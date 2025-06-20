@@ -4,7 +4,7 @@
     --outline-color: #89938F; --error-color: #FF5449;
 }
 body { font-family: 'Roboto', sans-serif; background-color: var(--background-color); color: var(--on-surface-color); margin: 0; padding: 1rem; overflow: hidden; }
-#welcome-screen, #winner-screen, #lobby-screen { max-width: 450px; margin: 15vh auto; padding: 2.5rem; background-color: var(--surface-color); border-radius: 28px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 1rem; }
+#welcome-screen, #winner-screen, #lobby-screen { max-width: 450px; margin: 5vh auto; padding: 2.5rem; background-color: var(--surface-color); border-radius: 28px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 1rem; max-height: 85vh; overflow-y: auto;}
 #welcome-screen h1, #winner-screen h2, #lobby-screen h2, #lobby-screen h3 { font-weight: 700; color: var(--on-surface-color); text-align: center; }
 #welcome-screen h1, #lobby-screen h2 { font-size: 2rem; margin-bottom: 1rem; }
 #lobby-screen h3 { font-size: 1.2rem; margin-top: 1rem; margin-bottom: 0.5rem; text-align: left; }
