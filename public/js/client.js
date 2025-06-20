@@ -1,4 +1,7 @@
-const socket = io();
+const socket = io({
+    transports: ['websocket'] 
+});
+
 const welcomeScreen = document.getElementById('welcome-screen');
 const gameScreen = document.getElementById('game-screen');
 const lobbyScreen = document.getElementById('lobby-screen');
