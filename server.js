@@ -1,17 +1,44 @@
+require('dotenv').config()
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const crypto = require('crypto');
+const bcrypt = require('bcrypt');
+const db = require('./database.js');
+const session = require('express-session');
+const SQLiteStore = require('connect-sqlite3')(session);
+
+const authRoutes = require('./routes/auth');
 
 const app = express();
 
+app.use(
+    session({
+        store: new SQLiteStore({
+            db: 'database.sqlite',
+            dir: './data'
+        }),
+        secret: process.env.SESSION_SECRET, 
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            maxAge: 1000 * 60 * 60 * 24 * 7,
+            secure: 'auto'
+        }
+    })
+);
+
 app.set('trust proxy', 1);
+app.use(express.json());
 
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 3000;
 app.use(express.static('public'));
+
+app.use('/', authRoutes);
 
 const RANK_VALUES = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
 let games = {};

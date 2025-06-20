@@ -33,6 +33,17 @@ const hostControls = document.getElementById('host-controls');
 const startGameBtn = document.getElementById('startGameBtn');
 const copyLobbyLinkBtn = document.getElementById('copyLobbyLinkBtn');
 const copyLinkBtn = document.getElementById('copyLinkBtn');
+const showLoginBtn = document.getElementById('showLoginBtn');
+const showRegisterBtn = document.getElementById('showRegisterBtn');
+const authModal = document.getElementById('auth-modal');
+const closeModalBtn = document.querySelector('.close-modal-btn');
+const modalTitle = document.getElementById('modal-title');
+const authForm = document.getElementById('auth-form');
+const authUsernameInput = document.getElementById('authUsername');
+const authPasswordInput = document.getElementById('authPassword');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+const authError = document.getElementById('auth-error');
+
 
 let playerId = null; let gameId = null; let lastGameState = null;
 
@@ -167,5 +178,87 @@ function displayWinner(winnerData) {
         rematchBtn.style.display = 'none'; rematchStatus.style.display = 'none';
     }
 }
+function openModal(mode) {
+    authModal.style.display = 'flex';
+    authError.innerText = '';
+    authForm.reset();
+
+    if (mode === 'login') {
+        modalTitle.innerText = 'Вхід';
+        authSubmitBtn.innerText = 'Увійти';
+        authForm.dataset.mode = 'login';
+    } else {
+        modalTitle.innerText = 'Реєстрація';
+        authSubmitBtn.innerText = 'Зареєструватися';
+        authForm.dataset.mode = 'register';
+    }
+}
+
+function closeModal() {
+    authModal.style.display = 'none';
+}
+showLoginBtn.addEventListener('click', () => openModal('login'));
+showRegisterBtn.addEventListener('click', () => openModal('register'));
+closeModalBtn.addEventListener('click', closeModal);
+authModal.addEventListener('click', (e) => {
+    if (e.target === authModal) {
+        closeModal();
+    }
+});
+authForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = authUsernameInput.value;
+    const password = authPasswordInput.value;
+    const mode = authForm.dataset.mode;
+    const endpoint = (mode === 'login') ? '/login' : '/register';
+
+    authSubmitBtn.disabled = true;
+    authError.innerText = '';
+
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert(result.message);
+            closeModal();
+            if (result.user) { // Якщо це був успішний вхід
+                playerNameInput.value = result.user.username;
+                playerNameInput.disabled = true;
+                // Ховаємо кнопки входу/реєстрації
+                document.querySelector('.auth-buttons').style.display = 'none';
+                document.querySelector('.separator').style.display = 'none';
+            }
+        } else {
+            authError.innerText = result.message;
+        }
+    } catch (error) {
+        authError.innerText = 'Сталася помилка з\'єднання. Спробуйте ще раз.';
+    } finally {
+        authSubmitBtn.disabled = false;
+    }
+});
+window.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const response = await fetch('/check-session');
+        const data = await response.json();
+
+        if (data.isLoggedIn) {
+            console.log('Користувач авторизований:', data.user.username);
+            
+            playerNameInput.value = data.user.username;
+            playerNameInput.disabled = true;
+            document.querySelector('.auth-buttons').style.display = 'none';
+            document.querySelector('.separator').style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Помилка перевірки сесії:', error);
+    }
+});
 const SUITS = ['♦', '♥', '♠', '♣'];
 const RANK_VALUES = { '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
