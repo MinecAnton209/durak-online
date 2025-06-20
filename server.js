@@ -175,16 +175,32 @@ io.on('connection', (socket) => {
         game.table.push(card);
         broadcastGameState(gameId);
     });
+
     socket.on('passTurn', ({ gameId }) => {
         const game = games[gameId];
         if (!game || game.attackerId !== socket.id || game.table.length === 0 || game.table.length % 2 !== 0 || game.winner) return;
+
         game.lastAction = 'pass';
         game.discardPile.push(...game.table);
         game.table = [];
+
+        const defenderIdBeforeRefill = game.defenderId;
+
         refillHands(game);
-        if (checkGameOver(game)) return broadcastGameState(gameId);
-        const defenderIndex = game.playerOrder.indexOf(game.defenderId);
-        updateTurn(game, defenderIndex);
+
+        if (checkGameOver(game)) {
+            return broadcastGameState(gameId);
+        }
+
+        let nextAttackerIndex = game.playerOrder.indexOf(defenderIdBeforeRefill);
+
+        const nextAttacker = game.players[game.playerOrder[nextAttackerIndex]];
+
+        if (nextAttacker && nextAttacker.cards.length === 0) {
+            nextAttackerIndex = getNextPlayerIndex(nextAttackerIndex, game.playerOrder.length);
+        }
+
+        updateTurn(game, nextAttackerIndex);
         broadcastGameState(gameId);
     });
     socket.on('takeCards', ({ gameId }) => {

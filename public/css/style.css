@@ -46,6 +46,8 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 .opponent .card-hand { position: relative; min-height: 140px; display: flex; justify-content: center; align-items: center; }
 .opponent .card-hand .card { z-index: calc(var(--card-index, 0) + 1); }
 .opponent .card-hand .card:not(:first-child) { margin-left: -60px; }
+.opponent-left .card-hand, .opponent-right .card-hand { flex-direction: column; gap: 0; }
+.opponent-left .card-hand .card:not(:first-child), .opponent-right .card-hand .card:not(:first-child) { margin-left: 0; margin-top: -100px; }
 #table-area { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70vw; height: 40vh; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 1rem; }
 .card-hand { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 0.75rem; min-height: 140px; }
 .card { width: 90px; height: 126px; border-radius: 8px; background-color: #fdfdfd; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.2s; user-select: none; position: relative; padding: 8px; box-sizing: border-box; display: flex; flex-direction: column; }
@@ -88,6 +90,7 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 #action-buttons.visible button { animation: pulse 1.5s infinite cubic-bezier(0.4, 0, 0.6, 1); }
 @keyframes shake-screen-anim { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
 .shake-screen { animation: shake-screen-anim 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+.hand-setup .card { opacity: 0 !important; transition: opacity 0.3s; }
 
 @media (max-width: 768px) {
     body { padding: 0.5rem; font-size: 14px; }
@@ -105,6 +108,7 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
     .opponent .card-hand .card:not(:first-child) { margin-left: -50px; }
     .opponent-top { width: 60vw; }
     .opponent-left, .opponent-right { max-width: 100px; }
+    .opponent-left .card-hand .card:not(:first-child), .opponent-right .card-hand .card:not(:first-child) { margin-left: 0; margin-top: -70px; }
     #deck-area { transform: translateY(-50%) scale(0.9); }
     #table-area { width: 90vw; height: 50vh; }
     #action-buttons button { padding: 0.8rem 1.2rem; font-size: 0.9rem; }
