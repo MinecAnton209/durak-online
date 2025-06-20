@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const crypto = require('crypto');
 
 const app = express();
 
@@ -25,7 +26,10 @@ function createDeck(deckSize = 36) {
     }
     const deck = [];
     for (const suit of SUITS) { for (const rank of ranks) { deck.push({ suit, rank }); } }
-    for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[deck[i], deck[j]] = [deck[j], deck[i]]; }
+    for (let i = deck.length - 1; i > 0; i--) {
+        const j = crypto.randomInt(0, i + 1);
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
     return deck;
 }
 function canBeat(attackCard, defendCard, trumpSuit) {
