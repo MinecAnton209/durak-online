@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="uk">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Гра Дурень Онлайн</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div id="welcome-screen">
+        <h1>Дурень Онлайн</h1>
+        <div class="settings-form">
+            <div class="form-group"><label for="playerNameInput">Ваше ім'я:</label><input type="text"
+                    id="playerNameInput" placeholder="Гравець 1" value="Гравець 1"></div>
+            <div class="form-group"><label for="deckSize">Розмір колоди:</label><select id="deckSize">
+                    <option value="36" selected>36 карт</option>
+                    <option value="52">52 карти</option>
+                    <option value="24">24 карти</option>
+                </select></div>
+            <div class="form-group"><label for="maxPlayers">Кількість гравців:</label><select id="maxPlayers">
+                    <option value="2" selected>2 гравці</option>
+                    <option value="3">3 гравці</option>
+                    <option value="4">4 гравці</option>
+                </select></div>
+            <div class="form-group"><label for="customGameId">Своє посилання (необов'язково):</label><input type="text"
+                    id="customGameId" placeholder="MY-COOL-GAME"></div>
+            <button id="createGameBtn">Створити гру</button>
+        </div>
+        <div id="join-game-section" style="display: none;">
+            <p>Приєднайтесь до гри друга:</p><button id="joinGameBtn">Приєднатись</button>
+        </div>
+        <p id="error-message" class="error" style="display: none;"></p>
+    </div>
+
+    <div id="lobby-screen" style="display: none;">
+        <h2>Кімната: <span id="lobbyGameId"></span></h2>
+        <p>Посилання для запрошення:</p>
+        <div class="invite-link-wrapper">
+            <input type="text" id="lobbyInviteLink" readonly>
+            <div id="copyLobbyLinkBtn" class="copy-icon-btn" title="Копіювати посилання">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            </div>
+        </div>
+        <hr>
+        <h3>Гравці в кімнаті:</h3>
+        <ul id="player-list"></ul>
+        <p id="lobby-status">Очікуємо на інших гравців...</p>
+        <div id="host-controls" style="display: none;">
+            <button id="startGameBtn" disabled>Почати гру</button>
+        </div>
+    </div>
+
+    <div id="game-screen" style="display: none;">
+        <div class="game-header">
+            <div class="invite-link-wrapper">
+                <input type="text" id="inviteLink" readonly>
+                <div id="copyLinkBtn" class="copy-icon-btn" title="Копіювати посилання">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                </div>
+            </div>
+        </div>
+        <div id="opponents-container"></div>
+        <div id="deck-area">
+            <div id="deck-pile-visual">
+                <div class="card card-back"></div>
+                <span id="deck-count-display">?</span>
+            </div>
+        </div>
+        <div id="table-area">
+            <div id="game-info-bar">
+                <span id="trump-card-display">Козир: ?</span>
+            </div>
+            <p id="turn-status" class="turn-status"></p>
+            <div id="game-table" class="card-hand"></div>
+            <div id="action-buttons"></div>
+        </div>
+        <div id="player-area" class="player-area">
+            <h3>Ви: <span id="playerName"></span></h3>
+            <div id="player-cards" class="card-hand"></div>
+        </div>
+    </div>
+
+    <div id="winner-screen" style="display: none;">
+        <h2 id="winner-message"></h2>
+        <button id="rematchBtn">Реванш</button>
+        <p id="rematch-status"></p>
+        <a href="/"><button class="secondary-btn">Вийти в головне меню</button></a>
+    </div>
+
+    <div id="center-animation-container"></div>
+    <div id="error-toast"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/client.js"></script>
+</body>
+
+</html>
