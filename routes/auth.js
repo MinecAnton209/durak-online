@@ -51,29 +51,20 @@ router.get('/check-session', (req, res) => {
     if (req.session && req.session.user) {
         const sql = `SELECT * FROM users WHERE id = ?`;
         db.get(sql, [req.session.user.id], (err, user) => {
-            if (err || !user) {
-                return res.status(200).json({ isLoggedIn: false });
-            }
-
+            if (err || !user) { return res.status(200).json({ isLoggedIn: false }); }
             req.session.user = {
                 id: user.id,
                 username: user.username,
                 wins: user.wins,
                 losses: user.losses,
-                streak: user.streak_count
+                streak: user.streak_count,
+                card_back_style: user.card_back_style
             };
             req.session.save();
-
-            res.status(200).json({
-                isLoggedIn: true,
-                user: req.session.user
-            });
+            res.status(200).json({ isLoggedIn: true, user: req.session.user });
         });
-
     } else {
-        res.status(200).json({
-            isLoggedIn: false
-        });
+        res.status(200).json({ isLoggedIn: false });
     }
 });
 
@@ -82,6 +73,21 @@ router.post('/logout', (req, res) => {
         if (err) { return res.status(500).json({ message: 'Не вдалося вийти' }); }
         res.clearCookie('connect.sid');
         res.status(200).json({ message: 'Ви успішно вийшли' });
+    });
+});
+
+router.post('/update-settings', (req, res) => {
+    if (!req.session.user) { return res.status(401).json({ message: 'Не авторизовано' }); }
+    const { card_back_style } = req.body;
+    const userId = req.session.user.id;
+    const allowedStyles = ['default', 'red', 'blue', 'green', 'purple', 'gold'];
+    if (!allowedStyles.includes(card_back_style)) { return res.status(400).json({ message: 'Неприпустимий стиль' }); }
+    const sql = `UPDATE users SET card_back_style = ? WHERE id = ?`;
+    db.run(sql, [card_back_style, userId], (err) => {
+        if (err) { console.error(err.message); return res.status(500).json({ message: 'Помилка оновлення налаштувань' }); }
+        req.session.user.card_back_style = card_back_style;
+        req.session.save();
+        res.status(200).json({ message: 'Налаштування збережено!' });
     });
 });
 

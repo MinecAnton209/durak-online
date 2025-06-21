@@ -34,6 +34,20 @@ pool.query(`
 `).then(() => console.log('Таблиця "user_sessions" готова до роботи.'))
     .catch(err => console.error('Помилка створення таблиці "user_sessions":', err));
 
+pool.query(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS(SELECT *
+                FROM information_schema.columns
+                WHERE table_name='users' and column_name='card_back_style')
+            THEN
+                ALTER TABLE "users" ADD COLUMN card_back_style TEXT DEFAULT 'default';
+            END IF;
+        END;
+        $$;
+    `).then(() => console.log('Перевірено наявність колонки card_back_style.'))
+    .catch(err => console.error('Помилка при перевірці/додаванні колонки card_back_style:', err));
+
 
 function formatSql(sql) {
     let i = 0;
