@@ -50,6 +50,8 @@ const gameLogContainer = document.getElementById('game-log-container');
 const gameLogList = document.getElementById('game-log-list');
 const closeLogBtn = document.getElementById('close-log-btn');
 const showLogBtnMobile = document.getElementById('show-log-btn-mobile');
+const chatForm = document.getElementById('chat-form');
+const chatInput = document.getElementById('chat-input');
 
 let playerId = null; let gameId = null; let lastGameState = null;
 
@@ -85,8 +87,14 @@ socket.on('lobbyStateUpdate', ({ players, maxPlayers, hostId }) => { playerList.
 socket.on('error', (message) => { errorMessage.style.display = 'block'; errorMessage.innerText = message; welcomeScreen.classList.add('shake'); setTimeout(() => welcomeScreen.classList.remove('shake'), 500); });
 socket.on('invalidMove', ({ reason }) => { errorToast.innerText = reason; errorToast.classList.add('visible'); const flyingCard = document.querySelector('.card.animate-play'); if (flyingCard) { flyingCard.classList.remove('animate-play'); flyingCard.classList.add('shake-card'); setTimeout(() => flyingCard.classList.remove('shake-card'), 400); } setTimeout(() => errorToast.classList.remove('visible'), 3000); });
 socket.on('rematchUpdate', ({ votes, total }) => { rematchStatus.innerText = `За реванш проголосувало: ${votes} з ${total}`; });
-socket.on('newLogEntry', (logEntry) => { const li = document.createElement('li'); li.innerHTML = `<span class="log-time">[${logEntry.timestamp}]</span> ${logEntry.message}`; gameLogList.prepend(li); });
-
+socket.on('newLogEntry', (logEntry) => {
+    const li = document.createElement('li');
+    if (logEntry.message.includes('<span class="message-author">')) {
+        li.classList.add('chat-message');
+    }
+    li.innerHTML = `<span class="log-time">[${logEntry.timestamp}]</span> ${logEntry.message}`;
+    gameLogList.prepend(li);
+});
 socket.on('gameStateUpdate', (state) => {
     if (!playerId) return;
     if (!state.winner && (winnerScreen.style.display === 'block' || lobbyScreen.style.display === 'block')) { winnerScreen.style.display = 'none'; lobbyScreen.style.display = 'none'; gameScreen.style.display = 'block'; gameLogList.innerHTML = ''; }
@@ -201,5 +209,13 @@ function displayWinner(winnerData) {
         }).catch(error => { console.error('Не вдалося оновити статистику:', error); });
     }, 1000);
 }
+chatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const message = chatInput.value;
+    if (message.trim()) {
+        socket.emit('sendMessage', { gameId, message });
+        chatInput.value = '';
+    }
+});
 const SUITS = ['♦', '♥', '♠', '♣'];
 const RANK_VALUES = { '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };

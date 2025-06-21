@@ -232,6 +232,17 @@ io.on('connection', (socket) => {
             }
         }
     });
+    socket.on('sendMessage', ({ gameId, message }) => {
+        const game = games[gameId];
+        const player = game.players[socket.id];
+        if (!game || !player || !message) return;
+    
+        const trimmedMessage = message.trim();
+        if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) {
+            
+            const chatMessage = `<span class="message-author">${player.name}:</span> <span class="message-text">${trimmedMessage}</span>`;
+            logEvent(game, chatMessage);
+        }
+    });
 });
-
 server.listen(PORT, () => console.log(`Сервер запущено на порті ${PORT}`));
