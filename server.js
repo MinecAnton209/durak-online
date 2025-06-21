@@ -17,7 +17,6 @@ const io = socketIo(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 3000;
 
-// server.js -> ЗАМІНИТИ БЛОК НАЛАШТУВАННЯ СЕСІЙ
 
 const sessionConfig = {
     secret: process.env.SESSION_SECRET,
@@ -27,7 +26,6 @@ const sessionConfig = {
 };
 
 if (process.env.DB_CLIENT === 'postgres') {
-    // Налаштування для PostgreSQL
     const pgSession = require('connect-pg-simple')(session);
     sessionConfig.store = new pgSession({
         pool: db.pool,
@@ -35,7 +33,6 @@ if (process.env.DB_CLIENT === 'postgres') {
     });
     console.log("Сесії будуть зберігатися в PostgreSQL.");
 } else {
-    // Налаштування для SQLite (за замовчуванням)
     const SQLiteStore = require('connect-sqlite3')(session);
     sessionConfig.store = new SQLiteStore({
         db: 'database.sqlite',
@@ -63,7 +60,19 @@ function createDeck(deckSize = 36) { const SUITS = ['♦', '♥', '♠', '♣'];
 function canBeat(attackCard, defendCard, trumpSuit) { if (attackCard.suit === defendCard.suit) return RANK_VALUES[defendCard.rank] > RANK_VALUES[attackCard.rank]; if (defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit) return true; return false; }
 function getNextPlayerIndex(currentIndex, totalPlayers) { if (totalPlayers === 0) return 0; return (currentIndex + 1) % totalPlayers; }
 function updateTurn(game, newAttackerIndex) { if (game.playerOrder.length === 0) return; const safeIndex = newAttackerIndex % game.playerOrder.length; game.attackerId = game.playerOrder[safeIndex]; const defenderIndex = getNextPlayerIndex(safeIndex, game.playerOrder.length); game.defenderId = game.playerOrder[defenderIndex]; game.turn = game.attackerId; }
-function addPlayerToGame(socket, game, playerName) { const sessionUser = socket.request.session.user; game.players[socket.id] = { id: socket.id, name: sessionUser ? sessionUser.username : playerName, dbId: sessionUser ? sessionUser.id : null, isGuest: !sessionUser, cards: [] }; game.playerOrder.push(socket.id); }
+function addPlayerToGame(socket, game, playerName) {
+    const sessionUser = socket.request.session.user;
+
+    game.players[socket.id] = {
+        id: socket.id,
+        name: sessionUser ? sessionUser.username : playerName,
+        dbId: sessionUser ? sessionUser.id : null,
+        isGuest: !sessionUser,
+        streak: sessionUser ? sessionUser.streak : 0,
+        cards: []
+    };
+    game.playerOrder.push(socket.id);
+}
 function logEvent(game, message) { if (!game.log) game.log = []; const timestamp = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); const logEntry = { timestamp, message }; game.log.push(logEntry); if (game.log.length > 50) game.log.shift(); io.to(game.id).emit('newLogEntry', logEntry); }
 
 function startGame(gameId) {
@@ -114,31 +123,77 @@ function checkGameOver(game) {
 }
 function updateStatsAfterGame(game) {
     if (!game.winner) return;
+
     const { winners, loser } = game.winner;
-    winners.forEach(winner => {
-        if (winner && !winner.isGuest) {
-            db.run(`UPDATE users SET wins = wins + 1 WHERE id = ?`, [winner.dbId], (err) => {
-                if (err) { console.error("Помилка оновлення перемог:", err.message); }
-                else {
-                    const winnerSocket = io.sockets.sockets.get(winner.id);
-                    if (winnerSocket && winnerSocket.request.session.user) {
-                        winnerSocket.request.session.user.wins++;
-                        winnerSocket.request.session.save();
-                    }
+    const today = new Date().toISOString().slice(0, 10);
+
+    winners.forEach(player => {
+        if (player && !player.isGuest) {
+            db.get(`SELECT streak_count, last_played_date FROM users WHERE id = ?`, [player.dbId], (err, userData) => {
+                if (err || !userData) return;
+
+                let newStreak = 1;
+                if (userData.last_played_date) {
+                    const lastDate = new Date(userData.last_played_date);
+                    const todayDate = new Date(today);
+                    const diffTime = Math.abs(todayDate - lastDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    
+                    if (diffDays === 0) newStreak = userData.streak_count;
+                    else if (diffDays === 1) newStreak = userData.streak_count + 1;
+                    else newStreak = 1;
                 }
+                
+                db.run(
+                    `UPDATE users SET wins = wins + 1, streak_count = ?, last_played_date = ? WHERE id = ?`,
+                    [newStreak, today, player.dbId],
+                    (updateErr) => {
+                        if (updateErr) console.error("Помилка оновлення перемог:", updateErr.message);
+                        else {
+                            const playerSocket = io.sockets.sockets.get(player.id);
+                            if (playerSocket && playerSocket.request.session.user) {
+                                playerSocket.request.session.user.wins++;
+                                playerSocket.request.session.user.streak = newStreak;
+                                playerSocket.request.session.save();
+                            }
+                        }
+                    }
+                );
             });
         }
     });
+
     if (loser && !loser.isGuest) {
-        db.run(`UPDATE users SET losses = losses + 1 WHERE id = ?`, [loser.dbId], (err) => {
-            if (err) { console.error("Помилка оновлення поразок:", err.message); }
-            else {
-                const loserSocket = io.sockets.sockets.get(loser.id);
-                if (loserSocket && loserSocket.request.session.user) {
-                    loserSocket.request.session.user.losses++;
-                    loserSocket.request.session.save();
-                }
+        db.get(`SELECT streak_count, last_played_date FROM users WHERE id = ?`, [loser.dbId], (err, userData) => {
+            if (err || !userData) return;
+
+            let newStreak = 1;
+            if (userData.last_played_date) {
+                const lastDate = new Date(userData.last_played_date);
+                const todayDate = new Date(today);
+                const diffTime = Math.abs(todayDate - lastDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays === 0) newStreak = userData.streak_count;
+                else if (diffDays === 1) newStreak = userData.streak_count + 1;
+                else newStreak = 1;
             }
+
+            db.run(
+                `UPDATE users SET losses = losses + 1, streak_count = ?, last_played_date = ? WHERE id = ?`,
+                [newStreak, today, loser.dbId],
+                (updateErr) => {
+                    if (updateErr) console.error("Помилка оновлення поразок:", updateErr.message);
+                    else {
+                        const loserSocket = io.sockets.sockets.get(loser.id);
+                        if (loserSocket && loserSocket.request.session.user) {
+                            loserSocket.request.session.user.losses++;
+                            loserSocket.request.session.user.streak = newStreak;
+                            loserSocket.request.session.save();
+                        }
+                    }
+                }
+            );
         });
     }
 }
@@ -149,7 +204,7 @@ function broadcastGameState(gameId) {
         if (playerSocket) {
             const stateForPlayer = {
                 gameId: game.id,
-                players: game.playerOrder.map(id => { const p = game.players[id]; if(!p) return null; return { id: p.id, name: p.name, cards: p.id === playerId ? p.cards : p.cards.map(() => ({ hidden: true })), isAttacker: p.id === game.attackerId, isDefender: p.id === game.defenderId, } }).filter(p => p !== null),
+                players: game.playerOrder.map(id => { const p = game.players[id]; if(!p) return null; return { id: p.id, name: p.name, streak: p.streak || 0, cards: p.id === playerId ? p.cards : p.cards.map(() => ({ hidden: true })), isAttacker: p.id === game.attackerId, isDefender: p.id === game.defenderId, } }).filter(p => p !== null),
                 table: game.table, trumpCard: game.trumpCard, trumpSuit: game.trumpSuit, deckCardCount: game.deck.length,
                 isYourTurn: playerId === game.turn, canPass: playerId === game.attackerId && game.table.length > 0 && game.table.length % 2 === 0,
                 canTake: playerId === game.defenderId && game.table.length > 0, winner: game.winner, lastAction: game.lastAction
