@@ -58,7 +58,8 @@ router.get('/check-session', (req, res) => {
                 wins: user.wins,
                 losses: user.losses,
                 streak: user.streak_count,
-                card_back_style: user.card_back_style
+                card_back_style: user.card_back_style,
+                isVerified: user.is_verified
             };
             req.session.save();
             res.status(200).json({ isLoggedIn: true, user: req.session.user });

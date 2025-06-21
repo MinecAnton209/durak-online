@@ -48,6 +48,18 @@ pool.query(`
     `).then(() => console.log('Перевірено наявність колонки card_back_style.'))
     .catch(err => console.error('Помилка при перевірці/додаванні колонки card_back_style:', err));
 
+pool.query(`
+    DO $$
+    BEGIN
+        IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='is_verified')
+        THEN
+            ALTER TABLE "users" ADD COLUMN is_verified BOOLEAN DEFAULT FALSE;
+        END IF;
+    END;
+    $$;
+`).then(() => console.log('Перевірено наявність колонки is_verified.'))
+    .catch(err => console.error('Помилка при перевірці/додаванні колонки is_verified:', err));
+
 
 function formatSql(sql) {
     let i = 0;

@@ -30,25 +30,38 @@ const db = new sqlite3.Database(dbPath, (err) => {
         }
     });
 
-    db.all(`PRAGMA table_info(users)`, (err, columns) => { // **ЗМІНЕНО**: db.get -> db.all
+    db.all(`PRAGMA table_info(users)`, (err, columns) => {
         if (err) {
             console.error("Не вдалося отримати інформацію про таблицю users:", err.message);
             return;
         }
-
-        // Тепер 'columns' - це гарантовано масив
-        const hasColumn = columns.some(col => col.name === 'card_back_style');
-
-        if (!hasColumn) {
+        const hasCardBackColumn = columns.some(col => col.name === 'card_back_style');
+        if (!hasCardBackColumn) {
             db.run(`ALTER TABLE users ADD COLUMN card_back_style TEXT DEFAULT 'default'`, (alterErr) => {
-                if (alterErr) {
-                    console.error('Помилка додавання колонки card_back_style:', alterErr.message);
-                } else {
-                    console.log('Колонка card_back_style успішно додана в таблицю users.');
-                }
+                if (alterErr) { console.error('Помилка додавання колонки card_back_style:', alterErr.message); }
+                else { console.log('Колонка card_back_style успішно додана в таблицю users.'); }
             });
         } else {
             console.log('Колонка card_back_style вже існує.');
+        }
+    });
+
+    db.all(`PRAGMA table_info(users)`, (err, columns) => {
+        if (err) {
+            console.error("Не вдалося отримати інформацію про таблицю users:", err.message);
+            return;
+        }
+        const hasVerifiedColumn = columns.some(col => col.name === 'is_verified');
+        if (!hasVerifiedColumn) {
+            db.run(`ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT FALSE`, (alterErr) => {
+                if (alterErr) {
+                    console.error('Помилка додавання колонки is_verified:', alterErr.message);
+                } else {
+                    console.log('Колонка is_verified успішно додана в таблицю users.');
+                }
+            });
+        } else {
+            console.log('Колонка is_verified вже існує.');
         }
     });
 });
