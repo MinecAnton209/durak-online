@@ -6,7 +6,7 @@ A real-time, multiplayer online version of the popular card game "Durak". This p
 
 [Read this README in Ukrainian](README-UA.md)
 
-![Durak Online Gameplay Screenshot]([https://github.com/MinecAnton209/durak-online/docs/main-img.png])
+![Durak Online Gameplay Screenshot]([https://github.com/MinecAnton209/durak-online/blob/main/docs/main-img.jpg])
 
 ---
 

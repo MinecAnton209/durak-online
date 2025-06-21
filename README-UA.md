@@ -4,7 +4,7 @@
 
 **Посилання на робочу версію:** https://durak-online-1li7.onrender.com/
 
-![Скріншот гри "Дурень Онлайн"]([https://github.com/MinecAnton209/durak-online/docs/main-img.png])
+![Скріншот гри "Дурень Онлайн"]([https://github.com/MinecAnton209/durak-online/blob/main/docs/main-img.jpg])
 
 ---
 
