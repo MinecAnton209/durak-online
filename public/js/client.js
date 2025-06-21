@@ -46,6 +46,10 @@ const authUsernameInput = document.getElementById('authUsername');
 const authPasswordInput = document.getElementById('authPassword');
 const authSubmitBtn = document.getElementById('authSubmitBtn');
 const authError = document.getElementById('auth-error');
+const gameLogContainer = document.getElementById('game-log-container');
+const gameLogList = document.getElementById('game-log-list');
+const closeLogBtn = document.getElementById('close-log-btn');
+const showLogBtnMobile = document.getElementById('show-log-btn-mobile');
 
 let playerId = null; let gameId = null; let lastGameState = null;
 
@@ -55,10 +59,10 @@ function closeModal() { authModal.style.display = 'none'; }
 function showUserProfile(user) { guestLogin.style.display = 'none'; userProfile.style.display = 'block'; profileUsername.innerText = user.username; profileWins.innerText = user.wins; profileLosses.innerText = user.losses; playerNameInput.value = user.username; playerNameInput.disabled = true; }
 function showGuestLogin() { guestLogin.style.display = 'block'; userProfile.style.display = 'none'; playerNameInput.value = `Гравець_${Math.floor(Math.random() * 1000)}`; playerNameInput.disabled = false; }
 
+window.addEventListener('DOMContentLoaded', async () => { try { const response = await fetch('/check-session'); const data = await response.json(); if (data.isLoggedIn) { showUserProfile(data.user); } } catch (error) { console.error('Помилка перевірки сесії:', error); } });
 const urlParams = new URLSearchParams(window.location.search);
 const joinGameId = urlParams.get('gameId')?.toUpperCase();
 if (joinGameId) { document.getElementById('join-game-section').style.display = 'block'; gameId = joinGameId; }
-window.addEventListener('DOMContentLoaded', async () => { try { const response = await fetch('/check-session'); const data = await response.json(); if (data.isLoggedIn) { showUserProfile(data.user); } } catch (error) { console.error('Помилка перевірки сесії:', error); } });
 createGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = "Будь ласка, введіть ім'я."; return; } const settings = { playerName: playerNameValue, deckSize: parseInt(document.getElementById('deckSize').value, 10), maxPlayers: parseInt(document.getElementById('maxPlayers').value, 10), customId: document.getElementById('customGameId').value.trim().toUpperCase() }; socket.emit('createGame', settings); });
 joinGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = "Будь ласка, введіть ім'я."; return; } socket.emit('joinGame', { gameId, playerName: playerNameValue }); });
 rematchBtn.addEventListener('click', () => { socket.emit('requestRematch', { gameId }); rematchBtn.disabled = true; rematchBtn.innerText = 'Очікуємо на інших...'; });
@@ -71,6 +75,8 @@ showRegisterBtn.addEventListener('click', () => openModal('register'));
 closeModalBtn.addEventListener('click', closeModal);
 authModal.addEventListener('click', (e) => { if (e.target === authModal) { closeModal(); } });
 authForm.addEventListener('submit', async (e) => { e.preventDefault(); const username = authUsernameInput.value; const password = authPasswordInput.value; const mode = authForm.dataset.mode; const endpoint = (mode === 'login') ? '/login' : '/register'; authSubmitBtn.disabled = true; authError.innerText = ''; try { const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const result = await response.json(); if (response.ok) { alert(result.message); closeModal(); if (result.user) { showUserProfile(result.user); } } else { authError.innerText = result.message; } } catch (error) { authError.innerText = 'Сталася помилка з\'єднання.'; } finally { authSubmitBtn.disabled = false; } });
+showLogBtnMobile.addEventListener('click', () => gameLogContainer.classList.add('visible'));
+closeLogBtn.addEventListener('click', () => gameLogContainer.classList.remove('visible'));
 
 socket.on('gameCreated', (data) => { gameId = data.gameId; playerId = data.playerId; welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'block'; lobbyGameId.innerText = gameId; const link = `${window.location.origin}?gameId=${gameId}`; lobbyInviteLink.value = link; inviteLink.value = link; socket.emit('getLobbyState', { gameId }); });
 socket.on('joinSuccess', (data) => { playerId = data.playerId; gameId = data.gameId; welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'block'; lobbyGameId.innerText = gameId; const link = `${window.location.origin}?gameId=${gameId}`; lobbyInviteLink.value = link; inviteLink.value = link; socket.emit('getLobbyState', { gameId }); });
@@ -79,10 +85,11 @@ socket.on('lobbyStateUpdate', ({ players, maxPlayers, hostId }) => { playerList.
 socket.on('error', (message) => { errorMessage.style.display = 'block'; errorMessage.innerText = message; welcomeScreen.classList.add('shake'); setTimeout(() => welcomeScreen.classList.remove('shake'), 500); });
 socket.on('invalidMove', ({ reason }) => { errorToast.innerText = reason; errorToast.classList.add('visible'); const flyingCard = document.querySelector('.card.animate-play'); if (flyingCard) { flyingCard.classList.remove('animate-play'); flyingCard.classList.add('shake-card'); setTimeout(() => flyingCard.classList.remove('shake-card'), 400); } setTimeout(() => errorToast.classList.remove('visible'), 3000); });
 socket.on('rematchUpdate', ({ votes, total }) => { rematchStatus.innerText = `За реванш проголосувало: ${votes} з ${total}`; });
+socket.on('newLogEntry', (logEntry) => { const li = document.createElement('li'); li.innerHTML = `<span class="log-time">[${logEntry.timestamp}]</span> ${logEntry.message}`; gameLogList.prepend(li); });
 
 socket.on('gameStateUpdate', (state) => {
     if (!playerId) return;
-    if (!state.winner && (winnerScreen.style.display === 'block' || lobbyScreen.style.display === 'block')) { winnerScreen.style.display = 'none'; lobbyScreen.style.display = 'none'; gameScreen.style.display = 'block'; }
+    if (!state.winner && (winnerScreen.style.display === 'block' || lobbyScreen.style.display === 'block')) { winnerScreen.style.display = 'none'; lobbyScreen.style.display = 'none'; gameScreen.style.display = 'block'; gameLogList.innerHTML = ''; }
     const isFirstDeal = !lastGameState && state.players.some(p => p.cards.length > 0);
     if (isFirstDeal) {
         animateTrumpReveal(state.trumpCard);
@@ -163,7 +170,7 @@ function updateCards(container, newCards, isPlayer, state) {
     }
     newCards.forEach((card, index) => { const cardDiv = createCardDiv(card); cardDiv.style.setProperty('--card-index', index); if (playableCards.some(pc => pc.rank === card.rank && pc.suit === card.suit)) { cardDiv.classList.add('playable'); } cardDiv.addEventListener('click', () => handleCardClick(card, cardDiv)); container.appendChild(cardDiv); });
 }
-function updateTable(newTableCards) { const gameTable = document.getElementById('game-table'); if (lastGameState && lastGameState.table.length > 0 && newTableCards.length === 0) { if (lastGameState.lastAction !== 'take') { playSound('pass.mp3'); } const wasTaken = lastGameState.lastAction === 'take'; Array.from(gameTable.children).forEach((cardDiv, i) => { cardDiv.classList.add(wasTaken ? 'animate-take' : 'animate-discard'); cardDiv.style.setProperty('--card-index', i); }); setTimeout(() => gameTable.innerHTML = '', 500); return; } gameTable.innerHTML = ''; newTableCards.forEach(card => { const cardDiv = createCardDiv(card); gameTable.appendChild(cardDiv); }); }
+function updateTable(newTableCards) { const gameTable = document.getElementById('game-table'); if (lastGameState && lastGameState.table.length > 0 && newTableCards.length === 0) { if (lastGameState.lastAction !== 'take') { playSound('pass.mp3'); } const wasTaken = lastGameState.lastAction === 'take'; if (wasTaken) { playSound('take.mp3'); document.body.classList.add('shake-screen'); setTimeout(() => document.body.classList.remove('shake-screen'), 400); } Array.from(gameTable.children).forEach((cardDiv, i) => { cardDiv.classList.add(wasTaken ? 'animate-take' : 'animate-discard'); cardDiv.style.setProperty('--card-index', i); }); setTimeout(() => gameTable.innerHTML = '', 500); return; } gameTable.innerHTML = ''; newTableCards.forEach(card => { const cardDiv = createCardDiv(card); gameTable.appendChild(cardDiv); }); }
 function canBeat(attackCard, defendCard, trumpSuit) { if (!attackCard || !defendCard || !trumpSuit) return false; const RANK_VALUES = { '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 }; if (attackCard.suit === defendCard.suit) { return RANK_VALUES[defendCard.rank] > RANK_VALUES[attackCard.rank]; } return defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit; }
 function createCardDiv(card) { const cardDiv = document.createElement('div'); cardDiv.className = 'card'; if (card.hidden) { cardDiv.classList.add('card-back'); } else { const rankSpan = document.createElement('span'); rankSpan.className = 'rank'; rankSpan.textContent = card.rank; const suitSpan = document.createElement('span'); suitSpan.className = 'suit'; suitSpan.textContent = card.suit; if (card.suit === '♥' || card.suit === '♦') { cardDiv.classList.add('red'); } else { cardDiv.classList.add('black'); } if (card.rank) rankSpan.setAttribute('data-rank', card.rank); cardDiv.appendChild(rankSpan); cardDiv.appendChild(suitSpan); } return cardDiv; }
 function handleCardClick(card, cardDiv) { playSound('play.mp3'); cardDiv.classList.add('animate-play'); setTimeout(() => socket.emit('makeMove', { gameId, card }), 50); }

@@ -164,3 +164,88 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
     margin-top: 0.5rem;
     padding: 0.8rem 1.5rem;
 }
+#game-log-container {
+    position: fixed;
+    top: 5rem;
+    right: 1rem;
+    width: 280px;
+    height: 60vh;
+    background: rgba(0,0,0,0.5);
+    border-radius: 12px;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    z-index: 150;
+    display: flex;
+    flex-direction: column;
+    color: var(--on-surface-variant-color);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--outline-color);
+    background: rgba(0,0,0,0.2);
+    border-radius: 12px 12px 0 0;
+}
+.log-header h4 { margin: 0; }
+.close-log-btn { display: none; font-size: 1.5rem; cursor: pointer; }
+
+#game-log-list {
+    list-style: none;
+    padding: 1rem;
+    margin: 0;
+    flex-grow: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column-reverse;
+}
+
+#game-log-list li {
+    padding-top: 0.75rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid rgba(137, 147, 143, 0.2);
+    font-size: 0.9rem;
+    animation: fadeIn 0.5s ease;
+}
+#game-log-list li:first-child { border-top: none; }
+.log-time { font-size: 0.8rem; color: var(--outline-color); margin-right: 0.5rem; }
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.floating-btn {
+    display: none;
+    position: fixed;
+    bottom: 8rem;
+    right: 1rem;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    padding: 0;
+    z-index: 140;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+@media (max-width: 768px) {
+    #game-log-container {
+        top: 0; left: 0; right: 0; bottom: 0;
+        width: 100%; height: 100%;
+        border-radius: 0;
+        transform: translateX(100%);
+        transition: transform 0.3s ease-in-out;
+    }
+
+    #game-log-container.visible {
+        transform: translateX(0);
+    }
+
+    .log-header { padding-top: 2rem; }
+    .close-log-btn { display: block; }
+    #show-log-btn-mobile { display: flex; justify-content: center; align-items: center; }
+}

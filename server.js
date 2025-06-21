@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
+const socketIo =require('socket.io');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
@@ -17,17 +17,11 @@ const io = socketIo(server, { cors: { origin: "*" } });
 const PORT = process.env.PORT || 3000;
 
 const sessionMiddleware = session({
-    store: new SQLiteStore({
-        db: 'database.sqlite',
-        dir: './data'
-    }),
+    store: new SQLiteStore({ db: 'database.sqlite', dir: './data' }),
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: {
-        maxAge: 1000 * 60 * 60 * 24 * 7,
-        secure: 'auto'
-    }
+    cookie: { maxAge: 1000 * 60 * 60 * 24 * 7, secure: 'auto' }
 });
 
 app.set('trust proxy', 1);
@@ -43,60 +37,25 @@ io.use((socket, next) => {
 const RANK_VALUES = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
 let games = {};
 
-function createDeck(deckSize = 36) {
-    const SUITS = ['♦', '♥', '♠', '♣'];
-    let ranks;
-    switch (deckSize) {
-        case 52: ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']; break;
-        case 24: ranks = ['9', '10', 'J', 'Q', 'K', 'A']; break;
-        default: ranks = ['6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']; break;
-    }
-    const deck = [];
-    for (const suit of SUITS) { for (const rank of ranks) { deck.push({ suit, rank }); } }
-    for (let i = deck.length - 1; i > 0; i--) { const j = crypto.randomInt(0, i + 1); [deck[i], deck[j]] = [deck[j], deck[i]]; }
-    return deck;
-}
-function canBeat(attackCard, defendCard, trumpSuit) {
-    if (attackCard.suit === defendCard.suit) return RANK_VALUES[defendCard.rank] > RANK_VALUES[attackCard.rank];
-    if (defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit) return true;
-    return false;
-}
+function createDeck(deckSize = 36) { const SUITS = ['♦', '♥', '♠', '♣']; let ranks; switch (deckSize) { case 52: ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']; break; case 24: ranks = ['9', '10', 'J', 'Q', 'K', 'A']; break; default: ranks = ['6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']; break; } const deck = []; for (const suit of SUITS) { for (const rank of ranks) { deck.push({ suit, rank }); } } for (let i = deck.length - 1; i > 0; i--) { const j = crypto.randomInt(0, i + 1); [deck[i], deck[j]] = [deck[j], deck[i]]; } return deck; }
+function canBeat(attackCard, defendCard, trumpSuit) { if (attackCard.suit === defendCard.suit) return RANK_VALUES[defendCard.rank] > RANK_VALUES[attackCard.rank]; if (defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit) return true; return false; }
 function getNextPlayerIndex(currentIndex, totalPlayers) { if (totalPlayers === 0) return 0; return (currentIndex + 1) % totalPlayers; }
-function updateTurn(game, newAttackerIndex) {
-    if (game.playerOrder.length === 0) return;
-    const safeIndex = newAttackerIndex % game.playerOrder.length;
-    game.attackerId = game.playerOrder[safeIndex];
-    const defenderIndex = getNextPlayerIndex(safeIndex, game.playerOrder.length);
-    game.defenderId = game.playerOrder[defenderIndex];
-    game.turn = game.attackerId;
-}
-function addPlayerToGame(socket, game, playerName) {
-    const sessionUser = socket.request.session.user;
-    game.players[socket.id] = {
-        id: socket.id,
-        name: sessionUser ? sessionUser.username : playerName,
-        dbId: sessionUser ? sessionUser.id : null,
-        isGuest: !sessionUser,
-        cards: []
-    };
-    game.playerOrder.push(socket.id);
-}
+function updateTurn(game, newAttackerIndex) { if (game.playerOrder.length === 0) return; const safeIndex = newAttackerIndex % game.playerOrder.length; game.attackerId = game.playerOrder[safeIndex]; const defenderIndex = getNextPlayerIndex(safeIndex, game.playerOrder.length); game.defenderId = game.playerOrder[defenderIndex]; game.turn = game.attackerId; }
+function addPlayerToGame(socket, game, playerName) { const sessionUser = socket.request.session.user; game.players[socket.id] = { id: socket.id, name: sessionUser ? sessionUser.username : playerName, dbId: sessionUser ? sessionUser.id : null, isGuest: !sessionUser, cards: [] }; game.playerOrder.push(socket.id); }
+function logEvent(game, message) { if (!game.log) game.log = []; const timestamp = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); const logEntry = { timestamp, message }; game.log.push(logEntry); if (game.log.length > 50) game.log.shift(); io.to(game.id).emit('newLogEntry', logEntry); }
 
 function startGame(gameId) {
-    const game = games[gameId];
-    if (!game) return;
+    const game = games[gameId]; if (!game) return;
     game.deck = createDeck(game.settings.deckSize);
     game.trumpCard = game.deck[game.deck.length - 1];
     game.trumpSuit = game.trumpCard.suit;
-    let firstAttackerIndex = 0;
-    let minTrumpRank = Infinity;
+    let firstAttackerIndex = 0; let minTrumpRank = Infinity;
     game.playerOrder.forEach((playerId, index) => {
         const player = game.players[playerId];
         player.cards = game.deck.splice(0, 6);
         player.cards.forEach(card => {
             if (card.suit === game.trumpSuit && RANK_VALUES[card.rank] < minTrumpRank) {
-                minTrumpRank = RANK_VALUES[card.rank];
-                firstAttackerIndex = index;
+                minTrumpRank = RANK_VALUES[card.rank]; firstAttackerIndex = index;
             }
         });
     });
@@ -105,8 +64,7 @@ function startGame(gameId) {
     broadcastGameState(gameId);
 }
 function refillHands(game) {
-    const attackerIndex = game.playerOrder.indexOf(game.attackerId);
-    if(attackerIndex === -1) return;
+    const attackerIndex = game.playerOrder.indexOf(game.attackerId); if(attackerIndex === -1) return;
     for (let i = 0; i < game.playerOrder.length; i++) {
         const playerIndex = (attackerIndex + i) % game.playerOrder.length;
         const player = game.players[game.playerOrder[playerIndex]];
@@ -162,17 +120,8 @@ function updateStatsAfterGame(game) {
         });
     }
 }
-function logEvent(game, message) {
-    if (!game.log) game.log = [];
-    const timestamp = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const logEntry = { timestamp, message };
-    game.log.push(logEntry);
-    if (game.log.length > 50) game.log.shift();
-    io.to(game.id).emit('newLogEntry', logEntry);
-}
 function broadcastGameState(gameId) {
-    const game = games[gameId];
-    if (!game) return;
+    const game = games[gameId]; if (!game) return;
     game.playerOrder.forEach(playerId => {
         const playerSocket = io.sockets.sockets.get(playerId);
         if (playerSocket) {
@@ -204,10 +153,11 @@ io.on('connection', (socket) => {
             logEvent(game, `${player.name} відбивається картою ${card.rank}${card.suit}.`);
             game.turn = game.attackerId;
         } else {
+            const attackerName = game.attackerId === socket.id ? 'атакує' : 'підкидає';
             if (game.table.length > 0 && !game.table.some(c => c.rank === card.rank)) { return socket.emit('invalidMove', { reason: "Підкидати можна лише карти того ж номіналу." }); }
             const defender = game.players[game.defenderId]; if (!defender) return;
             if ((game.table.length / 2) >= defender.cards.length) { return socket.emit('invalidMove', { reason: "Не можна підкидати більше карт, ніж є у захисника." }); }
-            logEvent(game, `${player.name} ходить картою ${card.rank}${card.suit}.`);
+            logEvent(game, `${player.name} ${attackerName} картою ${card.rank}${card.suit}.`);
             game.turn = game.defenderId;
         }
         player.cards = player.cards.filter(c => !(c.rank === card.rank && c.suit === card.suit));
@@ -216,20 +166,20 @@ io.on('connection', (socket) => {
     });
     socket.on('passTurn', ({ gameId }) => {
         const game = games[gameId]; if (!game || game.attackerId !== socket.id || game.table.length === 0 || game.table.length % 2 !== 0 || game.winner) return;
-        game.lastAction = 'pass';
-        const defenderIdBeforeRefill = game.defenderId;
+        game.lastAction = 'pass'; const defenderIdBeforeRefill = game.defenderId;
         logEvent(game, `Відбій. Хід переходить до ${game.players[defenderIdBeforeRefill].name}.`);
         game.discardPile.push(...game.table); game.table = [];
         refillHands(game);
         if (checkGameOver(game)) { updateStatsAfterGame(game); return broadcastGameState(gameId); }
         let defenderIndex = game.playerOrder.indexOf(defenderIdBeforeRefill); if(defenderIndex === -1) defenderIndex = 0;
+        const nextAttacker = game.players[game.playerOrder[defenderIndex]];
+        if(nextAttacker && nextAttacker.cards.length === 0) { defenderIndex = getNextPlayerIndex(defenderIndex, game.playerOrder.length); }
         updateTurn(game, defenderIndex);
         broadcastGameState(gameId);
     });
     socket.on('takeCards', ({ gameId }) => {
         const game = games[gameId]; if (!game || game.defenderId !== socket.id || game.table.length === 0 || game.winner) return;
-        game.lastAction = 'take';
-        logEvent(game, `${game.players[game.defenderId].name} бере карти.`);
+        game.lastAction = 'take'; logEvent(game, `${game.players[game.defenderId].name} бере карти.`);
         game.players[game.defenderId].cards.push(...game.table); game.table = [];
         refillHands(game);
         if (checkGameOver(game)) { updateStatsAfterGame(game); return broadcastGameState(gameId); }
