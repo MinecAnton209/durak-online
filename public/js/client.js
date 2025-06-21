@@ -61,25 +61,27 @@ function closeModal() { authModal.style.display = 'none'; }
 function showUserProfile(user) { guestLogin.style.display = 'none'; userProfile.style.display = 'block'; let profileNameHTML = user.username; if (user.streak > 0) { profileNameHTML += ` <span class="streak-fire">🔥${user.streak}</span>`; } profileUsername.innerHTML = profileNameHTML; profileWins.innerText = user.wins; profileLosses.innerText = user.losses; playerNameInput.value = user.username; playerNameInput.disabled = true; }
 function showGuestLogin() { guestLogin.style.display = 'block'; userProfile.style.display = 'none'; playerNameInput.value = `Гравець_${Math.floor(Math.random() * 1000)}`; playerNameInput.disabled = false; }
 
-window.addEventListener('DOMContentLoaded', async () => { try { const response = await fetch('/check-session'); const data = await response.json(); if (data.isLoggedIn) { showUserProfile(data.user); } } catch (error) { console.error('Помилка перевірки сесії:', error); } });
-const urlParams = new URLSearchParams(window.location.search);
-const joinGameId = urlParams.get('gameId')?.toUpperCase();
-if (joinGameId) { document.getElementById('join-game-section').style.display = 'block'; gameId = joinGameId; }
-createGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = "Будь ласка, введіть ім'я."; return; } const settings = { playerName: playerNameValue, deckSize: parseInt(document.getElementById('deckSize').value, 10), maxPlayers: parseInt(document.getElementById('maxPlayers').value, 10), customId: document.getElementById('customGameId').value.trim().toUpperCase() }; socket.emit('createGame', settings); });
-joinGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = "Будь ласка, введіть ім'я."; return; } socket.emit('joinGame', { gameId, playerName: playerNameValue }); });
-rematchBtn.addEventListener('click', () => { socket.emit('requestRematch', { gameId }); rematchBtn.disabled = true; rematchBtn.innerText = 'Очікуємо на інших...'; });
-startGameBtn.addEventListener('click', () => { socket.emit('forceStartGame', { gameId }); });
-logoutBtn.addEventListener('click', async () => { try { await fetch('/logout', { method: 'POST' }); showGuestLogin(); } catch (error) { console.error('Помилка виходу:', error); } });
-copyLobbyLinkBtn.addEventListener('click', () => copyLink(lobbyInviteLink, copyLobbyLinkBtn));
-copyLinkBtn.addEventListener('click', () => copyLink(inviteLink, copyLinkBtn));
-showLoginBtn.addEventListener('click', () => openModal('login'));
-showRegisterBtn.addEventListener('click', () => openModal('register'));
-closeModalBtn.addEventListener('click', closeModal);
-authModal.addEventListener('click', (e) => { if (e.target === authModal) { closeModal(); } });
-authForm.addEventListener('submit', async (e) => { e.preventDefault(); const username = authUsernameInput.value; const password = authPasswordInput.value; const mode = authForm.dataset.mode; const endpoint = (mode === 'login') ? '/login' : '/register'; authSubmitBtn.disabled = true; authError.innerText = ''; try { const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const result = await response.json(); if (response.ok) { alert(result.message); closeModal(); if (result.user) { showUserProfile(result.user); } } else { authError.innerText = result.message; } } catch (error) { authError.innerText = 'Сталася помилка з\'єднання.'; } finally { authSubmitBtn.disabled = false; } });
-showLogBtnMobile.addEventListener('click', () => gameLogContainer.classList.add('visible'));
-closeLogBtn.addEventListener('click', () => gameLogContainer.classList.remove('visible'));
-chatForm.addEventListener('submit', (e) => { e.preventDefault(); const message = chatInput.value; if (message.trim()) { socket.emit('sendMessage', { gameId, message }); chatInput.value = ''; } });
+window.addEventListener('DOMContentLoaded', () => {
+    fetch('/check-session').then(res => res.json()).then(data => { if (data.isLoggedIn) { showUserProfile(data.user); } }).catch(error => console.error('Помилка перевірки сесії:', error));
+    const urlParams = new URLSearchParams(window.location.search);
+    const joinGameId = urlParams.get('gameId')?.toUpperCase();
+    if (joinGameId) { document.getElementById('join-game-section').style.display = 'block'; gameId = joinGameId; }
+    createGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = "Будь ласка, введіть ім'я."; return; } const settings = { playerName: playerNameValue, deckSize: parseInt(document.getElementById('deckSize').value, 10), maxPlayers: parseInt(document.getElementById('maxPlayers').value, 10), customId: document.getElementById('customGameId').value.trim().toUpperCase() }; socket.emit('createGame', settings); });
+    joinGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = "Будь ласка, введіть ім'я."; return; } socket.emit('joinGame', { gameId, playerName: playerNameValue }); });
+    rematchBtn.addEventListener('click', () => { socket.emit('requestRematch', { gameId }); rematchBtn.disabled = true; rematchBtn.innerText = 'Очікуємо на інших...'; });
+    startGameBtn.addEventListener('click', () => { socket.emit('forceStartGame', { gameId }); });
+    logoutBtn.addEventListener('click', async () => { try { await fetch('/logout', { method: 'POST' }); showGuestLogin(); } catch (error) { console.error('Помилка виходу:', error); } });
+    copyLobbyLinkBtn.addEventListener('click', () => copyLink(lobbyInviteLink, copyLobbyLinkBtn));
+    copyLinkBtn.addEventListener('click', () => copyLink(inviteLink, copyLinkBtn));
+    showLoginBtn.addEventListener('click', () => openModal('login'));
+    showRegisterBtn.addEventListener('click', () => openModal('register'));
+    closeModalBtn.addEventListener('click', closeModal);
+    authModal.addEventListener('click', (e) => { if (e.target === authModal) closeModal(); });
+    authForm.addEventListener('submit', async (e) => { e.preventDefault(); const username = authUsernameInput.value; const password = authPasswordInput.value; const mode = authForm.dataset.mode; const endpoint = (mode === 'login') ? '/login' : '/register'; authSubmitBtn.disabled = true; authError.innerText = ''; try { const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const result = await response.json(); if (response.ok) { alert(result.message); closeModal(); if (result.user) { showUserProfile(result.user); } } else { authError.innerText = result.message; } } catch (error) { authError.innerText = 'Сталася помилка з\'єднання.'; } finally { authSubmitBtn.disabled = false; } });
+    showLogBtnMobile.addEventListener('click', () => gameLogContainer.classList.add('visible'));
+    closeLogBtn.addEventListener('click', () => gameLogContainer.classList.remove('visible'));
+    chatForm.addEventListener('submit', (e) => { e.preventDefault(); const message = chatInput.value; if (message.trim()) { socket.emit('sendMessage', { gameId, message }); chatInput.value = ''; } });
+});
 
 socket.on('gameCreated', (data) => { gameId = data.gameId; playerId = data.playerId; welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'block'; lobbyGameId.innerText = gameId; const link = `${window.location.origin}?gameId=${gameId}`; lobbyInviteLink.value = link; inviteLink.value = link; socket.emit('getLobbyState', { gameId }); });
 socket.on('joinSuccess', (data) => { playerId = data.playerId; gameId = data.gameId; welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'block'; lobbyGameId.innerText = gameId; const link = `${window.location.origin}?gameId=${gameId}`; lobbyInviteLink.value = link; inviteLink.value = link; socket.emit('getLobbyState', { gameId }); });
@@ -111,7 +113,6 @@ function playSound(soundFile) { try { new Audio(`/sounds/${soundFile}`).play(); 
 function animateTrumpReveal(trumpCard) { if (!trumpCard) return; centerAnimationContainer.innerHTML = `<div class="flipper"><div class="front card card-back"></div><div class="back">${createCardDiv(trumpCard).outerHTML}</div></div>`; const flipper = centerAnimationContainer.querySelector('.flipper'); setTimeout(() => flipper.classList.add('flipped'), 100); setTimeout(() => { flipper.style.transition = 'opacity 0.5s, transform 0.5s'; flipper.style.opacity = '0'; flipper.style.transform = 'scale(0.8)'; setTimeout(() => centerAnimationContainer.innerHTML = '', 500); }, 1500); }
 function animateCardDraw(targetPlayerId, count) { const deckArea = document.getElementById('deck-area'); const targetHand = (targetPlayerId === playerId) ? document.getElementById('player-cards') : document.querySelector(`.opponent[data-player-id="${targetPlayerId}"] .card-hand`); if (!deckArea || !targetHand) return; const deckRect = deckArea.getBoundingClientRect(); const handRect = targetHand.getBoundingClientRect(); for (let i = 0; i < count; i++) { const delay = i * 100; const dummyCard = document.createElement('div'); dummyCard.className = 'card card-back animated-card'; document.body.appendChild(dummyCard); dummyCard.style.transform = `translate(${deckRect.left}px, ${deckRect.top}px)`; setTimeout(() => { const targetX = handRect.left + (handRect.width / 2) - 45; const targetY = handRect.top + (handRect.height / 2) - 63; dummyCard.style.transform = `translate(${targetX}px, ${targetY}px) rotate(${Math.random() * 10 - 5}deg)`; setTimeout(() => dummyCard.remove(), 500); }, delay); } }
 function animateOpponentPlay(card, opponentId) { playSound('play.mp3'); const opponentDiv = document.querySelector(`.opponent[data-player-id="${opponentId}"]`); const tableRect = document.getElementById('game-table').getBoundingClientRect(); if (!opponentDiv) return; const handRect = opponentDiv.getBoundingClientRect(); const dummyCard = createCardDiv(card); dummyCard.classList.add('animated-card'); document.body.appendChild(dummyCard); const startX = handRect.left + (handRect.width / 2) - 45; const startY = handRect.top + (handRect.height / 2) - 63; dummyCard.style.transform = `translate(${startX}px, ${startY}px)`; setTimeout(() => { const targetX = tableRect.left + (tableRect.width / 2) - 45 + (Math.random() * 40 - 20); const targetY = tableRect.top + (tableRect.height / 2) - 63 + (Math.random() * 40 - 20); dummyCard.style.transform = `translate(${targetX}px, ${targetY}px) rotate(${Math.random() * 20 - 10}deg)`; setTimeout(() => dummyCard.remove(), 500); }, 50); }
-
 function renderGame(state) {
     if (state.winner) { return displayWinner(state.winner); }
     const me = state.players.find(p => p.id === playerId);
@@ -145,7 +146,8 @@ function renderGame(state) {
         let opponentNameHTML = player.name;
         if (player.streak > 0) { opponentNameHTML += ` <span class="streak-fire">🔥${player.streak}</span>`; }
         if (player.isAttacker) opponentNameHTML += ' ⚔️'; if (player.isDefender) opponentNameHTML += ' 🛡️';
-        const h3 = document.createElement('h3'); h3.innerHTML = opponentNameHTML;
+        const h3 = document.createElement('h3');
+        h3.innerHTML = opponentNameHTML;
         opponentDiv.appendChild(h3);
         opponentDiv.appendChild(opponentHand);
         opponentsContainer.appendChild(opponentDiv);
@@ -168,45 +170,4 @@ function updateCards(container, newCards, isPlayer, state) {
                     if (state.table.length === 0) { playableCards = newCards; }
                     else { const tableRanks = state.table.map(c => c.rank); playableCards = newCards.filter(c => tableRanks.includes(c.rank)); }
                 } else if (me.isDefender) {
-                    const attackCard = state.table[state.table.length - 1];
-                    if (attackCard) { playableCards = newCards.filter(c => canBeat(attackCard, c, state.trumpSuit)); }
-                }
-            } else if (!me.isAttacker && !me.isDefender && state.table.length > 0 && state.table.length % 2 === 0) {
-                 const tableRanks = state.table.map(c => c.rank); playableCards = newCards.filter(c => tableRanks.includes(c.rank));
-            }
-        }
-    }
-    newCards.forEach((card, index) => { const cardDiv = createCardDiv(card); cardDiv.style.setProperty('--card-index', index); if (playableCards.some(pc => pc.rank === card.rank && pc.suit === card.suit)) { cardDiv.classList.add('playable'); } cardDiv.addEventListener('click', () => handleCardClick(card, cardDiv)); container.appendChild(cardDiv); });
-}
-function updateTable(newTableCards) { const gameTable = document.getElementById('game-table'); if (lastGameState && lastGameState.table.length > 0 && newTableCards.length === 0) { if (lastGameState.lastAction !== 'take') { playSound('pass.mp3'); } const wasTaken = lastGameState.lastAction === 'take'; if (wasTaken) { document.body.classList.add('shake-screen'); setTimeout(() => document.body.classList.remove('shake-screen'), 400); } Array.from(gameTable.children).forEach((cardDiv, i) => { cardDiv.classList.add(wasTaken ? 'animate-take' : 'animate-discard'); cardDiv.style.setProperty('--card-index', i); }); setTimeout(() => gameTable.innerHTML = '', 500); return; } gameTable.innerHTML = ''; newTableCards.forEach(card => { const cardDiv = createCardDiv(card); gameTable.appendChild(cardDiv); }); }
-function canBeat(attackCard, defendCard, trumpSuit) { if (!attackCard || !defendCard || !trumpSuit) return false; const RANK_VALUES = { '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 }; if (attackCard.suit === defendCard.suit) { return RANK_VALUES[defendCard.rank] > RANK_VALUES[attackCard.rank]; } return defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit; }
-function createCardDiv(card) { const cardDiv = document.createElement('div'); cardDiv.className = 'card'; if (card.hidden) { cardDiv.classList.add('card-back'); } else { const rankSpan = document.createElement('span'); rankSpan.className = 'rank'; rankSpan.textContent = card.rank; const suitSpan = document.createElement('span'); suitSpan.className = 'suit'; suitSpan.textContent = card.suit; if (card.suit === '♥' || card.suit === '♦') { cardDiv.classList.add('red'); } else { cardDiv.classList.add('black'); } if (card.rank) rankSpan.setAttribute('data-rank', card.rank); cardDiv.appendChild(rankSpan); cardDiv.appendChild(suitSpan); } return cardDiv; }
-function handleCardClick(card, cardDiv) { playSound('play.mp3'); cardDiv.classList.add('animate-play'); setTimeout(() => socket.emit('makeMove', { gameId, card }), 50); }
-function displayWinner(winnerData) {
-    gameScreen.style.display = 'none'; winnerScreen.style.display = 'block';
-    let message = ''; let showRematchButton = true;
-    if (winnerData.reason) { message = winnerData.reason; showRematchButton = false; }
-    else {
-        const winnerNames = winnerData.winners.map(w => w.id === playerId ? 'ВИ' : w.name).join(', ');
-        if (winnerData.winners.some(w => w.id === playerId)) { message = `🎉 Перемога! Переможці: ${winnerNames} 🎉`; playSound('win.mp3'); }
-        else if (winnerData.loser) { message = `😞 Ви програли. Дурень: ${winnerData.loser.name}.`; playSound('lose.mp3'); }
-        else { message = 'Нічия!'; }
-    }
-    winnerMessage.innerText = message;
-    if (showRematchButton) {
-        rematchBtn.style.display = 'block'; rematchStatus.style.display = 'block';
-        rematchBtn.disabled = false; rematchBtn.innerText = 'Реванш';
-        rematchStatus.innerText = '';
-    } else {
-        rematchBtn.style.display = 'none'; rematchStatus.style.display = 'none';
-    }
-    setTimeout(() => {
-        fetch('/check-session').then(res => { if (res.ok) return res.json(); }).then(data => {
-            if (data.isLoggedIn) {
-                showUserProfile(data.user);
-            }
-        }).catch(error => { console.error('Не вдалося оновити статистику:', error); });
-    }, 1000);
-}
-const SUITS = ['♦', '♥', '♠', '♣'];
-const RANK_VALUES = { '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+                    const attackCard = state.table[state.t
