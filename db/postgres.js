@@ -21,7 +21,18 @@ pool.query(`
         last_played_date DATE
     );
 `).then(() => console.log('Таблиця "users" в PostgreSQL готова до роботи.'))
-  .catch(err => console.error('Помилка створення таблиці "users" в PostgreSQL:', err));
+    .catch(err => console.error('Помилка створення таблиці "users" в PostgreSQL:', err));
+
+pool.query(`
+    CREATE TABLE IF NOT EXISTS "user_sessions" (
+        "sid" varchar NOT NULL COLLATE "default",
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL
+    )
+    WITH (OIDS=FALSE);
+    ALTER TABLE "user_sessions" ADD CONSTRAINT "user_sessions_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE;
+`).then(() => console.log('Таблиця "user_sessions" готова до роботи.'))
+    .catch(err => console.error('Помилка створення таблиці "user_sessions":', err));
 
 
 function formatSql(sql) {
