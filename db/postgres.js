@@ -4,7 +4,8 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
         rejectUnauthorized: false
-    }
+    },
+    host: new URL(process.env.DATABASE_URL).hostname
 });
 
 console.log('Використовується база даних PostgreSQL.');
