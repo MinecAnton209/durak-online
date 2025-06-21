@@ -1,3 +1,4 @@
+// public/js/client.js
 const socket = io({ transports: ['websocket'] });
 const welcomeScreen = document.getElementById('welcome-screen');
 const gameScreen = document.getElementById('game-screen');
@@ -170,4 +171,45 @@ function updateCards(container, newCards, isPlayer, state) {
                     if (state.table.length === 0) { playableCards = newCards; }
                     else { const tableRanks = state.table.map(c => c.rank); playableCards = newCards.filter(c => tableRanks.includes(c.rank)); }
                 } else if (me.isDefender) {
-                    const attackCard = state.table[state.t
+                    const attackCard = state.table[state.table.length - 1];
+                    if (attackCard) { playableCards = newCards.filter(c => canBeat(attackCard, c, state.trumpSuit)); }
+                }
+            } else if (!me.isAttacker && !me.isDefender && state.table.length > 0 && state.table.length % 2 === 0) {
+                 const tableRanks = state.table.map(c => c.rank); playableCards = newCards.filter(c => tableRanks.includes(c.rank));
+            }
+        }
+    }
+    newCards.forEach((card, index) => { const cardDiv = createCardDiv(card); cardDiv.style.setProperty('--card-index', index); if (playableCards.some(pc => pc.rank === card.rank && pc.suit === card.suit)) { cardDiv.classList.add('playable'); } cardDiv.addEventListener('click', () => handleCardClick(card, cardDiv)); container.appendChild(cardDiv); });
+}
+function updateTable(newTableCards) { const gameTable = document.getElementById('game-table'); if (lastGameState && lastGameState.table.length > 0 && newTableCards.length === 0) { if (lastGameState.lastAction !== 'take') { playSound('pass.mp3'); } const wasTaken = lastGameState.lastAction === 'take'; if (wasTaken) { document.body.classList.add('shake-screen'); setTimeout(() => document.body.classList.remove('shake-screen'), 400); } Array.from(gameTable.children).forEach((cardDiv, i) => { cardDiv.classList.add(wasTaken ? 'animate-take' : 'animate-discard'); cardDiv.style.setProperty('--card-index', i); }); setTimeout(() => gameTable.innerHTML = '', 500); return; } gameTable.innerHTML = ''; newTableCards.forEach(card => { const cardDiv = createCardDiv(card); gameTable.appendChild(cardDiv); }); }
+function canBeat(attackCard, defendCard, trumpSuit) { if (!attackCard || !defendCard || !trumpSuit) return false; const RANK_VALUES = { '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 }; if (attackCard.suit === defendCard.suit) { return RANK_VALUES[defendCard.rank] > RANK_VALUES[attackCard.rank]; } return defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit; }
+function createCardDiv(card) { const cardDiv = document.createElement('div'); cardDiv.className = 'card'; if (card.hidden) { cardDiv.classList.add('card-back'); } else { const rankSpan = document.createElement('span'); rankSpan.className = 'rank'; rankSpan.textContent = card.rank; const suitSpan = document.createElement('span'); suitSpan.className = 'suit'; suitSpan.textContent = card.suit; if (card.suit === '♥' || card.suit === '♦') { cardDiv.classList.add('red'); } else { cardDiv.classList.add('black'); } if (card.rank) rankSpan.setAttribute('data-rank', card.rank); cardDiv.appendChild(rankSpan); cardDiv.appendChild(suitSpan); } return cardDiv; }
+function handleCardClick(card, cardDiv) { playSound('play.mp3'); cardDiv.classList.add('animate-play'); setTimeout(() => socket.emit('makeMove', { gameId, card }), 50); }
+function displayWinner(winnerData) {
+    gameScreen.style.display = 'none'; winnerScreen.style.display = 'block';
+    let message = ''; let showRematchButton = true;
+    if (winnerData.reason) { message = winnerData.reason; showRematchButton = false; }
+    else {
+        const winnerNames = winnerData.winners.map(w => w.id === playerId ? 'ВИ' : w.name).join(', ');
+        if (winnerData.winners.some(w => w.id === playerId)) { message = `🎉 Перемога! Переможці: ${winnerNames} 🎉`; playSound('win.mp3'); }
+        else if (winnerData.loser) { message = `😞 Ви програли. Дурень: ${winnerData.loser.name}.`; playSound('lose.mp3'); }
+        else { message = 'Нічия!'; }
+    }
+    winnerMessage.innerText = message;
+    if (showRematchButton) {
+        rematchBtn.style.display = 'block'; rematchStatus.style.display = 'block';
+        rematchBtn.disabled = false; rematchBtn.innerText = 'Реванш';
+        rematchStatus.innerText = '';
+    } else {
+        rematchBtn.style.display = 'none'; rematchStatus.style.display = 'none';
+    }
+    setTimeout(() => {
+        fetch('/check-session').then(res => { if (res.ok) return res.json(); }).then(data => {
+            if (data.isLoggedIn) {
+                showUserProfile(data.user);
+            }
+        }).catch(error => { console.error('Не вдалося оновити статистику:', error); });
+    }, 1000);
+}
+const SUITS = ['♦', '♥', '♠', '♣'];
+const RANK_VALUES = { '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
