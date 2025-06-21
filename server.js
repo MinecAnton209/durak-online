@@ -8,7 +8,8 @@ const bcrypt = require('bcrypt');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const authRoutes = require('./routes/auth.js');
-const db = require('./database.js');
+const db = require('./db');
+const pgSession = require('connect-pg-simple')(session);
 
 const app = express();
 const server = http.createServer(app);
@@ -16,18 +17,39 @@ const io = socketIo(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 3000;
 
-const sessionMiddleware = session({
-    store: new SQLiteStore({ db: 'database.sqlite', dir: './data' }),
+// server.js -> ЗАМІНИТИ БЛОК НАЛАШТУВАННЯ СЕСІЙ
+
+const sessionConfig = {
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: { maxAge: 1000 * 60 * 60 * 24 * 7, secure: 'auto' }
-});
+};
+
+if (process.env.DB_CLIENT === 'postgres') {
+    // Налаштування для PostgreSQL
+    const pgSession = require('connect-pg-simple')(session);
+    sessionConfig.store = new pgSession({
+        pool: db.pool,
+        tableName: 'user_sessions'
+    });
+    console.log("Сесії будуть зберігатися в PostgreSQL.");
+} else {
+    // Налаштування для SQLite (за замовчуванням)
+    const SQLiteStore = require('connect-sqlite3')(session);
+    sessionConfig.store = new SQLiteStore({
+        db: 'database.sqlite',
+        dir: './data'
+    });
+    console.log("Сесії будуть зберігатися в SQLite.");
+}
+
+const sessionMiddleware = session(sessionConfig);
 
 app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.static('public'));
-app.use(sessionMiddleware);
+app.use(session(sessionConfig));
 app.use('/', authRoutes);
 
 io.use((socket, next) => {

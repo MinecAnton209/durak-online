@@ -11,10 +11,12 @@
   "description": "",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "connect-pg-simple": "^10.0.0",
     "connect-sqlite3": "^0.9.15",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "express-session": "^1.18.1",
+    "pg": "^8.16.2",
     "socket.io": "^4.8.1",
     "sqlite3": "^5.1.7"
   }
