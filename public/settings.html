@@ -3,28 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Налаштування - Дурень Онлайн</title>
+    <title data-i18n="settings_page_title">Налаштування - Дурень Онлайн</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
     <link rel="stylesheet" href="/css/style.css">
+    <script src="https://unpkg.com/i18next/i18next.js"></script>
+    <script src="https://unpkg.com/i18next-browser-languagedetector/i18nextBrowserLanguageDetector.js"></script>
 </head>
 <body>
+    <div class="lang-switcher">
+        <button class="lang-btn" data-lang="uk">🇺🇦</button>
+        <button class="lang-btn" data-lang="en">🇬🇧</button>
+    </div>
+
     <div id="settings-page-container">
-        <h1>Налаштування профілю</h1>
+        <h1 data-i18n="profile_settings_title">Налаштування профілю</h1>
         
         <div class="setting-section">
-            <h3>Оберіть сорочку для карт</h3>
+            <h3 data-i18n="card_back_selection_title">Оберіть сорочку для карт</h3>
             <div id="card-back-selector" class="card-back-selector">
                 <div class="card-back-option" data-style="default">
                     <div class="card card-back"></div>
-                    <span>Стандартна</span>
+                    <span data-i18n="style_default">Стандартна</span>
                 </div>
             </div>
         </div>
         
-        <a href="/"><button class="secondary-btn">Повернутися на головну</button></a>
+        <a href="/"><button class="secondary-btn" data-i18n="return_to_main_button">Повернутися на головну</button></a>
         <p id="save-status"></p>
     </div>
 
+    <script src="/js/i18n.js"></script>
     <script src="/js/settings.js"></script>
 </body>
 </html>

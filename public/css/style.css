@@ -21,7 +21,7 @@ body { font-family: 'Roboto', sans-serif; background-color: var(--background-col
 .separator:not(:empty)::before { margin-right: .25em; }
 .separator:not(:empty)::after { margin-left: .25em; }
 #user-profile { text-align: center; background: rgba(0,0,0,0.2); padding: 1rem 1.5rem; border-radius: 16px; border: 1px solid var(--outline-color); margin-bottom: 1rem; }
-#user-profile p { margin: 0; font-size: 1.1rem; }
+#user-profile p { margin: 0; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; }
 #user-profile .stats { display: flex; justify-content: center; gap: 1.5rem; margin: 1rem 0; font-size: 1rem; }
 #user-profile .stats span { color: var(--on-surface-variant-color); }
 #user-profile .stats b { color: var(--on-surface-color); font-weight: 700; }
@@ -48,15 +48,18 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 .copy-icon-btn svg { stroke: var(--on-surface-variant-color); transition: transform 0.2s; }
 .copy-icon-btn:hover { background-color: rgba(255, 255, 255, 0.1); }
 .copy-icon-btn:active svg { transform: scale(0.85); }
+.leave-btn { position: absolute; top: 0.5rem; left: 1rem; z-index: 201; background: var(--error-color); color: white; border-radius: 8px; padding: 0.5rem 1rem; font-size: 0.9rem; }
 #player-area { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); width: 60vw; z-index: 100; background: rgba(0, 0, 0, 0.3); border-radius: 24px; padding: 0.75rem; border: 2px solid transparent; }
 #player-area.active-player { border-color: var(--primary-color); box-shadow: 0 0 20px 0px var(--primary-color); }
-#player-area h3 { margin: 0 0 10px; text-align: center; transition: color 0.3s; }
+#player-area h3 { margin: 0 0 10px; text-align: center; transition: color 0.3s; display: flex; justify-content: center; align-items: center; }
 #player-area .card:not(:first-child) { margin-left: -60px; }
 #player-area .card { z-index: calc(var(--card-index, 0) + 1); }
 #opponents-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 .opponent { position: absolute; background-color: var(--surface-color); border-radius: 24px; padding: 0.75rem; transition: box-shadow 0.3s ease-in-out; border: 2px solid transparent; pointer-events: all; text-align: center; }
-.opponent h3 { margin: 0 0 10px; }
+.opponent h3 { margin: 0 0 10px; display: flex; justify-content: center; align-items: center; }
 .opponent.active-player { box-shadow: 0 0 20px 0px var(--primary-color); border-color: var(--primary-color); }
+.opponent.disconnected { opacity: 0.6; border-style: dashed; border-color: var(--outline-color); }
+.offline-status { color: #ffc107; font-style: italic; font-size: 0.8em; margin-left: 0.5em; }
 .opponent-top { top: 1rem; left: 50%; transform: translateX(-50%); width: 40vw; }
 .opponent-left { top: 50%; left: 1rem; transform: translateY(-50%); width: auto; max-width: 200px; }
 .opponent-right { top: 50%; right: 1rem; transform: translateY(-50%); width: auto; max-width: 200px; }
@@ -107,6 +110,8 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 #chat-form button { margin-left: 0.5rem; padding: 0.5rem; border-radius: 8px; width: 40px; flex-shrink: 0; font-size: 1.2rem; line-height: 1; }
 .floating-btn { display: none; position: fixed; bottom: 8rem; right: 1rem; width: 50px; height: 50px; border-radius: 50%; font-size: 1.5rem; padding: 0; z-index: 140; box-shadow: 0 4px 8px rgba(0,0,0,0.3); justify-content: center; align-items: center; }
 .streak-fire { color: #FF9800; text-shadow: 0 0 5px #FF5722, 0 0 10px #FFC107; font-weight: bold; margin-left: 0.25em; animation: fire-pulse 2s infinite; }
+.verified-badge { display: inline-block; width: 1em; height: 1em; vertical-align: -0.15em; margin-left: 0.25em; }
+.verified-badge svg { width: 100%; height: 100%; }
 .card-back.style-red { background: linear-gradient(135deg, #B71C1C, #F44336); }
 .card-back.style-blue { background: linear-gradient(135deg, #1A237E, #3F51B5); }
 .card-back.style-green { background: linear-gradient(135deg, #1B5E20, #4CAF50); }
@@ -134,8 +139,7 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 @keyframes shake-screen-anim { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
 .shake-screen { animation: shake-screen-anim 0.4s cubic-bezier(.36,.07,.19,.97) both; }
 .hand-setup .card { opacity: 0 !important; transition: opacity 0.3s; }
-.verified-badge { display: inline-block; width: 1em; height: 1em; vertical-align: -0.15em; margin-left: 0.25em; }
-.verified-badge svg { width: 100%; height: 100%; }
+
 @media (max-width: 1024px) { #game-log-container { display: none; } #show-log-btn-mobile { display: flex; } }
 @media (max-width: 768px) {
     body { padding: 0.5rem; font-size: 14px; }
