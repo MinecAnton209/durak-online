@@ -17,6 +17,13 @@ const io = socketIo(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 3000;
 
+const VERIFIED_BADGE_SVG = `
+    <span class="verified-badge" title="Верифікований гравець">
+        <svg viewBox="0 0 20 22" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z" fill="#1d9bf0"></path>
+        </svg>
+    </span>`;
+
 const sessionMiddleware = session({
     store: (process.env.DB_CLIENT === 'postgres' && process.env.DATABASE_URL) ?
         new (require('connect-pg-simple')(session))({ pool: db.pool, tableName: 'user_sessions' }) :
@@ -58,9 +65,21 @@ function canBeat(attackCard, defendCard, trumpSuit) { if (!attackCard || !defend
 function getNextPlayerIndex(currentIndex, totalPlayers) { if (totalPlayers === 0) return 0; return (currentIndex + 1) % totalPlayers; }
 function updateTurn(game, newAttackerIndex) { if (game.playerOrder.length === 0) return; const safeIndex = newAttackerIndex % game.playerOrder.length; game.attackerId = game.playerOrder[safeIndex]; const defenderIndex = getNextPlayerIndex(safeIndex, game.playerOrder.length); game.defenderId = game.playerOrder[defenderIndex]; game.turn = game.attackerId; }
 function addPlayerToGame(socket, game, playerName) { const sessionUser = socket.request.session.user; game.players[socket.id] = { id: socket.id, name: sessionUser ? sessionUser.username : playerName, dbId: sessionUser ? sessionUser.id : null, isGuest: !sessionUser, cardBackStyle: sessionUser ? sessionUser.card_back_style : 'default', streak: sessionUser ? sessionUser.streak : 0, isVerified: sessionUser ? sessionUser.isVerified : false, cards: [] }; game.playerOrder.push(socket.id); }
-function logEvent(game, message) { if (!game.log) game.log = []; const timestamp = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); const logEntry = { timestamp, message }; game.log.push(logEntry); if (game.log.length > 50) game.log.shift(); io.to(game.id).emit('newLogEntry', logEntry); }
-function startGame(gameId) { const game = games[gameId]; if (!game) return; game.startTime = new Date(); game.deck = createDeck(game.settings.deckSize); game.trumpCard = game.deck.length > 0 ? game.deck[game.deck.length - 1] : { suit: '♠', rank: ''}; game.trumpSuit = game.trumpCard.suit; let firstAttackerIndex = 0; let minTrumpRank = Infinity; game.playerOrder.forEach((playerId, index) => { const player = game.players[playerId]; player.cards = game.deck.splice(0, 6); player.cards.forEach(card => { if (card.suit === game.trumpSuit && RANK_VALUES[card.rank] < minTrumpRank) { minTrumpRank = RANK_VALUES[card.rank]; firstAttackerIndex = index; } }); }); logEvent(game, `Гра почалася! Козир: ${game.trumpSuit}. Перший хід за ${game.players[game.playerOrder[firstAttackerIndex]].name}.`); updateTurn(game, firstAttackerIndex); broadcastGameState(gameId); }
-function refillHands(game) { const attackerIndex = game.playerOrder.indexOf(game.attackerId); if(attackerIndex === -1) return; for (let i = 0; i < game.playerOrder.length; i++) { const playerIndex = (attackerIndex + i) % game.playerOrder.length; const player = game.players[game.playerOrder[playerIndex]]; if(player) { const cardsToDraw = 6 - player.cards.length; if (cardsToDraw > 0 && game.deck.length > 0) { const drawnCards = game.deck.splice(0, cardsToDraw); player.cards.push(...drawnCards); logEvent(game, `${player.name} добирає ${drawnCards.length} карт(и).`); } } } }
+function logEvent(game, message, options = {}) {
+    if (!game.log) game.log = [];
+    const timestamp = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    const logEntry = { timestamp, ...options };
+    if(typeof message === 'string' && !options.i18nKey) {
+        logEntry.message = message;
+    }
+
+    game.log.push(logEntry);
+    if (game.log.length > 50) game.log.shift();
+    io.to(game.id).emit('newLogEntry', logEntry);
+}
+function startGame(gameId) { const game = games[gameId]; if (!game) return; game.startTime = new Date(); game.deck = createDeck(game.settings.deckSize); game.trumpCard = game.deck.length > 0 ? game.deck[game.deck.length - 1] : { suit: '♠', rank: ''}; game.trumpSuit = game.trumpCard.suit; let firstAttackerIndex = 0; let minTrumpRank = Infinity; game.playerOrder.forEach((playerId, index) => { const player = game.players[playerId]; player.cards = game.deck.splice(0, 6); player.cards.forEach(card => { if (card.suit === game.trumpSuit && RANK_VALUES[card.rank] < minTrumpRank) { minTrumpRank = RANK_VALUES[card.rank]; firstAttackerIndex = index; } }); }); logEvent(game, null, { i18nKey: 'log_game_start', options: { trump: game.trumpSuit, player: game.players[game.playerOrder[firstAttackerIndex]].name } }); updateTurn(game, firstAttackerIndex); broadcastGameState(gameId); }
+function refillHands(game) { const attackerIndex = game.playerOrder.indexOf(game.attackerId); if(attackerIndex === -1) return; for (let i = 0; i < game.playerOrder.length; i++) { const playerIndex = (attackerIndex + i) % game.playerOrder.length; const player = game.players[game.playerOrder[playerIndex]]; if(player) { const cardsToDraw = 6 - player.cards.length; if (cardsToDraw > 0 && game.deck.length > 0) { const drawnCards = game.deck.splice(0, cardsToDraw); player.cards.push(...drawnCards); logEvent(game, null, { i18nKey: 'log_draw_cards', options: { name: player.name, count: drawnCards.length } }); } } } }
 function checkGameOver(game) { if (game.deck.length === 0) { const playersWithCards = game.playerOrder.map(id => game.players[id]).filter(p => p && p.cards.length > 0); if (playersWithCards.length <= 1) { const loser = playersWithCards.length === 1 ? playersWithCards[0] : null; const winners = game.playerOrder.map(id => game.players[id]).filter(p => p && p.cards.length === 0); game.winner = { winners, loser }; return true; } } return false; }
 function updateStatsAfterGame(game) {
     if (!game.winner || !game.startTime) return;
@@ -97,23 +116,39 @@ io.on('connection', (socket) => {
     socket.on('joinGame', ({ gameId, playerName }) => { if (!gameId) { return socket.emit('error', 'ID гри не вказано.'); } const upperCaseGameId = gameId.toUpperCase(); const game = games[upperCaseGameId]; if (game && game.playerOrder.length < game.settings.maxPlayers) { socket.join(upperCaseGameId); addPlayerToGame(socket, game, playerName); socket.emit('joinSuccess', { playerId: socket.id, gameId: upperCaseGameId }); io.to(upperCaseGameId).emit('playerJoined'); } else { socket.emit('error', 'Кімната не існує або вже повна.'); } });
     socket.on('getLobbyState', ({ gameId }) => { const game = games[gameId]; if (game) { io.to(gameId).emit('lobbyStateUpdate', { players: Object.values(game.players), maxPlayers: game.settings.maxPlayers, hostId: game.hostId }); } });
     socket.on('forceStartGame', ({ gameId }) => { const game = games[gameId]; if (!game || game.hostId !== socket.id) return; if (game.playerOrder.length >= 2) { game.settings.maxPlayers = game.playerOrder.length; startGame(gameId); } });
-    socket.on('sendMessage', ({ gameId, message }) => { const game = games[gameId]; const player = game.players[socket.id]; if (!game || !player || !message) return; const trimmedMessage = message.trim(); if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) { const chatMessage = `<span class="message-author">${player.name}:</span> <span class="message-text">${trimmedMessage}</span>`; logEvent(game, chatMessage); } });
+    
+    socket.on('sendMessage', ({ gameId, message }) => {
+        const game = games[gameId];
+        const player = game.players[socket.id];
+        if (!game || !player || !message) return;
+        const trimmedMessage = message.trim();
+        if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) {
+            let authorHTML = player.name;
+            if (player.isVerified) {
+                authorHTML += VERIFIED_BADGE_SVG;
+            }
+            const chatMessage = `<span class="message-author">${authorHTML}:</span> <span class="message-text">${trimmedMessage}</span>`;
+            logEvent(game, chatMessage);
+        }
+    });
+
     socket.on('makeMove', ({ gameId, card }) => {
         const game = games[gameId]; if (!game || !game.players[socket.id] || game.winner) return;
         game.lastAction = 'move';
         const player = game.players[socket.id]; const isDefender = socket.id === game.defenderId; const canToss = !isDefender && game.table.length > 0 && game.table.length % 2 === 0;
-        if (game.turn !== socket.id && !canToss) { return socket.emit('invalidMove', { reason: "Зараз не ваш хід." }); }
-        if (!player.cards.some(c => c.rank === card.rank && c.suit === card.suit)) { return socket.emit('invalidMove', { reason: "Шахраювати не можна!" }); }
+        if (game.turn !== socket.id && !canToss) { return socket.emit('invalidMove', { reason: "error_invalid_move_turn" }); }
+        if (!player.cards.some(c => c.rank === card.rank && c.suit === card.suit)) { return socket.emit('invalidMove', { reason: "error_invalid_move_no_card" }); }
         if (isDefender) {
-            if (!canBeat(game.table[game.table.length - 1], card, game.trumpSuit)) { return socket.emit('invalidMove', { reason: "Цією картою не можна побити." }); }
-            logEvent(game, `${player.name} відбивається картою ${card.rank}${card.suit}.`);
+            if (!canBeat(game.table[game.table.length - 1], card, game.trumpSuit)) { return socket.emit('invalidMove', { reason: "error_invalid_move_cannot_beat" }); }
+            logEvent(game, null, { i18nKey: 'log_defend', options: { name: player.name, rank: card.rank, suit: card.suit } });
             game.turn = game.attackerId;
         } else {
-            const attackerName = game.attackerId === socket.id ? 'атакує' : 'підкидає';
-            if (game.table.length > 0 && !game.table.some(c => c.rank === card.rank)) { return socket.emit('invalidMove', { reason: "Підкидати можна лише карти того ж номіналу." }); }
+            const isAttacking = game.attackerId === socket.id;
+            const logKey = isAttacking ? 'log_attack' : 'log_toss';
+            if (game.table.length > 0 && !game.table.some(c => c.rank === card.rank)) { return socket.emit('invalidMove', { reason: "error_invalid_move_wrong_rank" }); }
             const defender = game.players[game.defenderId]; if (!defender) return;
-            if ((game.table.length / 2) >= defender.cards.length) { return socket.emit('invalidMove', { reason: "Не можна підкидати більше карт, ніж є у захисника." }); }
-            logEvent(game, `${player.name} ${attackerName} картою ${card.rank}${card.suit}.`);
+            if ((game.table.length / 2) >= defender.cards.length) { return socket.emit('invalidMove', { reason: "error_invalid_move_toss_limit" }); }
+            logEvent(game, null, { i18nKey: logKey, options: { name: player.name, rank: card.rank, suit: card.suit } });
             game.turn = game.defenderId;
         }
         player.cards = player.cards.filter(c => !(c.rank === card.rank && c.suit === card.suit));
@@ -123,7 +158,7 @@ io.on('connection', (socket) => {
     socket.on('passTurn', ({ gameId }) => {
         const game = games[gameId]; if (!game || game.attackerId !== socket.id || game.table.length === 0 || game.table.length % 2 !== 0 || game.winner) return;
         game.lastAction = 'pass'; const defenderIdBeforeRefill = game.defenderId;
-        if(game.players[defenderIdBeforeRefill]) logEvent(game, `Відбій. Хід переходить до ${game.players[defenderIdBeforeRefill].name}.`);
+        if(game.players[defenderIdBeforeRefill]) logEvent(game, null, { i18nKey: 'log_pass', options: { name: game.players[defenderIdBeforeRefill].name } });
         game.discardPile.push(...game.table); game.table = [];
         refillHands(game);
         if (checkGameOver(game)) { updateStatsAfterGame(game); return broadcastGameState(gameId); }
@@ -135,7 +170,7 @@ io.on('connection', (socket) => {
     });
     socket.on('takeCards', ({ gameId }) => {
         const game = games[gameId]; if (!game || game.defenderId !== socket.id || game.table.length === 0 || game.winner) return;
-        game.lastAction = 'take'; logEvent(game, `${game.players[game.defenderId].name} бере карти.`);
+        game.lastAction = 'take'; logEvent(game, null, { i18nKey: 'log_take', options: { name: game.players[game.defenderId].name } });
         game.players[game.defenderId].cards.push(...game.table); game.table = [];
         refillHands(game);
         if (checkGameOver(game)) { updateStatsAfterGame(game); return broadcastGameState(gameId); }
@@ -170,7 +205,7 @@ io.on('connection', (socket) => {
                 }
                 else if (!game.winner) {
                     if (game.playerOrder.length < 2) {
-                        game.winner = { reason: `Гравець ${disconnectedPlayer.name} вийшов. Гру завершено.` };
+                        game.winner = { reason: { i18nKey: 'game_over_player_left', options: { player: disconnectedPlayer.name } } };
                         broadcastGameState(gameId);
                     } else {
                         if (game.turn === socket.id) {

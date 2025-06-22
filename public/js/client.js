@@ -52,6 +52,8 @@ const closeLogBtn = document.getElementById('close-log-btn');
 const showLogBtnMobile = document.getElementById('show-log-btn-mobile');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
+const toggleChatBtn = document.getElementById('toggle-chat-btn');
+const leaveGameBtn = document.getElementById('leaveGameBtn');
 
 const VERIFIED_BADGE_SVG = `
     <span class="verified-badge" title="Верифікований гравець">
@@ -86,7 +88,36 @@ window.addEventListener('DOMContentLoaded', () => {
     authForm.addEventListener('submit', async (e) => { e.preventDefault(); const username = authUsernameInput.value; const password = authPasswordInput.value; const mode = authForm.dataset.mode; const endpoint = (mode === 'login') ? '/login' : '/register'; authSubmitBtn.disabled = true; authError.innerText = ''; try { const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const result = await response.json(); if (response.ok) { alert(i18next.t(result.i18nKey || 'alert_success')); closeModal(); if (result.user) { showUserProfile(result.user); } } else { authError.innerText = i18next.t(result.i18nKey || 'error_unknown'); } } catch (error) { authError.innerText = i18next.t('error_connection'); } finally { authSubmitBtn.disabled = false; } });
     showLogBtnMobile.addEventListener('click', () => gameLogContainer.classList.add('visible'));
     closeLogBtn.addEventListener('click', () => gameLogContainer.classList.remove('visible'));
+    leaveGameBtn.addEventListener('click', () => {
+        // Перше, загальне підтвердження
+        if (window.confirm(i18next.t('confirm_leave_general'))) {
+            
+            // Якщо користувач погодився, перевіряємо, чи триває гра
+            if (lastGameState && !lastGameState.winner) {
+                
+                // Гра активна, показуємо друге, суворе попередження про поразку
+                if (window.confirm(i18next.t('confirm_leave_game_loss'))) {
+                    // Користувач підтвердив двічі, виходимо
+                    window.location.reload();
+                }
+                
+            } else {
+                // Якщо ми в лобі або гра завершена, виходимо одразу після першого підтвердження
+                window.location.reload();
+            }
+        }
+        // Якщо користувач скасував перше вікно, нічого не відбувається
+    });
     chatForm.addEventListener('submit', (e) => { e.preventDefault(); const message = chatInput.value; if (message.trim()) { socket.emit('sendMessage', { gameId, message }); chatInput.value = ''; } });
+    
+    toggleChatBtn.addEventListener('click', () => {
+        gameLogContainer.classList.toggle('collapsed');
+        localStorage.setItem('chatCollapsed', gameLogContainer.classList.contains('collapsed'));
+    });
+
+    if (localStorage.getItem('chatCollapsed') === 'true') {
+        gameLogContainer.classList.add('collapsed');
+    }
 });
 
 socket.on('gameCreated', (data) => { gameId = data.gameId; playerId = data.playerId; welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'block'; lobbyGameId.innerText = gameId; const link = `${window.location.origin}?gameId=${gameId}`; lobbyInviteLink.value = link; inviteLink.value = link; socket.emit('getLobbyState', { gameId }); });
@@ -96,7 +127,21 @@ socket.on('lobbyStateUpdate', ({ players, maxPlayers, hostId }) => { playerList.
 socket.on('error', (message) => { errorMessage.style.display = 'block'; errorMessage.innerText = i18next.t(message.i18nKey || 'error_unknown', { message: message.text }); welcomeScreen.classList.add('shake'); setTimeout(() => welcomeScreen.classList.remove('shake'), 500); });
 socket.on('invalidMove', ({ reason }) => { errorToast.innerText = i18next.t(reason); errorToast.classList.add('visible'); const flyingCard = document.querySelector('.card.animate-play'); if (flyingCard) { flyingCard.classList.remove('animate-play'); flyingCard.classList.add('shake-card'); setTimeout(() => flyingCard.classList.remove('shake-card'), 400); } setTimeout(() => errorToast.classList.remove('visible'), 3000); });
 socket.on('rematchUpdate', ({ votes, total }) => { rematchStatus.innerHTML = i18next.t('rematch_status', { votes, total }); });
-socket.on('newLogEntry', (logEntry) => { const li = document.createElement('li'); let message = i18next.t(logEntry.i18nKey, logEntry.options); if (message.includes('<span class="message-author">')) { li.classList.add('chat-message'); } li.innerHTML = `<span class="log-time">[${logEntry.timestamp}]</span> ${message}`; gameLogList.prepend(li); });
+socket.on('newLogEntry', (logEntry) => {
+    const li = document.createElement('li');
+    let message;
+    if (logEntry.i18nKey) {
+        message = i18next.t(logEntry.i18nKey, logEntry.options);
+    } else {
+        message = logEntry.message;
+    }
+    
+    if (message && message.includes('<span class="message-author">')) {
+        li.classList.add('chat-message');
+    }
+    li.innerHTML = `<span class="log-time">[${logEntry.timestamp}]</span> ${message || ''}`;
+    gameLogList.prepend(li);
+});
 
 socket.on('gameStateUpdate', (state) => {
     if (!playerId) return;
@@ -125,10 +170,13 @@ function renderGame(state) {
     const me = state.players.find(p => p.id === playerId);
     if (!me) { return; }
     const trumpSuitSpan = `<span class="card-suit-${state.trumpSuit?.toLowerCase()}">${state.trumpSuit || '?'}</span>`;
-    trumpCardDisplay.innerHTML = `Козир: ${trumpSuitSpan}`;
+    trumpCardDisplay.innerHTML = i18next.t('trump_card_display', { suit: trumpSuitSpan });
     deckCountDisplay.innerText = `${state.deckCardCount}`;
-    if (state.isYourTurn) { turnStatus.innerText = me.isAttacker ? 'Ваш хід: Атакуйте!' : 'Ваш хід: Відбивайтеся!'; }
-    else { turnStatus.innerText = 'Хід супротивника...'; }
+    if (state.isYourTurn) { 
+        turnStatus.innerHTML = me.isAttacker ? i18next.t('turn_status_attack') : i18next.t('turn_status_defend');
+    } else { 
+        turnStatus.innerHTML = i18next.t('turn_status_opponent');
+    }
     let myNameHTML = me.name;
     if (me.isVerified) { myNameHTML += VERIFIED_BADGE_SVG; }
     if (me.streak > 0) { myNameHTML += ` <span class="streak-fire">🔥${me.streak}</span>`; }
@@ -151,7 +199,7 @@ function renderGame(state) {
         const opponentHand = document.createElement('div');
         opponentHand.className = 'card-hand';
         updateCards(opponentHand, player.cards, false, state, player);
-        let opponentNameHTML = player.name;
+        let opponentNameHTML = player.name || '...';
         if (player.isVerified) { opponentNameHTML += VERIFIED_BADGE_SVG; }
         if (player.streak > 0) { opponentNameHTML += ` <span class="streak-fire">🔥${player.streak}</span>`; }
         if (player.isAttacker) opponentNameHTML += ' ⚔️'; if (player.isDefender) opponentNameHTML += ' 🛡️';
@@ -164,15 +212,13 @@ function renderGame(state) {
     updateTable(state.table);
     renderActionButtons(state);
 }
-function renderActionButtons(state) { actionButtons.innerHTML = ''; if (state.canPass || state.canTake) { if (state.canPass) { const passBtn = document.createElement('button'); passBtn.innerText = 'Відбій'; passBtn.onclick = () => socket.emit('passTurn', { gameId }); actionButtons.appendChild(passBtn); } if (state.canTake) { const takeBtn = document.createElement('button'); takeBtn.innerText = 'Беру'; takeBtn.onclick = () => { playSound('take.mp3'); document.body.classList.add('shake-screen'); setTimeout(() => document.body.classList.remove('shake-screen'), 400); socket.emit('takeCards', { gameId }); }; actionButtons.appendChild(takeBtn); } actionButtons.classList.add('visible'); } else { actionButtons.classList.remove('visible'); } }
+function renderActionButtons(state) { actionButtons.innerHTML = ''; if (state.canPass || state.canTake) { if (state.canPass) { const passBtn = document.createElement('button'); passBtn.innerHTML = i18next.t('pass_button'); passBtn.onclick = () => socket.emit('passTurn', { gameId }); actionButtons.appendChild(passBtn); } if (state.canTake) { const takeBtn = document.createElement('button'); takeBtn.innerHTML = i18next.t('take_button'); takeBtn.onclick = () => { playSound('take.mp3'); document.body.classList.add('shake-screen'); setTimeout(() => document.body.classList.remove('shake-screen'), 400); socket.emit('takeCards', { gameId }); }; actionButtons.appendChild(takeBtn); } actionButtons.classList.add('visible'); } else { actionButtons.classList.remove('visible'); } }
 function showGameScreen() { welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'none'; gameScreen.style.display = 'block'; gameIdDisplay.innerText = gameId; }
 
-function updateCards(container, newCards, isPlayer, state) {
+function updateCards(container, newCards, isPlayer, state, player) {
     container.innerHTML = '';
-
     if (isPlayer) {
         newCards.sort((a, b) => SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit) || RANK_VALUES[a.rank] - RANK_VALUES[b.rank]);
-        
         let playableCards = [];
         if (state) {
             const me = state.players.find(p => p.id === playerId);
@@ -191,7 +237,6 @@ function updateCards(container, newCards, isPlayer, state) {
                 }
             }
         }
-
         newCards.forEach((card, index) => {
             const cardDiv = createCardDiv(card);
             cardDiv.style.setProperty('--card-index', index);
@@ -199,6 +244,13 @@ function updateCards(container, newCards, isPlayer, state) {
                 cardDiv.classList.add('playable');
             }
             cardDiv.addEventListener('click', () => handleCardClick(card, cardDiv));
+            container.appendChild(cardDiv);
+        });
+    } else {
+        newCards.forEach((card, index) => {
+            const cardInfo = { hidden: true, style: player.cardBackStyle };
+            const cardDiv = createCardDiv(cardInfo);
+            cardDiv.style.setProperty('--card-index', index);
             container.appendChild(cardDiv);
         });
     }
@@ -235,17 +287,17 @@ function handleCardClick(card, cardDiv) { playSound('play.mp3'); cardDiv.classLi
 function displayWinner(winnerData) {
     gameScreen.style.display = 'none'; winnerScreen.style.display = 'block';
     let message = ''; let showRematchButton = true;
-    if (winnerData.reason) { message = winnerData.reason; showRematchButton = false; }
+    if (winnerData.reason) { if (typeof winnerData.reason === 'object' && winnerData.reason.i18nKey) { message = i18next.t(winnerData.reason.i18nKey, winnerData.reason.options); } else { message = winnerData.reason; } showRematchButton = false; }
     else {
-        const winnerNames = winnerData.winners.map(w => w.id === playerId ? 'ВИ' : w.name).join(', ');
-        if (winnerData.winners.some(w => w.id === playerId)) { message = `🎉 Перемога! Переможці: ${winnerNames} 🎉`; playSound('win.mp3'); }
-        else if (winnerData.loser) { message = `😞 Ви програли. Дурень: ${winnerData.loser.name}.`; playSound('lose.mp3'); }
-        else { message = 'Нічия!'; }
+        const winnerNames = winnerData.winners.map(w => w.id === playerId ? i18next.t('you_in_winner_list') : w.name).join(', ');
+        if (winnerData.winners.some(w => w.id === playerId)) { message = i18next.t('winner_message_win', { winners: winnerNames }); playSound('win.mp3'); }
+        else if (winnerData.loser) { message = i18next.t('winner_message_lose', { loser: winnerData.loser.name }); playSound('lose.mp3'); }
+        else { message = i18next.t('winner_message_draw'); }
     }
     winnerMessage.innerText = message;
     if (showRematchButton) {
         rematchBtn.style.display = 'block'; rematchStatus.style.display = 'block';
-        rematchBtn.disabled = false; rematchBtn.innerText = 'Реванш';
+        rematchBtn.disabled = false; rematchBtn.innerHTML = i18next.t('rematch_button');
         rematchStatus.innerText = '';
     } else {
         rematchBtn.style.display = 'none'; rematchStatus.style.display = 'none';

@@ -40,7 +40,7 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
 .form-group label { font-size: 0.9rem; font-weight: 500; color: var(--on-surface-variant-color); }
 #game-screen { display: none; position: relative; width: 100%; height: calc(100vh - 2rem); }
-.game-header { display: flex; justify-content: flex-end; align-items: center; padding: 5px; position: absolute; top: 0; left: 0; width: calc(100% - 10px); z-index: 200; }
+.game-header { position: absolute; top: -3.5rem; right: 1rem; z-index: 200; }
 .invite-link-wrapper { display: flex; align-items: center; background-color: var(--surface-color); border-radius: 100px; border: 1px solid var(--outline-color); padding-left: 1.5rem; }
 #inviteLink, #lobbyInviteLink { flex-grow: 1; background: none; border: none; padding: 0; font-size: 1rem; color: var(--on-surface-variant-color); }
 #inviteLink:focus, #lobbyInviteLink:focus { outline: none; }
@@ -84,7 +84,7 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 #error-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background-color: var(--error-color); color: white; padding: 1rem 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); font-weight: 500; z-index: 1000; opacity: 0; transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.4s; }
 #error-toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 .error { color: var(--error-color); font-weight: 500; }
-#deck-area { position: absolute; top: 1rem; left: 1rem; z-index: 10; transform: none; }
+#deck-area { position: absolute; top: 4rem; left: 1rem; z-index: 10; transform: none; }
 #deck-pile-visual { position: relative; width: 90px; height: 126px; }
 #deck-pile-visual .card { position: absolute; top: 0; left: 0; }
 #deck-count-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 1.5rem; font-weight: bold; text-shadow: 1px 1px 2px black; }
@@ -95,19 +95,28 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 #center-animation-container .flipper .front, #center-animation-container .flipper .back { position: absolute; width: 100%; height: 100%; -webkit-backface-visibility: hidden; backface-visibility: hidden; }
 #center-animation-container .flipper .back { transform: rotateY(180deg); }
 .animated-card { position: fixed; z-index: 500; transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
-#game-log-container { position: fixed; top: 5rem; right: 1rem; width: 300px; height: 65vh; background: rgba(0,0,0,0.5); border-radius: 12px; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); z-index: 150; display: flex; flex-direction: column; color: var(--on-surface-variant-color); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-.log-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; border-bottom: 1px solid var(--outline-color); background: rgba(0,0,0,0.2); border-radius: 12px 12px 0 0; }
+#game-log-container { position: fixed; top: 5rem; right: 1rem; width: 300px; height: 65vh; background: rgba(0,0,0,0.5); border-radius: 12px; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); z-index: 150; display: flex; flex-direction: column; color: var(--on-surface-variant-color); box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: height 0.4s ease-in-out; overflow: hidden; }
+.log-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; border-bottom: 1px solid var(--outline-color); background: rgba(0,0,0,0.2); border-radius: 12px 12px 0 0; flex-shrink: 0; }
 .log-header h4 { margin: 0; }
 .close-log-btn { display: none; font-size: 2rem; cursor: pointer; line-height: 1; padding: 0 0.5rem; z-index: 152; }
+.toggle-chat-btn { background: none; border: none; padding: 0.25rem; cursor: pointer; line-height: 0; margin-left: auto; border-radius: 4px; }
+.toggle-chat-btn:hover { background: rgba(255,255,255,0.1); }
+.toggle-chat-btn svg { stroke: var(--on-surface-variant-color); transition: transform 0.3s ease; }
 #game-log-list { list-style: none; padding: 1rem; margin: 0; flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column-reverse; }
 #game-log-list li { padding-top: 0.75rem; margin-top: 0.75rem; border-top: 1px solid rgba(137, 147, 143, 0.2); font-size: 0.9rem; word-wrap: break-word; animation: fadeIn 0.5s ease; }
 #game-log-list li:first-child { border-top: none; }
 .log-time { font-size: 0.8rem; color: var(--outline-color); margin-right: 0.5rem; }
 #game-log-list li.chat-message .message-author { font-weight: 700; color: var(--primary-container-color); }
 #game-log-list li.chat-message .message-text { margin-left: 0.5rem; color: var(--on-surface-color); }
-#chat-form { display: flex; padding: 0.5rem; border-top: 1px solid var(--outline-color); }
+#game-log-list li.chat-message .message-author .verified-badge { vertical-align: middle; }
+#chat-form { display: flex; padding: 0.5rem; border-top: 1px solid var(--outline-color); flex-shrink: 0; }
 #chat-input { flex-grow: 1; border: none; padding: 0.5rem; border-radius: 8px; background: rgba(0,0,0,0.3); color: var(--on-surface-color); }
 #chat-form button { margin-left: 0.5rem; padding: 0.5rem; border-radius: 8px; width: 40px; flex-shrink: 0; font-size: 1.2rem; line-height: 1; }
+#game-log-container.collapsed { height: 48px; }
+#game-log-container.collapsed #game-log-list,
+#game-log-container.collapsed #chat-form { display: none; }
+#game-log-container.collapsed .toggle-chat-btn svg { transform: rotate(180deg); }
+
 .floating-btn { display: none; position: fixed; bottom: 8rem; right: 1rem; width: 50px; height: 50px; border-radius: 50%; font-size: 1.5rem; padding: 0; z-index: 140; box-shadow: 0 4px 8px rgba(0,0,0,0.3); justify-content: center; align-items: center; }
 .streak-fire { color: #FF9800; text-shadow: 0 0 5px #FF5722, 0 0 10px #FFC107; font-weight: bold; margin-left: 0.25em; animation: fire-pulse 2s infinite; }
 .verified-badge { display: inline-block; width: 1em; height: 1em; vertical-align: -0.15em; margin-left: 0.25em; }
@@ -140,9 +149,13 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 .shake-screen { animation: shake-screen-anim 0.4s cubic-bezier(.36,.07,.19,.97) both; }
 .hand-setup .card { opacity: 0 !important; transition: opacity 0.3s; }
 
-@media (max-width: 1024px) { #game-log-container { display: none; } #show-log-btn-mobile { display: flex; } }
+@media (max-width: 1024px) { 
+    .toggle-chat-btn { display: none; }
+    #game-log-container { display: none; } 
+    #show-log-btn-mobile { display: flex; } 
+}
 @media (max-width: 768px) {
-    body { padding: 0.5rem; font-size: 14px; }
+    body { padding: 0.5rem; }
     #welcome-screen, #lobby-screen, #winner-screen { width: 90vw; padding: 1.5rem; margin-top: 5vh; }
     .invite-link-wrapper { padding-left: 1rem; }
     #inviteLink, #lobbyInviteLink { font-size: 0.8rem; }
@@ -162,7 +175,7 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
     #table-area { width: 90vw; height: 50vh; }
     #action-buttons button { padding: 0.8rem 1.2rem; font-size: 0.9rem; }
     .card.animate-play { transform: translateY(-25vh) scale(1.1) !important; }
-    #game-log-container.visible { top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; border-radius: 0; transform: translateX(0); display: flex; z-index: 250; }
+    #game-log-container.visible { top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; max-height: 100%; border-radius: 0; transform: translateX(0); display: flex; z-index: 250; }
     .close-log-btn { display: block; }
 }
 
