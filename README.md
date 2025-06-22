@@ -12,21 +12,17 @@ A real-time, multiplayer online version of the popular card game "Durak". This p
 
 ## ✨ Features
 
-*   **Play without Registration:** Anyone can join a game instantly just by entering a nickname.
-*   **Multiplayer Mode:** Supports 2 to 4 players in a single game room.
-*   **Private Rooms:** Create games and invite friends with a unique, shareable link.
-*   **Flexible Game Settings:** Choose the deck size (24, 36, or 52 cards) and the number of players.
-*   **Cheat-Proof:** All game logic and rule validation are handled on the server.
-*   **Optional User Accounts:**
-    *   Persistent stats tracking (wins/losses).
-    *   A permanent username.
-    *   User sessions (the site remembers you after a page refresh).
-*   **Interactive UI:**
-    *   Smooth animations for card plays and actions.
-    *   Highlighting of playable cards.
-    *   Responsive design for mobile and tablet devices.
-*   **Lobby System:** The game host can wait for players and start the game early.
-*   **Rematch System:** Quickly start a new game with the same group of players.
+*   **Real-time Multiplayer:** Play with 2-4 players in a single room.
+*   **No Registration Required:** Instantly join a game just by entering a nickname.
+*   **Optional User Accounts:** Register to track stats, daily streaks, and unlock customizations.
+*   **Persistent Sessions:** The site remembers you after a page refresh.
+*   **Player Reconnection:** If you accidentally close the tab or lose connection, you can rejoin an ongoing game.
+*   **Game Lobbies:** The host can wait for players and start the game when ready.
+*   **Customization:** Verified users can choose different card back styles.
+*   **In-Game Communication:** A unified game log and chat to see moves and communicate with players.
+*   **Internationalization (i18n):** The interface is available in multiple languages.
+*   **Cheat-Proof:** All game logic is validated on the server.
+*   **Mobile-Friendly:** Responsive design for a great experience on any device.
 
 ---
 
@@ -81,14 +77,24 @@ To run this project on your local machine, follow these steps:
 
 ## 🗺️ Roadmap
 
-This project is actively being developed. Here are some of the planned features:
+This project is actively being developed. Here are some of the planned features, categorized by priority.
 
-*   [ ] **Game Event Log:** A history of moves made in the current game.
-*   [ ] **In-Game Chat:** A simple chat for players in the room.
-*   [ ] **Daily Streaks:** Rewards for playing daily.
-*   [ ] **Achievements:** Icons and awards for completing in-game challenges.
-*   [ ] **Customization:** Ability to choose different card back designs.
-*   [ ] **Expansion to a Game Hub:** Adding new games (e.g., Checkers, Chess).
+### Tier 1: Core UX & Community Features
+- [x] **Game Event Log & Chat:** A unified log to track moves and communicate.
+- [ ] **Player Achievements:** Unlockable badges for in-game accomplishments (e.g., "First Win", "100 Games Played").
+- [ ] **Daily Streaks & Rewards:** Incentives for playing daily, including visual indicators like a "fire" icon.
+- [ ] **Card Back Customization:** Allow registered users to choose their card back design.
+- [ ] **Emotes / Quick Reactions:** A safe and fun way to communicate in-game.
+
+### Tier 2: Anti-Cheat & Moderation
+- [ ] **Game Duration Analysis:** Flag games that end suspiciously fast.
+- [ ] **Matchup Analysis:** Detect patterns of collusion between specific players.
+- [ ] **Player Karma/Reputation System:** Allow players to rate each other after a match.
+
+### Tier 3: Platform Expansion
+- [ ] **Modular Game Architecture:** Refactor the core logic to easily add new games.
+- [ ] **New Games:** Add classics like Checkers, Chess, etc.
+- [ ] **Authentication with JWT:** Switch from sessions to JSON Web Tokens for better scalability.
 
 ---
 
