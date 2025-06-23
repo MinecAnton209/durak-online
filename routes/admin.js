@@ -267,10 +267,25 @@ router.get('/stats/dashboard-overview', ensureAdmin, async (req, res) => {
         }
 
         const gamesTodayPromise = new Promise((resolve, reject) => {
-            db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='games_history'", [], (err, table) => {
+            const tableName = 'games';
+            const dbClient = process.env.DB_CLIENT || 'sqlite';
+
+            let checkTableSql;
+            if (dbClient === 'postgres') {
+                checkTableSql = `SELECT to_regclass('public.${tableName}')`;
+            } else { // для sqlite
+                checkTableSql = `SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`;
+            }
+
+            db.get(checkTableSql, [], (err, tableExistsResult) => {
                 if (err) return reject(err);
-                if (!table) {
-                    console.warn("Таблиця 'games_history' не знайдена, статистика ігор за сьогодні буде 0.");
+
+                const tableExists = dbClient === 'postgres'
+                    ? tableExistsResult && Object.values(tableExistsResult)[0] !== null
+                    : !!tableExistsResult;
+
+                if (!tableExists) {
+                    console.warn(`Таблиця '${tableName}' не знайдена, статистика ігор за сьогодні буде 0.`);
                     return resolve(0);
                 }
 
@@ -278,7 +293,7 @@ router.get('/stats/dashboard-overview', ensureAdmin, async (req, res) => {
                 todayStart.setHours(0, 0, 0, 0);
                 const todayStartISO = todayStart.toISOString();
 
-                db.get("SELECT COUNT(*) as count FROM games_history WHERE start_time >= ?", [todayStartISO], (err, row) => {
+                db.get(`SELECT COUNT(*) as count FROM ${tableName} WHERE start_time >= ?`, [todayStartISO], (err, row) => {
                     if (err) return reject(err);
                     resolve(row ? row.count : 0);
                 });
