@@ -25,9 +25,11 @@ body { font-family: 'Roboto', sans-serif; background-color: var(--background-col
 #user-profile .stats { display: flex; justify-content: center; gap: 1.5rem; margin: 1rem 0; font-size: 1rem; }
 #user-profile .stats span { color: var(--on-surface-variant-color); }
 #user-profile .stats b { color: var(--on-surface-color); font-weight: 700; }
+.profile-actions { display: flex; gap: 1rem; justify-content: center; margin-bottom: 1rem; }
 #logoutBtn { margin-top: 0.5rem; padding: 0.8rem 1.5rem; }
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
 .modal-content { position: relative; background: var(--surface-color); padding: 2rem; border-radius: 16px; width: 90%; max-width: 400px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+.modal-content.large { max-width: 800px; max-height: 80vh; display: flex; flex-direction: column; }
 .close-modal-btn { position: absolute; top: 10px; right: 20px; font-size: 2rem; font-weight: bold; cursor: pointer; color: var(--on-surface-variant-color); z-index: 152;}
 input[type="text"], select { background-color: transparent; color: var(--on-surface-color); border: 1px solid var(--outline-color); border-radius: 16px; padding: 1rem; font-size: 1rem; font-family: 'Roboto', sans-serif; transition: border-color 0.2s; box-sizing: border-box; width: 100%; }
 input[type="text"]:focus, select:focus { outline: none; border-color: var(--primary-color); }
@@ -40,7 +42,12 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
 .form-group label { font-size: 0.9rem; font-weight: 500; color: var(--on-surface-variant-color); }
 #game-screen { display: none; position: relative; width: 100%; height: calc(100vh - 2rem); }
-.game-header { position: absolute; top: -3.5rem; right: 1rem; z-index: 200; }
+.game-header {
+    position: absolute;
+    top: -2.5rem;
+    right: 1rem;
+    z-index: 200;
+}
 .invite-link-wrapper { display: flex; align-items: center; background-color: var(--surface-color); border-radius: 100px; border: 1px solid var(--outline-color); padding-left: 1.5rem; }
 #inviteLink, #lobbyInviteLink { flex-grow: 1; background: none; border: none; padding: 0; font-size: 1rem; color: var(--on-surface-variant-color); }
 #inviteLink:focus, #lobbyInviteLink:focus { outline: none; }
@@ -96,12 +103,14 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 #center-animation-container .flipper .back { transform: rotateY(180deg); }
 .animated-card { position: fixed; z-index: 500; transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
 #game-log-container { position: fixed; top: 5rem; right: 1rem; width: 300px; height: 65vh; background: rgba(0,0,0,0.5); border-radius: 12px; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); z-index: 150; display: flex; flex-direction: column; color: var(--on-surface-variant-color); box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: height 0.4s ease-in-out; overflow: hidden; }
+#game-log-container.collapsed { height: 48px; }
 .log-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; border-bottom: 1px solid var(--outline-color); background: rgba(0,0,0,0.2); border-radius: 12px 12px 0 0; flex-shrink: 0; }
 .log-header h4 { margin: 0; }
 .close-log-btn { display: none; font-size: 2rem; cursor: pointer; line-height: 1; padding: 0 0.5rem; z-index: 152; }
 .toggle-chat-btn { background: none; border: none; padding: 0.25rem; cursor: pointer; line-height: 0; margin-left: auto; border-radius: 4px; }
 .toggle-chat-btn:hover { background: rgba(255,255,255,0.1); }
 .toggle-chat-btn svg { stroke: var(--on-surface-variant-color); transition: transform 0.3s ease; }
+#game-log-container.collapsed .toggle-chat-btn svg { transform: rotate(180deg); }
 #game-log-list { list-style: none; padding: 1rem; margin: 0; flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column-reverse; }
 #game-log-list li { padding-top: 0.75rem; margin-top: 0.75rem; border-top: 1px solid rgba(137, 147, 143, 0.2); font-size: 0.9rem; word-wrap: break-word; animation: fadeIn 0.5s ease; }
 #game-log-list li:first-child { border-top: none; }
@@ -110,13 +119,10 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 #game-log-list li.chat-message .message-text { margin-left: 0.5rem; color: var(--on-surface-color); }
 #game-log-list li.chat-message .message-author .verified-badge { vertical-align: middle; }
 #chat-form { display: flex; padding: 0.5rem; border-top: 1px solid var(--outline-color); flex-shrink: 0; }
-#chat-input { flex-grow: 1; border: none; padding: 0.5rem; border-radius: 8px; background: rgba(0,0,0,0.3); color: var(--on-surface-color); }
-#chat-form button { margin-left: 0.5rem; padding: 0.5rem; border-radius: 8px; width: 40px; flex-shrink: 0; font-size: 1.2rem; line-height: 1; }
-#game-log-container.collapsed { height: 48px; }
 #game-log-container.collapsed #game-log-list,
 #game-log-container.collapsed #chat-form { display: none; }
-#game-log-container.collapsed .toggle-chat-btn svg { transform: rotate(180deg); }
-
+#chat-input { flex-grow: 1; border: none; padding: 0.5rem; border-radius: 8px; background: rgba(0,0,0,0.3); color: var(--on-surface-color); }
+#chat-form button { margin-left: 0.5rem; padding: 0.5rem; border-radius: 8px; width: 40px; flex-shrink: 0; font-size: 1.2rem; line-height: 1; }
 .floating-btn { display: none; position: fixed; bottom: 8rem; right: 1rem; width: 50px; height: 50px; border-radius: 50%; font-size: 1.5rem; padding: 0; z-index: 140; box-shadow: 0 4px 8px rgba(0,0,0,0.3); justify-content: center; align-items: center; }
 .streak-fire { color: #FF9800; text-shadow: 0 0 5px #FF5722, 0 0 10px #FFC107; font-weight: bold; margin-left: 0.25em; animation: fire-pulse 2s infinite; }
 .verified-badge { display: inline-block; width: 1em; height: 1em; vertical-align: -0.15em; margin-left: 0.25em; }
@@ -131,6 +137,25 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 .card-back-option.selected { border-color: var(--primary-color); transform: scale(1.05); }
 .card-back-option span { display: block; margin-top: 0.5rem; font-weight: 500; }
 #save-status { text-align: center; min-height: 1.2rem; margin-top: 1rem; color: var(--primary-color); }
+.achievements-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 1.5rem; overflow-y: auto; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 12px; }
+.achievement-item { display: flex; flex-direction: column; align-items: center; text-align: center; opacity: 0.4; transition: opacity 0.3s, transform 0.3s; position: relative; cursor: help; }
+.achievement-item.unlocked { opacity: 1; }
+.achievement-item .ach-icon { width: 70px; height: 70px; border: 3px solid var(--outline-color); border-radius: 50%; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: center; position: relative; background: linear-gradient(145deg, var(--surface-color), #242625); }
+.achievement-item.unlocked.rarity-common .ach-icon { border-color: #B0BEC5; }
+.achievement-item.unlocked.rarity-uncommon .ach-icon { border-color: #4CAF50; }
+.achievement-item.unlocked.rarity-rare .ach-icon { border-color: #2196F3; }
+.achievement-item.unlocked.rarity-epic .ach-icon { border-color: #9C27B0; }
+.achievement-item.unlocked.rarity-legendary .ach-icon { border-color: #FFC107; animation: legendary-glow 2s infinite; }
+.achievement-item .ach-name { font-size: 0.8rem; font-weight: 500; color: var(--on-surface-variant-color); }
+.achievement-item.unlocked .ach-name { color: var(--on-surface-color); }
+#achievement-toast-container { position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; flex-direction: column-reverse; align-items: center; gap: 1rem; }
+.achievement-toast { display: flex; align-items: center; gap: 1rem; background-color: var(--surface-color); color: var(--on-surface-color); padding: 1rem 1.5rem; border-radius: 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); border: 2px solid var(--primary-color); width: 320px; animation: slide-in-up 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards, slide-out-down 0.5s cubic-bezier(0.5, 0, 0.75, 0) 4.5s forwards; }
+.achievement-toast .icon { width: 50px; height: 50px; flex-shrink: 0; }
+.achievement-toast .text h4 { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 700; color: var(--primary-color); }
+.achievement-toast .text p { margin: 0; font-size: 0.9rem; }
+@keyframes slide-in-up { from { opacity: 0; transform: translateY(100px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slide-out-down { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(100px); } }
+@keyframes legendary-glow { 0% { box-shadow: 0 0 5px #FFC107, 0 0 10px #FFC107; } 50% { box-shadow: 0 0 15px #FFD54F, 0 0 25px #FFD54F; } 100% { box-shadow: 0 0 5px #FFC107, 0 0 10px #FFC107; } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes shake-horizontal { 0%, 100% { transform: translateX(0); } 10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); } 20%, 40%, 60%, 80% { transform: translateX(10px); } }
 .shake { animation: shake-horizontal 0.5s cubic-bezier(.36,.07,.19,.97) both; }
@@ -148,6 +173,9 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 @keyframes shake-screen-anim { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
 .shake-screen { animation: shake-screen-anim 0.4s cubic-bezier(.36,.07,.19,.97) both; }
 .hand-setup .card { opacity: 0 !important; transition: opacity 0.3s; }
+.ach-icon.ach-FIRST_WIN { transform: rotate(45deg); }
+.ach-icon.ach-FIRST_WIN::before { content: ''; position: absolute; width: 8px; height: 40px; background-color: #B0BEC5; border-radius: 4px; top: 5px; }
+.ach-icon.ach-FIRST_WIN::after { content: ''; position: absolute; width: 20px; height: 6px; background-color: #784e2c; border-radius: 3px; bottom: 18px; }
 
 @media (max-width: 1024px) { 
     .toggle-chat-btn { display: none; }

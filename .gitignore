@@ -136,6 +136,6 @@ dist
 .pnp.*
 
 .history/
-data/
+data/database.sqlite
 .vscode/
 .idea/

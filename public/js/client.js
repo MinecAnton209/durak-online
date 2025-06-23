@@ -54,6 +54,10 @@ const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const toggleChatBtn = document.getElementById('toggle-chat-btn');
 const leaveGameBtn = document.getElementById('leaveGameBtn');
+const achievementsBtn = document.getElementById('achievementsBtn');
+const achievementsModal = document.getElementById('achievements-modal');
+const closeAchievementsModalBtn = document.getElementById('close-achievements-modal-btn');
+const achievementsList = document.getElementById('achievements-list');
 
 const VERIFIED_BADGE_SVG = `
     <span class="verified-badge" title="Верифікований гравець">
@@ -89,24 +93,18 @@ window.addEventListener('DOMContentLoaded', () => {
     showLogBtnMobile.addEventListener('click', () => gameLogContainer.classList.add('visible'));
     closeLogBtn.addEventListener('click', () => gameLogContainer.classList.remove('visible'));
     leaveGameBtn.addEventListener('click', () => {
-        // Перше, загальне підтвердження
         if (window.confirm(i18next.t('confirm_leave_general'))) {
             
-            // Якщо користувач погодився, перевіряємо, чи триває гра
             if (lastGameState && !lastGameState.winner) {
                 
-                // Гра активна, показуємо друге, суворе попередження про поразку
                 if (window.confirm(i18next.t('confirm_leave_game_loss'))) {
-                    // Користувач підтвердив двічі, виходимо
                     window.location.reload();
                 }
                 
             } else {
-                // Якщо ми в лобі або гра завершена, виходимо одразу після першого підтвердження
                 window.location.reload();
             }
         }
-        // Якщо користувач скасував перше вікно, нічого не відбувається
     });
     chatForm.addEventListener('submit', (e) => { e.preventDefault(); const message = chatInput.value; if (message.trim()) { socket.emit('sendMessage', { gameId, message }); chatInput.value = ''; } });
     
@@ -118,6 +116,70 @@ window.addEventListener('DOMContentLoaded', () => {
     if (localStorage.getItem('chatCollapsed') === 'true') {
         gameLogContainer.classList.add('collapsed');
     }
+    async function showAchievements() {
+        achievementsList.innerHTML = 'Завантаження...'; // TODO: i18n
+        achievementsModal.style.display = 'flex';
+    
+        try {
+            // Отримуємо два списки паралельно
+            const [allAchievementsRes, myAchievementsRes] = await Promise.all([
+                fetch('/api/achievements/all'),
+                fetch('/api/achievements/my')
+            ]);
+    
+            if (!allAchievementsRes.ok) throw new Error('Could not fetch all achievements');
+            
+            const allAchievements = await allAchievementsRes.json();
+            let myAchievements = [];
+            if (myAchievementsRes.ok) {
+                myAchievements = await myAchievementsRes.json();
+            }
+            
+            const myAchievementsMap = new Map(myAchievements.map(ach => [ach.achievement_code, ach.unlocked_at]));
+    
+            achievementsList.innerHTML = ''; // Очищуємо
+    
+            allAchievements.forEach(ach => {
+                const isUnlocked = myAchievementsMap.has(ach.code);
+                
+                const item = document.createElement('div');
+                item.className = 'achievement-item';
+                item.classList.add(`rarity-${ach.rarity}`);
+                if (isUnlocked) {
+                    item.classList.add('unlocked');
+                }
+                
+                // Створюємо тултіп з описом
+                const description = i18next.t(ach.description_key);
+                const unlockedDate = isUnlocked ? new Date(myAchievementsMap.get(ach.code)).toLocaleDateString() : '';
+                item.title = `${i18next.t(ach.name_key)}\n${description}${isUnlocked ? `\nОтримано: ${unlockedDate}` : ''}`;
+    
+                const iconDiv = document.createElement('div');
+                iconDiv.className = 'ach-icon';
+                // TODO: Додати сюди CSS-іконки на основі ach.code
+    
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'ach-name';
+                nameSpan.textContent = i18next.t(ach.name_key);
+                
+                item.appendChild(iconDiv);
+                item.appendChild(nameSpan);
+                achievementsList.appendChild(item);
+            });
+    
+        } catch (error) {
+            console.error("Помилка завантаження ачівок:", error);
+            achievementsList.innerHTML = 'Не вдалося завантажити досягнення.'; // TODO: i18n
+        }
+    }
+    
+    achievementsBtn.addEventListener('click', showAchievements);
+    closeAchievementsModalBtn.addEventListener('click', () => achievementsModal.style.display = 'none');
+    achievementsModal.addEventListener('click', (e) => {
+        if (e.target === achievementsModal) {
+            achievementsModal.style.display = 'none';
+        }
+    });
 });
 
 socket.on('gameCreated', (data) => { gameId = data.gameId; playerId = data.playerId; welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'block'; lobbyGameId.innerText = gameId; const link = `${window.location.origin}?gameId=${gameId}`; lobbyInviteLink.value = link; inviteLink.value = link; socket.emit('getLobbyState', { gameId }); });
@@ -158,6 +220,36 @@ socket.on('gameStateUpdate', (state) => {
         renderGame(state);
     }
     lastGameState = state;
+});
+socket.on('achievementUnlocked', ({ code }) => {
+    const name = i18next.t(`ach_${code.toLowerCase()}_name`);
+    const description = i18next.t(`ach_${code.toLowerCase()}_desc`);
+
+    const toastContainer = document.getElementById('achievement-toast-container');
+
+    const toast = document.createElement('div');
+    toast.className = 'achievement-toast';
+
+    const iconDiv = document.createElement('div');
+    iconDiv.className = 'icon'; 
+    iconDiv.innerHTML = '🏆';
+
+    const textDiv = document.createElement('div');
+    textDiv.className = 'text';
+    textDiv.innerHTML = `
+        <h4 data-i18n="ach_unlocked_title">Досягнення розблоковано!</h4>
+        <p>${name}</p>
+    `;
+    
+    toast.appendChild(iconDiv);
+    toast.appendChild(textDiv);
+    toastContainer.appendChild(toast);
+    
+    playSound('achievement.mp3');
+
+    setTimeout(() => {
+        toast.remove();
+    }, 5000);
 });
 
 function playSound(soundFile) { try { new Audio(`/sounds/${soundFile}`).play(); } catch(e) {} }

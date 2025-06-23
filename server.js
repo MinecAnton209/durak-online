@@ -7,15 +7,20 @@ const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
+const { seedAchievements } = require('./db/seed.js');
+const achievementService = require('./services/achievementService.js');
 
 const db = require('./db');
 const authRoutes = require('./routes/auth.js');
+const achievementRoutes = require('./routes/achievements.js');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*" } });
+achievementService.init(io);
 
 const PORT = process.env.PORT || 3000;
+setTimeout(seedAchievements, 1000);
 
 const VERIFIED_BADGE_SVG = `
     <span class="verified-badge" title="Верифікований гравець">
@@ -45,7 +50,7 @@ app.use(express.json());
 app.use(express.static('public'));
 app.use(sessionMiddleware);
 app.use('/', authRoutes);
-
+app.use('/api/achievements', achievementRoutes);
 app.get('/settings', (req, res) => {
     if (!req.session.user) {
         return res.redirect('/');
@@ -64,7 +69,7 @@ function createDeck(deckSize = 36) { const SUITS = ['♦', '♥', '♠', '♣'];
 function canBeat(attackCard, defendCard, trumpSuit) { if (!attackCard || !defendCard) return false; if (attackCard.suit === defendCard.suit) return RANK_VALUES[defendCard.rank] > RANK_VALUES[attackCard.rank]; if (defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit) return true; return false; }
 function getNextPlayerIndex(currentIndex, totalPlayers) { if (totalPlayers === 0) return 0; return (currentIndex + 1) % totalPlayers; }
 function updateTurn(game, newAttackerIndex) { if (game.playerOrder.length === 0) return; const safeIndex = newAttackerIndex % game.playerOrder.length; game.attackerId = game.playerOrder[safeIndex]; const defenderIndex = getNextPlayerIndex(safeIndex, game.playerOrder.length); game.defenderId = game.playerOrder[defenderIndex]; game.turn = game.attackerId; }
-function addPlayerToGame(socket, game, playerName) { const sessionUser = socket.request.session.user; game.players[socket.id] = { id: socket.id, name: sessionUser ? sessionUser.username : playerName, dbId: sessionUser ? sessionUser.id : null, isGuest: !sessionUser, cardBackStyle: sessionUser ? sessionUser.card_back_style : 'default', streak: sessionUser ? sessionUser.streak : 0, isVerified: sessionUser ? sessionUser.isVerified : false, cards: [] }; game.playerOrder.push(socket.id); }
+function addPlayerToGame(socket, game, playerName) { const sessionUser = socket.request.session.user; game.players[socket.id] = { id: socket.id, name: sessionUser ? sessionUser.username : playerName, dbId: sessionUser ? sessionUser.id : null, isGuest: !sessionUser, cardBackStyle: sessionUser ? sessionUser.card_back_style : 'default', streak: sessionUser ? sessionUser.streak : 0, isVerified: sessionUser ? sessionUser.isVerified : false, cards: [], gameStats: {cardsTaken: 0, successfulDefenses: 0, cardsBeatenInDefense: 0 } }; game.playerOrder.push(socket.id); }
 function logEvent(game, message, options = {}) {
     if (!game.log) game.log = [];
     const timestamp = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -88,13 +93,16 @@ function updateStatsAfterGame(game) {
     const { winners, loser } = game.winner; const allPlayersInGame = [...winners, loser].filter(p => p);
     allPlayersInGame.forEach(player => {
         if (player && !player.isGuest) {
-            db.get(`SELECT streak_count, last_played_date FROM users WHERE id = ?`, [player.dbId], (err, userData) => {
+            db.get(`SELECT streak_count, last_played_date, wins, losses, win_streak FROM users WHERE id = ?`, [player.dbId], (err, userData) => {
                 if (err || !userData) return;
+                achievementService.checkPostGameAchievements(game, player, userData)
                 const today = new Date().toISOString().slice(0, 10); const lastPlayed = userData.last_played_date; let newStreak = 1;
                 if (lastPlayed) { const lastDate = new Date(lastPlayed); const todayDate = new Date(today); const diffTime = Math.abs(todayDate - lastDate); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); if (diffDays === 0) newStreak = userData.streak_count; else if (diffDays === 1) newStreak = userData.streak_count + 1; }
                 const isWinner = winners.some(w => w.id === player.id);
-                const query = isWinner ? `UPDATE users SET wins = wins + 1, streak_count = ?, last_played_date = ? WHERE id = ?` : `UPDATE users SET losses = losses + 1, streak_count = ?, last_played_date = ? WHERE id = ?`;
-                db.run(query, [newStreak, today, player.dbId], (updateErr) => {
+                let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0; 
+                const query = isWinner ? `UPDATE users SET wins = wins + 1, streak_count = ?, last_played_date = ?, win_streak = ? WHERE id = ?` : `UPDATE users SET losses = losses + 1, streak_count = ?, last_played_date = ?, win_streak = 0 WHERE id = ?`;
+                const params = isWinner ? [newStreak, today, newWinStreak, player.dbId] : [newStreak, today, player.dbId]
+                db.run(query, params, (updateErr) => {
                     if (updateErr) console.error("Помилка оновлення статистики:", updateErr.message);
                     else {
                         const playerSocket = io.sockets.sockets.get(player.id);
@@ -105,6 +113,8 @@ function updateStatsAfterGame(game) {
                         }
                     }
                 });
+
+                achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
             });
         }
     });
@@ -156,6 +166,8 @@ io.on('connection', (socket) => {
         broadcastGameState(gameId);
     });
     socket.on('passTurn', ({ gameId }) => {
+        const defender = game.players[game.defenderId];
+        if (defender) { const defenderStats = defender.gameStats; defenderStats.successfulDefenses += 1; defenderStats.cardsBeatenInDefense += game.table.length / 2; achievementService.checkInGameAchievements(game, game.defenderId, 'passTurn'); }
         const game = games[gameId]; if (!game || game.attackerId !== socket.id || game.table.length === 0 || game.table.length % 2 !== 0 || game.winner) return;
         game.lastAction = 'pass'; const defenderIdBeforeRefill = game.defenderId;
         if(game.players[defenderIdBeforeRefill]) logEvent(game, null, { i18nKey: 'log_pass', options: { name: game.players[defenderIdBeforeRefill].name } });
@@ -171,6 +183,8 @@ io.on('connection', (socket) => {
     socket.on('takeCards', ({ gameId }) => {
         const game = games[gameId]; if (!game || game.defenderId !== socket.id || game.table.length === 0 || game.winner) return;
         game.lastAction = 'take'; logEvent(game, null, { i18nKey: 'log_take', options: { name: game.players[game.defenderId].name } });
+        const defenderStats = game.players[game.defenderId].gameStats;
+        defenderStats.cardsTaken += game.table.length;
         game.players[game.defenderId].cards.push(...game.table); game.table = [];
         refillHands(game);
         if (checkGameOver(game)) { updateStatsAfterGame(game); return broadcastGameState(gameId); }

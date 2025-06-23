@@ -64,6 +64,51 @@ const db = new sqlite3.Database(dbPath, (err) => {
             console.log('Колонка is_verified вже існує.');
         }
     });
+    db.all(`PRAGMA table_info(users)`, (err, columns) => {
+        if (err) return console.error("Не вдалося отримати інформацію про таблицю users:", err.message);
+        
+        const hasWinStreakColumn = columns.some(col => col.name === 'win_streak');
+        if (!hasWinStreakColumn) {
+            db.run(`ALTER TABLE users ADD COLUMN win_streak INTEGER DEFAULT 0`, (alterErr) => {
+                if (alterErr) {
+                    console.error('Помилка додавання колонки win_streak:', alterErr.message);
+                } else {
+                    console.log('Колонка win_streak успішно додана в таблицю users.');
+                }
+            });
+        }
+    });
+    db.run(`
+        CREATE TABLE IF NOT EXISTS achievements (
+            code TEXT PRIMARY KEY,
+            name_key TEXT NOT NULL,
+            description_key TEXT NOT NULL,
+            rarity TEXT NOT NULL
+        )
+    `, (err) => {
+        if (err) {
+            console.error('Помилка створення таблиці "achievements" в SQLite', err.message);
+        } else {
+            console.log('Таблиця "achievements" в SQLite готова.');
+        }
+    });
+    
+    db.run(`
+        CREATE TABLE IF NOT EXISTS user_achievements (
+            user_id INTEGER NOT NULL,
+            achievement_code TEXT NOT NULL,
+            unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, achievement_code),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (achievement_code) REFERENCES achievements(code) ON DELETE CASCADE
+        )
+    `, (err) => {
+        if (err) {
+            console.error('Помилка створення таблиці "user_achievements" в SQLite', err.message);
+        } else {
+            console.log('Таблиця "user_achievements" в SQLite готова.');
+        }
+    });
 });
 
 module.exports = db;
