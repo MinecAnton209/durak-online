@@ -185,6 +185,15 @@ pool.query(`
     `).then(() => console.log('Таблиця "game_participants" в PostgreSQL готова.'))
         .catch(err => console.error('Помилка створення таблиці "game_participants" в PostgreSQL:', err.stack));
 
+    pool.query(`
+        CREATE TABLE IF NOT EXISTS system_stats_daily (
+            date DATE PRIMARY KEY,
+            new_registrations INTEGER DEFAULT 0,
+            games_played INTEGER DEFAULT 0
+        );
+    `).then(() => console.log('Таблиця "system_stats_daily" в PostgreSQL готова.'))
+        .catch(err => console.error('Помилка створення таблиці "system_stats_daily" в PostgreSQL:', err.stack));
+
     function formatSql(sql) {
         let i = 0;
         return sql.replace(/\?/g, () => `$${++i}`);

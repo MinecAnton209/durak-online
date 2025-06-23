@@ -68,6 +68,8 @@ function checkPostGameAchievements(game, player, userStats, newWinStreak) {
 
     const userId = player.dbId;
 
+    const gameStats = player.gameStats || { cardsTaken: 0 };
+
     if (userStats.wins + userStats.losses === 0) {
         unlockAchievement(userId, 'FIRST_GAME');
     }

@@ -252,6 +252,14 @@ router.get('/stats/dashboard-overview', ensureAdmin, async (req, res) => {
             });
         });
 
+        const todayStatsPromise = new Promise((resolve, reject) => {
+            const today = new Date().toISOString().slice(0, 10);
+            db.get("SELECT new_registrations, games_played FROM system_stats_daily WHERE date = ?", [today], (err, row) => {
+                if (err) return reject(err);
+                resolve(row || { new_registrations: 0, games_played: 0 });
+            });
+        });
+
         const activeGamesCount = games ? Object.keys(games).length : 0;
 
         let onlineUsersCount = 0;
@@ -259,58 +267,24 @@ router.get('/stats/dashboard-overview', ensureAdmin, async (req, res) => {
             const sockets = await io.fetchSockets();
             const uniqueUserIds = new Set();
             sockets.forEach(socket => {
-                if (socket.request.session.user && socket.request.session.user.id) {
+                if (socket.request.session?.user?.id) {
                     uniqueUserIds.add(socket.request.session.user.id);
                 }
             });
             onlineUsersCount = uniqueUserIds.size;
         }
 
-        const gamesTodayPromise = new Promise((resolve, reject) => {
-            const tableName = 'games';
-            const dbClient = process.env.DB_CLIENT || 'sqlite';
-
-            let checkTableSql;
-            if (dbClient === 'postgres') {
-                checkTableSql = `SELECT to_regclass('public.${tableName}')`;
-            } else { // для sqlite
-                checkTableSql = `SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`;
-            }
-
-            db.get(checkTableSql, [], (err, tableExistsResult) => {
-                if (err) return reject(err);
-
-                const tableExists = dbClient === 'postgres'
-                    ? tableExistsResult && Object.values(tableExistsResult)[0] !== null
-                    : !!tableExistsResult;
-
-                if (!tableExists) {
-                    console.warn(`Таблиця '${tableName}' не знайдена, статистика ігор за сьогодні буде 0.`);
-                    return resolve(0);
-                }
-
-                const todayStart = new Date();
-                todayStart.setHours(0, 0, 0, 0);
-                const todayStartISO = todayStart.toISOString();
-
-                db.get(`SELECT COUNT(*) as count FROM ${tableName} WHERE start_time >= ?`, [todayStartISO], (err, row) => {
-                    if (err) return reject(err);
-                    resolve(row ? row.count : 0);
-                });
-            });
-        });
-
-
-        const [totalUsers, gamesPlayedToday] = await Promise.all([
+        const [totalUsers, todayStats] = await Promise.all([
             usersCountPromise,
-            gamesTodayPromise
+            todayStatsPromise
         ]);
 
         res.json({
             totalUsers,
             activeGames: activeGamesCount,
             onlineUsers: onlineUsersCount,
-            gamesPlayedToday
+            gamesPlayedToday: todayStats.games_played,
+            newRegistrationsToday: todayStats.new_registrations
         });
 
     } catch (error) {
@@ -318,5 +292,4 @@ router.get('/stats/dashboard-overview', ensureAdmin, async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-
 module.exports = router;

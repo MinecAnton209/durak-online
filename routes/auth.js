@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const db = require('../db');
 const router = express.Router();
 const saltRounds = 10;
+const statsService = require('../services/statsService');
 
 router.post('/register', async (req, res) => {
     try {
@@ -17,6 +18,7 @@ router.post('/register', async (req, res) => {
                 console.error(err.message);
                 return res.status(500).json({ message: 'Помилка бази даних.' });
             }
+            statsService.incrementDailyCounter('new_registrations');
             res.status(201).json({ message: 'Реєстрація успішна! Тепер можете увійти.' });
         });
     } catch (error) {

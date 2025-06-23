@@ -205,6 +205,14 @@ const db = new sqlite3.Database(dbPath, (err) => {
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
     )
 `, (err) => { if (err) console.error('Помилка створення таблиці "game_participants" в SQLite', err.message); });
+
+    db.run(`
+    CREATE TABLE IF NOT EXISTS system_stats_daily (
+        date TEXT PRIMARY KEY,
+        new_registrations INTEGER DEFAULT 0,
+        games_played INTEGER DEFAULT 0
+    )
+`, (err) => { if (err) console.error('Помилка створення таблиці "system_stats_daily" в SQLite', err.message); });
 });
 
 module.exports = db;

@@ -10,6 +10,7 @@ const session = require('express-session');
 const cors = require('cors');
 const i18next = require('i18next');
 const Backend = require('i18next-fs-backend');
+const statsService = require('./services/statsService.js');
 
 const db = require('./db');
 const authRoutes = require('./routes/auth.js');
@@ -199,19 +200,27 @@ function startGame(gameId) {
 
     db.run(`INSERT INTO games (id, start_time, game_type, host_user_id, is_bot_game) VALUES (?, ?, ?, ?, ?)`,
         [game.id, game.startTime.toISOString(), gameType, hostUserId, isBotGame],
-        (err) => { if (err) console.error(`Помилка створення запису для гри ${game.id} в 'games':`, err.message); }
-    );
+        (err) => {
+            if (err) {
+                return console.error(`Помилка створення запису для гри ${game.id} в 'games':`, err.message);
+            }
 
-    game.playerOrder.forEach((playerId, index) => {
-        const player = game.players[playerId];
-        const isFirstAttacker = (index === firstAttackerIndex);
-        if (player.dbId) {
-            db.run(`INSERT INTO game_participants (game_id, user_id, is_bot, is_first_attacker) VALUES (?, ?, ?, ?)`,
-                [game.id, player.dbId, player.isGuest, isFirstAttacker],
-                (err) => { if (err) console.error(`Помилка додавання учасника ${player.name} до гри ${game.id}:`, err.message); }
-            );
+            game.playerOrder.forEach((playerId, index) => {
+                const player = game.players[playerId];
+                const isFirstAttacker = (index === firstAttackerIndex);
+                if (player.dbId) {
+                    db.run(`INSERT INTO game_participants (game_id, user_id, is_bot, is_first_attacker) VALUES (?, ?, ?, ?)`,
+                        [game.id, player.dbId, player.isGuest, isFirstAttacker],
+                        (participantErr) => {
+                            if (participantErr) {
+                                console.error(`Помилка додавання учасника ${player.name} до гри ${game.id}:`, participantErr.message);
+                            }
+                        }
+                    );
+                }
+            });
         }
-    });
+    );
 
     logEvent(game, null, { i18nKey: 'log_game_start', options: { trump: game.trumpSuit, player: game.players[game.playerOrder[firstAttackerIndex]].name } });
     updateTurn(game, firstAttackerIndex);
@@ -230,7 +239,7 @@ function updateStatsAfterGame(game) {
 
     db.run(`UPDATE games SET end_time = ?, duration_seconds = ?, winner_user_id = ?, loser_user_id = ? WHERE id = ?`,
         [endTime.toISOString(), durationSeconds, winnerId, loserId, game.id],
-        (err) => { if (err) console.error(`Помилка оновлення гри ${game.id} в 'games':`, err.message); }
+        (err) => { if (err) console.error(`Помилка оновлення гри ${game.id} в 'games':`, err.message);  if (!err) { statsService.incrementDailyCounter('games_played'); } }
     );
 
     const allPlayersInGame = [...winners, loser].filter(p => p);
