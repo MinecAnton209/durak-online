@@ -173,26 +173,95 @@ function logEvent(game, message, options = {}) {
     if (game.log.length > 50) game.log.shift();
     io.to(game.id).emit('newLogEntry', logEntry);
 }
-function startGame(gameId) { const game = games[gameId]; if (!game) return; game.startTime = new Date(); game.deck = createDeck(game.settings.deckSize); game.trumpCard = game.deck.length > 0 ? game.deck[game.deck.length - 1] : { suit: '♠', rank: ''}; game.trumpSuit = game.trumpCard.suit; let firstAttackerIndex = 0; let minTrumpRank = Infinity; game.playerOrder.forEach((playerId, index) => { const player = game.players[playerId]; player.cards = game.deck.splice(0, 6); player.cards.forEach(card => { if (card.suit === game.trumpSuit && RANK_VALUES[card.rank] < minTrumpRank) { minTrumpRank = RANK_VALUES[card.rank]; firstAttackerIndex = index; } }); }); logEvent(game, null, { i18nKey: 'log_game_start', options: { trump: game.trumpSuit, player: game.players[game.playerOrder[firstAttackerIndex]].name } }); updateTurn(game, firstAttackerIndex); broadcastGameState(gameId); }
+function startGame(gameId) {
+    const game = games[gameId];
+    if (!game) return;
+    game.startTime = new Date();
+    game.deck = createDeck(game.settings.deckSize);
+    game.trumpCard = game.deck.length > 0 ? game.deck[game.deck.length - 1] : { suit: '♠', rank: '' };
+    game.trumpSuit = game.trumpCard.suit;
+    let firstAttackerIndex = 0;
+    let minTrumpRank = Infinity;
+    game.playerOrder.forEach((playerId, index) => {
+        const player = game.players[playerId];
+        player.cards = game.deck.splice(0, 6);
+        player.cards.forEach(card => {
+            if (card.suit === game.trumpSuit && RANK_VALUES[card.rank] < minTrumpRank) {
+                minTrumpRank = RANK_VALUES[card.rank];
+                firstAttackerIndex = index;
+            }
+        });
+    });
+
+    const gameType = `${game.playerOrder.length}_player`;
+    const hostUserId = game.players[game.hostId]?.dbId || null;
+    const isBotGame = Object.values(game.players).some(p => p.isGuest);
+
+    db.run(`INSERT INTO games (id, start_time, game_type, host_user_id, is_bot_game) VALUES (?, ?, ?, ?, ?)`,
+        [game.id, game.startTime.toISOString(), gameType, hostUserId, isBotGame],
+        (err) => { if (err) console.error(`Помилка створення запису для гри ${game.id} в 'games':`, err.message); }
+    );
+
+    game.playerOrder.forEach((playerId, index) => {
+        const player = game.players[playerId];
+        const isFirstAttacker = (index === firstAttackerIndex);
+        if (player.dbId) {
+            db.run(`INSERT INTO game_participants (game_id, user_id, is_bot, is_first_attacker) VALUES (?, ?, ?, ?)`,
+                [game.id, player.dbId, player.isGuest, isFirstAttacker],
+                (err) => { if (err) console.error(`Помилка додавання учасника ${player.name} до гри ${game.id}:`, err.message); }
+            );
+        }
+    });
+
+    logEvent(game, null, { i18nKey: 'log_game_start', options: { trump: game.trumpSuit, player: game.players[game.playerOrder[firstAttackerIndex]].name } });
+    updateTurn(game, firstAttackerIndex);
+    broadcastGameState(gameId);
+}
 function refillHands(game) { const attackerIndex = game.playerOrder.indexOf(game.attackerId); if(attackerIndex === -1) return; for (let i = 0; i < game.playerOrder.length; i++) { const playerIndex = (attackerIndex + i) % game.playerOrder.length; const player = game.players[game.playerOrder[playerIndex]]; if(player) { const cardsToDraw = 6 - player.cards.length; if (cardsToDraw > 0 && game.deck.length > 0) { const drawnCards = game.deck.splice(0, cardsToDraw); player.cards.push(...drawnCards); logEvent(game, null, { i18nKey: 'log_draw_cards', options: { name: player.name, count: drawnCards.length } }); } } } }
 function checkGameOver(game) { if (game.deck.length === 0) { const playersWithCards = game.playerOrder.map(id => game.players[id]).filter(p => p && p.cards.length > 0); if (playersWithCards.length <= 1) { const loser = playersWithCards.length === 1 ? playersWithCards[0] : null; const winners = game.playerOrder.map(id => game.players[id]).filter(p => p && p.cards.length === 0); game.winner = { winners, loser }; return true; } } return false; }
 function updateStatsAfterGame(game) {
     if (!game.winner || !game.startTime) return;
-    const endTime = new Date(); const durationSeconds = Math.round((endTime - game.startTime) / 1000); const minDuration = parseInt(process.env.MIN_GAME_DURATION_SECONDS, 10) || 30; const isSuspicious = durationSeconds < minDuration;
-    db.run(`INSERT INTO games_history (game_id, start_time, end_time, duration_seconds, players_count, is_suspicious) VALUES (?, ?, ?, ?, ?, ?)`, [game.id, game.startTime.toISOString(), endTime.toISOString(), durationSeconds, game.playerOrder.length, isSuspicious], (err) => { if (err) { console.error("Помилка запису в історію ігор:", err.message); } else if (isSuspicious) { console.warn(`ПОПЕРЕДЖЕННЯ: Гра ${game.id} завершилася занадто швидко (${durationSeconds} сек) і позначена як підозріла.`); } });
-    const { winners, loser } = game.winner; const allPlayersInGame = [...winners, loser].filter(p => p);
+    const endTime = new Date();
+    const durationSeconds = Math.round((endTime - game.startTime) / 1000);
+    const { winners, loser } = game.winner;
+
+    const winnerId = (winners.length === 1 && !winners[0].isGuest) ? winners[0].dbId : null;
+    const loserId = (loser && !loser.isGuest) ? loser.dbId : null;
+
+    db.run(`UPDATE games SET end_time = ?, duration_seconds = ?, winner_user_id = ?, loser_user_id = ? WHERE id = ?`,
+        [endTime.toISOString(), durationSeconds, winnerId, loserId, game.id],
+        (err) => { if (err) console.error(`Помилка оновлення гри ${game.id} в 'games':`, err.message); }
+    );
+
+    const allPlayersInGame = [...winners, loser].filter(p => p);
+
     allPlayersInGame.forEach(player => {
         if (player && !player.isGuest) {
+            const outcome = winners.some(w => w.id === player.id) ? 'win' : 'loss';
+            db.run(`UPDATE game_participants SET outcome = ?, cards_at_end = ? WHERE game_id = ? AND user_id = ?`,
+                [outcome, player.cards.length, game.id, player.dbId],
+                (err) => { if (err) console.error(`Помилка оновлення учасника ${player.name} в грі ${game.id}:`, err.message); }
+            );
+
             db.get(`SELECT streak_count, last_played_date, wins, losses, win_streak FROM users WHERE id = ?`, [player.dbId], (err, userData) => {
                 if (err || !userData) return;
 
-                const isWinner = winners.some(w => w.id === player.id);
+                const isWinner = outcome === 'win';
                 let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
 
                 achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
 
-                const today = new Date().toISOString().slice(0, 10); const lastPlayed = userData.last_played_date; let newStreak = 1;
-                if (lastPlayed) { const lastDate = new Date(lastPlayed); const todayDate = new Date(today); const diffTime = Math.abs(todayDate - lastDate); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); if (diffDays === 0) newStreak = userData.streak_count; else if (diffDays === 1) newStreak = userData.streak_count + 1; }
+                const today = new Date().toISOString().slice(0, 10);
+                const lastPlayed = userData.last_played_date;
+                let newStreak = 1;
+                if (lastPlayed) {
+                    const lastDate = new Date(lastPlayed);
+                    const todayDate = new Date(today);
+                    const diffTime = Math.abs(todayDate - lastDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    if (diffDays === 0) newStreak = userData.streak_count;
+                    else if (diffDays === 1) newStreak = userData.streak_count + 1;
+                }
 
                 const query = isWinner
                     ? `UPDATE users SET wins = wins + 1, streak_count = ?, last_played_date = ?, win_streak = ? WHERE id = ?`
@@ -397,6 +466,13 @@ io.on('connection', (socket) => {
             defenderStats.cardsTaken += game.table.length;
             logEvent(game, null, { i18nKey: 'log_take', options: { name: defender.name } });
             defender.cards.push(...game.table);
+
+            if (defender.dbId) {
+                db.run(`UPDATE game_participants SET cards_taken_total = cards_taken_total + ? WHERE game_id = ? AND user_id = ?`,
+                    [game.table.length, gameId, defender.dbId],
+                    (err) => { if (err) console.error(`Помилка оновлення cards_taken_total для гри ${gameId}:`, err.message); }
+                );
+            }
         }
         game.table = [];
 

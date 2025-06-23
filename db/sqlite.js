@@ -172,12 +172,39 @@ const db = new sqlite3.Database(dbPath, (err) => {
         duration_seconds INTEGER,
         players_count INTEGER,
         is_suspicious BOOLEAN DEFAULT FALSE
-        -- можна додати winner_id, loser_id тощо
     )
 `, (err) => {
         if (err) console.error('Помилка створення таблиці "games_history" в SQLite', err.message);
         else console.log('Таблиця "games_history" в SQLite готова.');
     });
+    db.run(`
+    CREATE TABLE IF NOT EXISTS games (
+        id TEXT PRIMARY KEY,
+        start_time TEXT NOT NULL,
+        end_time TEXT,
+        duration_seconds INTEGER,
+        game_type TEXT,
+        winner_user_id INTEGER,
+        loser_user_id INTEGER,
+        host_user_id INTEGER,
+        is_bot_game BOOLEAN DEFAULT FALSE
+    )
+`, (err) => { if (err) console.error('Помилка створення/оновлення таблиці "games" в SQLite', err.message); });
+
+    db.run(`
+    CREATE TABLE IF NOT EXISTS game_participants (
+        game_id TEXT NOT NULL,
+        user_id INTEGER,
+        is_bot BOOLEAN DEFAULT FALSE,
+        outcome TEXT,
+        cards_at_end INTEGER,
+        is_first_attacker BOOLEAN DEFAULT FALSE,
+        cards_taken_total INTEGER DEFAULT 0,
+        PRIMARY KEY (game_id, user_id),
+        FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+`, (err) => { if (err) console.error('Помилка створення таблиці "game_participants" в SQLite', err.message); });
 });
 
 module.exports = db;

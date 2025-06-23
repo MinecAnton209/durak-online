@@ -150,6 +150,37 @@ pool.query(`
     `).then(() => console.log('Таблиця "games_history" в PostgreSQL готова.'))
         .catch(err => console.error('Помилка створення таблиці "games_history" в PostgreSQL:', err.stack));
 
+    pool.query(`
+        CREATE TABLE IF NOT EXISTS games (
+            id TEXT PRIMARY KEY,
+            start_time TIMESTAMPTZ NOT NULL,
+            end_time TIMESTAMPTZ,
+            duration_seconds INTEGER,
+            game_type TEXT,
+            winner_user_id INTEGER,
+            loser_user_id INTEGER,
+            host_user_id INTEGER,
+            is_bot_game BOOLEAN DEFAULT FALSE
+        );
+    `).then(() => console.log('Таблиця "games" в PostgreSQL готова.'))
+        .catch(err => console.error('Помилка створення таблиці "games" в PostgreSQL:', err.stack));
+
+    pool.query(`
+        CREATE TABLE IF NOT EXISTS game_participants (
+            game_id TEXT NOT NULL,
+            user_id INTEGER,
+            is_bot BOOLEAN DEFAULT FALSE,
+            outcome TEXT,
+            cards_at_end INTEGER,
+            is_first_attacker BOOLEAN DEFAULT FALSE,
+            cards_taken_total INTEGER DEFAULT 0,
+            PRIMARY KEY (game_id, user_id),
+            CONSTRAINT fk_game FOREIGN KEY(game_id) REFERENCES games(id) ON DELETE CASCADE,
+            CONSTRAINT fk_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+    `).then(() => console.log('Таблиця "game_participants" в PostgreSQL готова.'))
+        .catch(err => console.error('Помилка створення таблиці "game_participants" в PostgreSQL:', err.stack));
+
     function formatSql(sql) {
         let i = 0;
         return sql.replace(/\?/g, () => `$${++i}`);
