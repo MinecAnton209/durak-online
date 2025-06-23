@@ -41,7 +41,7 @@ router.post('/login', (req, res) => {
                         options: { reason: user.ban_reason || i18next.t('ban_reason_not_specified', { ns: 'translation'}) }
                     });
                 }
-                req.session.user = { id: user.id, username: user.username, wins: user.wins, losses: user.losses, streak: user.streak_count, is_admin: user.is_admin, is_banned: user.is_banned, ban_reason: user.ban_reason };
+                req.session.user = { id: user.id, username: user.username, wins: user.wins, losses: user.losses, streak: user.streak_count, is_admin: user.is_admin, is_banned: user.is_banned, ban_reason: user.ban_reason, is_muted: user.is_muted };
                 res.status(200).json({ message: 'Вхід успішний!', user: req.session.user });
             } else {
                 res.status(401).json({ message: 'Неправильне ім\'я або пароль.' });
@@ -68,7 +68,8 @@ router.get('/check-session', (req, res) => {
                 isVerified: user.is_verified,
                 is_admin: user.is_admin,
                 is_banned: user.is_banned,
-                ban_reason: user.ban_reason
+                ban_reason: user.ban_reason,
+                is_muted: user.is_muted
             };
             req.session.save();
             res.status(200).json({ isLoggedIn: true, user: req.session.user });

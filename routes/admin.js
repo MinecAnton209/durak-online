@@ -71,4 +71,80 @@ router.post('/users/:userId/unban', ensureAdmin, (req, res) => {
     });
 });
 
+router.post('/users/:userId/mute', (req, res) => {
+    const { userId } = req.params;
+    const io = req.app.get('socketio');
+    const games = req.app.get('activeGames');
+
+    if (!userId) return res.status(400).json({ error: 'User ID is required' });
+
+    const sql = `UPDATE users SET is_muted = TRUE WHERE id = ?`;
+    db.run(sql, [userId], function(err) {
+        if (err) {
+            console.error(`Помилка муту користувача ${userId}:`, err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const io = req.app.get('socketio');
+        if (io) {
+            io.sockets.sockets.forEach((socket) => {
+                if (socket.request.session.user && socket.request.session.user.id === parseInt(userId, 10)) {
+                    socket.request.session.user.is_muted = true;
+                    socket.request.session.save();
+
+                    for (const gameId in games) {
+                        if (games[gameId] && games[gameId].players[socket.id]) {
+                            games[gameId].players[socket.id].is_muted = true;
+                            break;
+                        }
+                    }
+                    socket.emit('mutedStatusUpdate', { isMuted: true, reason: 'admin_action' });
+                }
+            });
+        }
+        res.json({ message: `User ${userId} has been muted.` });
+    });
+});
+
+router.post('/users/:userId/unmute', (req, res) => {
+    const { userId } = req.params;
+    const io = req.app.get('socketio');
+    const games = req.app.get('activeGames');
+
+    if (!userId) return res.status(400).json({ error: 'User ID is required' });
+
+    const sql = `UPDATE users SET is_muted = FALSE WHERE id = ?`;
+    db.run(sql, [userId], function(err) {
+        if (err) {
+            console.error(`Помилка анмуту користувача ${userId}:`, err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const io = req.app.get('socketio');
+        if (io) {
+            io.sockets.sockets.forEach((socket) => {
+                if (socket.request.session.user && socket.request.session.user.id === parseInt(userId, 10)) {
+                    socket.request.session.user.is_muted = false;
+                    socket.request.session.save();
+
+                    for (const gameId in games) {
+                        if (games[gameId] && games[gameId].players[socket.id]) {
+                            games[gameId].players[socket.id].is_muted = false;
+                            break;
+                        }
+                    }
+                    socket.emit('mutedStatusUpdate', { isMuted: false });
+                }
+            });
+        }
+        res.json({ message: `User ${userId} has been unmuted.` });
+    });
+});
+
 module.exports = router;

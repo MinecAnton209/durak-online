@@ -100,6 +100,10 @@
   "error_forbidden_admin_only": "Доступ заборонено. Тільки для адміністраторів.",
   "error_account_banned_with_reason": "Ваш акаунт заблоковано. Причина: {{reason}}",
   "ban_reason_not_specified": "Причина не вказана",
+  "error_chat_muted": "Ви не можете надсилати повідомлення, ваш чат приглушено.",
+  "chat_placeholder_muted": "Чат приглушено адміністратором",
+  "info_you_are_muted": "Ваш чат було приглушено адміністратором.",
+  "info_mute_lifted": "Обмеження чату знято.",
 
   "ach_first_game_name": "Новачок",
   "ach_first_game_desc": "Зіграти свою першу гру до кінця.",

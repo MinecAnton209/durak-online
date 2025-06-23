@@ -147,6 +147,22 @@ const db = new sqlite3.Database(dbPath, (err) => {
             });
         }
     });
+    db.all(`PRAGMA table_info(users)`, (err, columns) => {
+        if (err) {
+            console.error("Не вдалося отримати інформацію про таблицю users:", err.message);
+            return;
+        }
+        const hasIsMutedColumn = columns && columns.some(col => col.name === 'is_muted');
+        if (!hasIsMutedColumn) {
+            db.run(`ALTER TABLE users ADD COLUMN is_muted BOOLEAN DEFAULT FALSE`, (alterErr) => {
+                if (alterErr) {
+                    console.error('Помилка додавання колонки is_muted:', alterErr.message);
+                } else {
+                    console.log('Колонка is_muted успішно додана в таблицю users.');
+                }
+            });
+        }
+    });
 });
 
 module.exports = db;

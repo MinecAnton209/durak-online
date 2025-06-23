@@ -125,6 +125,17 @@ pool.query(`
         $$;
     `).then(() => console.log('Перевірено наявність колонок is_banned та ban_reason в PostgreSQL.'))
         .catch(err => console.error('Помилка при перевірці/додаванні колонок is_banned/ban_reason в PostgreSQL:', err.stack));
+    pool.query(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='is_muted')
+            THEN
+                ALTER TABLE "users" ADD COLUMN is_muted BOOLEAN DEFAULT FALSE;
+            END IF;
+        END;
+        $$;
+    `).then(() => console.log('Перевірено наявність колонки is_muted в PostgreSQL.'))
+        .catch(err => console.error('Помилка при перевірці/додаванні колонки is_muted в PostgreSQL:', err.stack));
 
     function formatSql(sql) {
         let i = 0;

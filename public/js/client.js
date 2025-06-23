@@ -68,10 +68,8 @@ const VERIFIED_BADGE_SVG = `
     
 let playerId = null; let gameId = null; let lastGameState = null;
 
-socket.on('forceDisconnect', (data) => {
-    alert(i18next.t(data.i18nKey, data.options || {}));
-    window.location.reload(); 
-});
+socket.on('mutedStatusUpdate', ({ isMuted, reason }) => { if (isMuted) { chatInput.disabled = true; chatInput.placeholder = i18next.t('chat_placeholder_muted'); errorToast.innerText = i18next.t('info_you_are_muted'); errorToast.classList.add('visible'); setTimeout(() => errorToast.classList.remove('visible'), 3000); } else { chatInput.disabled = false; chatInput.placeholder = i18next.t('chat_placeholder'); errorToast.innerText = i18next.t('info_mute_lifted'); errorToast.classList.remove('error'); errorToast.classList.add('visible'); setTimeout(() => errorToast.classList.remove('visible'), 3000); } });
+socket.on('forceDisconnect', (data) => { alert(i18next.t(data.i18nKey, data.options || {})); window.location.reload(); });
 function copyLink(inputElement, buttonElement) { if (!inputElement || !buttonElement) return; const textToCopy = inputElement.value; if (!textToCopy) return; navigator.clipboard.writeText(textToCopy).then(() => { const originalIcon = buttonElement.innerHTML; buttonElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-color)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`; setTimeout(() => { buttonElement.innerHTML = originalIcon; }, 2000); }).catch(err => { console.error('Не вдалося скопіювати текст: ', err); inputElement.select(); document.execCommand('copy'); }); }
 function openModal(mode) { authModal.style.display = 'flex'; authError.innerText = ''; authForm.reset(); if (mode === 'login') { modalTitle.innerHTML = i18next.t('login_modal_title'); authSubmitBtn.innerHTML = i18next.t('login_button'); authForm.dataset.mode = 'login'; } else { modalTitle.innerHTML = i18next.t('register_modal_title'); authSubmitBtn.innerHTML = i18next.t('register_button'); authForm.dataset.mode = 'register'; } }
 function closeModal() { authModal.style.display = 'none'; }
@@ -261,6 +259,13 @@ function animateOpponentPlay(card, opponentId) { playSound('play.mp3'); const op
 function renderGame(state) {
     if (state.winner) { return displayWinner(state.winner); }
     const me = state.players.find(p => p.id === playerId);
+    if (me && me.is_muted) {
+        chatInput.disabled = true;
+        chatInput.placeholder = i18next.t('chat_placeholder_muted');
+    } else if (me) {
+        chatInput.disabled = false;
+        chatInput.placeholder = i18next.t('chat_placeholder');
+    }
     if (!me) { return; }
     const trumpSuitSpan = `<span class="card-suit-${state.trumpSuit?.toLowerCase()}">${state.trumpSuit || '?'}</span>`;
     trumpCardDisplay.innerHTML = i18next.t('trump_card_display', { suit: trumpSuitSpan });

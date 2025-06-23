@@ -89,6 +89,7 @@ const VERIFIED_BADGE_SVG = `
 
 const RANK_VALUES = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
 let games = {};
+app.set('activeGames', games);
 
 function createDeck(deckSize = 36) { const SUITS = ['♦', '♥', '♠', '♣']; let ranks; switch (deckSize) { case 52: ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']; break; case 24: ranks = ['9', '10', 'J', 'Q', 'K', 'A']; break; default: ranks = ['6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']; break; } const deck = []; for (const suit of SUITS) { for (const rank of ranks) { deck.push({ suit, rank }); } } for (let i = deck.length - 1; i > 0; i--) { const j = crypto.randomInt(0, i + 1); [deck[i], deck[j]] = [deck[j], deck[i]]; } return deck; }
 function canBeat(attackCard, defendCard, trumpSuit) { if (!attackCard || !defendCard) return false; if (attackCard.suit === defendCard.suit) return RANK_VALUES[defendCard.rank] > RANK_VALUES[attackCard.rank]; if (defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit) return true; return false; }
@@ -104,6 +105,7 @@ function addPlayerToGame(socket, game, playerName) {
         cardBackStyle: sessionUser ? sessionUser.card_back_style : 'default',
         streak: sessionUser ? sessionUser.streak : 0,
         isVerified: sessionUser ? sessionUser.isVerified : false,
+        is_muted: sessionUser ? sessionUser.is_muted : false,
         cards: [],
         gameStats: {
             cardsTaken: 0,
@@ -206,6 +208,11 @@ io.on('connection', (socket) => {
         const game = games[gameId];
         const player = game ? game.players[socket.id] : null;
         if (!game || !player || !message) return;
+
+        if (player.is_muted) {
+            socket.emit('systemMessage', { i18nKey: 'error_chat_muted', type: 'error' });
+            return;
+        }
         const trimmedMessage = message.trim();
         if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) {
             let authorHTML = player.name;
@@ -337,3 +344,7 @@ io.on('connection', (socket) => {
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Сервер запущено на порті ${PORT}`);
 });
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports.games = games;
+}
