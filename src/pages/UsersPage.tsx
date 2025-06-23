@@ -139,7 +139,7 @@ const UsersPage: React.FC = () => {
                         icon={<Tooltip title={row.is_banned ? "Розбанити" : "Забанити"}>{row.is_banned ? <LockOpen /> : <Block />}</Tooltip>}
                         label={row.is_banned ? "Розбанити" : "Забанити"}
                         onClick={() => handleBanToggle(row.id, row.is_banned, row.username)}
-                        sx={{ color: row.is_banned ? 'success.main' : 'error.main' }}
+                        style={{ color: row.is_banned ? 'green' : 'red' }}
                         disabled={loading}
                     />,
                     <GridActionsCellItem
@@ -147,7 +147,7 @@ const UsersPage: React.FC = () => {
                         icon={row.is_muted ? <ChatBubbleOutline /> : <VolumeOff />}
                         label={row.is_muted ? "Розблокувати чат" : "Заблокувати чат"}
                         onClick={() => handleMuteToggle(row.id, row.is_muted, row.username)}
-                        sx={{ color: row.is_muted ? 'success.main' : 'warning.main' }}
+                        style={{ color: row.is_muted ? '#2e7d32' : '#ed6c02' }}
                         disabled={loading}
                     />,
                 ];

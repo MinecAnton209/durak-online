@@ -16,6 +16,7 @@ import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import VideogameAssetIcon from '@mui/icons-material/VideogameAsset';
 import OnlinePredictionIcon from '@mui/icons-material/OnlinePrediction';
 import TodayIcon from '@mui/icons-material/Today';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
 
 const API_BASE_URL = 'http://localhost:3000';
 
@@ -24,6 +25,7 @@ interface DashboardStats {
     activeGames: number;
     onlineUsers: number;
     gamesPlayedToday: number;
+    newRegistrationsToday: number; 
 }
 
 interface StatItemIconProps {
@@ -124,6 +126,7 @@ const DashboardPage: React.FC = () => {
         { title: 'Активних ігор', value: stats.activeGames, icon: <VideogameAssetIcon color="secondary" /> as React.ReactElement<StatItemIconProps> },
         { title: 'Онлайн зараз', value: stats.onlineUsers, icon: <OnlinePredictionIcon color="success" /> as React.ReactElement<StatItemIconProps> },
         { title: 'Ігор зіграно сьогодні', value: stats.gamesPlayedToday, icon: <TodayIcon color="info" /> as React.ReactElement<StatItemIconProps> },
+        { title: 'Нових реєстрацій сьогодні', value: stats.newRegistrationsToday, icon: <PersonAddIcon color="warning" /> as React.ReactElement<StatItemIconProps> },
     ];
 
     return (
@@ -133,7 +136,7 @@ const DashboardPage: React.FC = () => {
             </Typography>
             <Grid container spacing={3}>
                 {statItems.map((item, index) => (
-                    <Grid component="div" item xs={12} sm={6} md={3} key={index}>
+                    <Grid xs={12} sm={6} md={3} key={index}> 
                         <Card sx={{
                             borderRadius: '16px',
                             boxShadow: '0px 5px 15px rgba(0, 0, 0, 0.05)',
