@@ -436,4 +436,36 @@ router.post('/users/:userId/remove-admin', ensureAdmin, (req, res) => {
     });
 });
 
+router.post('/users/:userId/verify', ensureAdmin, (req, res) => {
+    const { userId } = req.params;
+
+    const sql = `UPDATE users SET is_verified = TRUE WHERE id = ?`;
+    db.run(sql, [userId], function(err) {
+        if (err) {
+            console.error(`Помилка верифікації користувача ${userId}:`, err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json({ message: `User ${userId} has been verified.` });
+    });
+});
+
+router.post('/users/:userId/unverify', ensureAdmin, (req, res) => {
+    const { userId } = req.params;
+
+    const sql = `UPDATE users SET is_verified = FALSE WHERE id = ?`;
+    db.run(sql, [userId], function(err) {
+        if (err) {
+            console.error(`Помилка зняття верифікації у користувача ${userId}:`, err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json({ message: `User ${userId} verification removed.` });
+    });
+});
+
 module.exports = router;
