@@ -394,4 +394,46 @@ router.get('/users/:userId/details', ensureAdmin, async (req, res) => {
     }
 });
 
+router.post('/users/:userId/set-admin', ensureAdmin, (req, res) => {
+    const { userId } = req.params;
+    const requestingAdminId = req.session.user.id;
+
+    if (parseInt(userId, 10) === requestingAdminId) {
+        return res.status(400).json({ error: "You cannot change your own admin status." });
+    }
+
+    const sql = `UPDATE users SET is_admin = TRUE WHERE id = ?`;
+    db.run(sql, [userId], function(err) {
+        if (err) {
+            console.error(`Помилка призначення адміном користувача ${userId}:`, err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json({ message: `User ${userId} is now an admin.` });
+    });
+});
+
+router.post('/users/:userId/remove-admin', ensureAdmin, (req, res) => {
+    const { userId } = req.params;
+    const requestingAdminId = req.session.user.id;
+
+    if (parseInt(userId, 10) === requestingAdminId) {
+        return res.status(400).json({ error: "You cannot change your own admin status." });
+    }
+
+    const sql = `UPDATE users SET is_admin = FALSE WHERE id = ?`;
+    db.run(sql, [userId], function(err) {
+        if (err) {
+            console.error(`Помилка зняття прав адміна у користувача ${userId}:`, err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json({ message: `User ${userId} is no longer an admin.` });
+    });
+});
+
 module.exports = router;
