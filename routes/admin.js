@@ -337,4 +337,62 @@ router.get('/games/history', ensureAdmin, (req, res) => {
         });
     });
 });
+
+router.get('/users/:userId/details', ensureAdmin, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+        const [userDetails, userGames, userAchievements] = await Promise.all([
+            new Promise((resolve, reject) => {
+                const sql = `SELECT id, username, wins, losses, streak_count, is_verified, is_admin, is_banned, ban_reason, is_muted, last_played_date FROM users WHERE id = ?`;
+                db.get(sql, [userId], (err, row) => {
+                    if (err) return reject(err);
+                    if (!row) return reject(new Error('User not found'));
+                    resolve(row);
+                });
+            }),
+            new Promise((resolve, reject) => {
+                const sql = `
+                    SELECT g.id, g.end_time, g.game_type, gp.outcome, gp.cards_at_end
+                    FROM game_participants gp
+                    JOIN games g ON gp.game_id = g.id
+                    WHERE gp.user_id = ?
+                    ORDER BY g.end_time DESC
+                    LIMIT 20
+                `;
+                db.all(sql, [userId], (err, rows) => {
+                    if (err) return reject(err);
+                    resolve(rows);
+                });
+            }),
+            new Promise((resolve, reject) => {
+                const sql = `
+                    SELECT ua.achievement_code, ua.unlocked_at, a.name_key, a.rarity
+                    FROM user_achievements ua
+                    JOIN achievements a ON ua.achievement_code = a.code
+                    WHERE ua.user_id = ?
+                    ORDER BY ua.unlocked_at DESC
+                `;
+                db.all(sql, [userId], (err, rows) => {
+                    if (err) return reject(err);
+                    resolve(rows);
+                });
+            })
+        ]);
+
+        res.json({
+            details: userDetails,
+            games: userGames,
+            achievements: userAchievements
+        });
+
+    } catch (error) {
+        console.error(`Помилка отримання деталей для користувача ${userId}:`, error.message);
+        if (error.message === 'User not found') {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 module.exports = router;
