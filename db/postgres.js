@@ -87,22 +87,34 @@ pool.query(`
         );
     `).then(() => console.log('Таблиця "user_achievements" в PostgreSQL готова до роботи.'))
       .catch(err => console.error('Помилка створення таблиці "user_achievements" в PostgreSQL:', err.stack));
-pool.query(`
-    DO $$
-    BEGIN
-        IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='win_streak')
-        THEN
-            ALTER TABLE "users" ADD COLUMN win_streak INTEGER DEFAULT 0;
-        END IF;
-    END;
-    $$;
-`).then(() => console.log('Перевірено наявність колонки win_streak.'))
-    .catch(err => console.error('Помилка при перевірці/додаванні колонки win_streak:', err));
+    pool.query(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='win_streak')
+            THEN
+                ALTER TABLE "users" ADD COLUMN win_streak INTEGER DEFAULT 0;
+            END IF;
+        END;
+        $$;
+    `).then(() => console.log('Перевірено наявність колонки win_streak.'))
+        .catch(err => console.error('Помилка при перевірці/додаванні колонки win_streak:', err));
 
-function formatSql(sql) {
-    let i = 0;
-    return sql.replace(/\?/g, () => `$${++i}`);
-}
+    pool.query(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='is_admin')
+            THEN
+                ALTER TABLE "users" ADD COLUMN is_admin BOOLEAN DEFAULT FALSE;
+            END IF;
+        END;
+        $$;
+    `).then(() => console.log('Перевірено наявність колонки is_admin в PostgreSQL.'))
+        .catch(err => console.error('Помилка при перевірці/додаванні колонки is_admin в PostgreSQL:', err.stack));
+
+    function formatSql(sql) {
+        let i = 0;
+        return sql.replace(/\?/g, () => `$${++i}`);
+    }
 
 module.exports = {
     run: (sql, params, callback) => {

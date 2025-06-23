@@ -96,6 +96,8 @@
   "error_invalid_move_cannot_beat": "This card can't beat the attack.",
   "error_invalid_move_wrong_rank": "You can only toss in cards of the same rank.",
   "error_invalid_move_toss_limit": "Can't toss in more cards than the defender has.",
+  "error_unauthorized": "Unauthorized. Please log in.",
+  "error_forbidden_admin_only": "Forbidden. Administrator access only.",
 
   "ach_first_game_name": "Rookie",
   "ach_first_game_desc": "Complete your first game.",

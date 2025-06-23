@@ -78,6 +78,25 @@ const db = new sqlite3.Database(dbPath, (err) => {
             });
         }
     });
+    db.run(`PRAGMA table_info(users)`, (err, columns) => {
+        if (err) {
+            console.error("Не вдалося отримати інформацію про таблицю users:", err.message);
+            return;
+        }
+        const hasIsAdminColumn = columns && columns.some(col => col.name === 'is_admin');
+        if (!hasIsAdminColumn) {
+            db.run(`ALTER TABLE users
+                ADD COLUMN is_admin BOOLEAN DEFAULT FALSE`, (alterErr) => {
+                if (alterErr) {
+                    console.error('Помилка додавання колонки is_admin:', alterErr.message);
+                } else {
+                    console.log('Колонка is_admin успішно додана в таблицю users.');
+                }
+            });
+        } else {
+            console.log('Колонка is_admin вже існує.');
+        }
+    })
     db.run(`
         CREATE TABLE IF NOT EXISTS achievements (
             code TEXT PRIMARY KEY,

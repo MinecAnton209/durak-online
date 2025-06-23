@@ -9,6 +9,7 @@ const bcrypt = require('bcrypt');
 const session = require('express-session');
 const { seedAchievements } = require('./db/seed.js');
 const achievementService = require('./services/achievementService.js');
+const adminRoutes = require('./routes/admin.js');
 
 const db = require('./db');
 const authRoutes = require('./routes/auth.js');
@@ -57,6 +58,7 @@ app.get('/settings', (req, res) => {
     }
     res.sendFile(path.join(__dirname, 'public', 'settings.html'));
 });
+app.use('/api/admin', adminRoutes);
 
 io.use((socket, next) => {
     sessionMiddleware(socket.request, {}, next);

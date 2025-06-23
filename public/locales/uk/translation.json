@@ -96,6 +96,8 @@
   "error_invalid_move_cannot_beat": "Цією картою не можна побити.",
   "error_invalid_move_wrong_rank": "Підкидати можна лише карти того ж номіналу.",
   "error_invalid_move_toss_limit": "Не можна підкидати більше карт, ніж є у захисника.",
+  "error_unauthorized": "Не авторизовано. Будь ласка, увійдіть.",
+  "error_forbidden_admin_only": "Доступ заборонено. Тільки для адміністраторів.",
 
   "ach_first_game_name": "Новачок",
   "ach_first_game_desc": "Зіграти свою першу гру до кінця.",
