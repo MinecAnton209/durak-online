@@ -147,4 +147,97 @@ router.post('/users/:userId/unmute', (req, res) => {
     });
 });
 
+router.get('/games/active', ensureAdmin, (req, res) => {
+    const activeGamesList = [];
+    const games = req.app.get('activeGames');
+
+    if (!games) {
+        console.error("Об'єкт 'games' не знайдено в req.app");
+        return res.status(500).json({ error: "Internal server error: Games object not found" });
+    }
+
+    for (const gameId in games) {
+        if (games.hasOwnProperty(gameId)) {
+            const game = games[gameId];
+
+            const playersInfo = game.playerOrder.map(playerId => {
+                const player = game.players[playerId];
+                return {
+                    id: player.id,
+                    dbId: player.dbId,
+                    name: player.name,
+                    isGuest: player.isGuest
+                };
+            });
+
+            activeGamesList.push({
+                id: game.id,
+                status: game.trumpSuit ? 'in_progress' : 'lobby',
+                playerCount: game.playerOrder.length,
+                maxPlayers: game.settings.maxPlayers,
+                players: playersInfo,
+                hostId: game.hostId,
+                hostName: game.players[game.hostId] ? game.players[game.hostId].name : 'N/A',
+                startTime: game.startTime ? game.startTime.toISOString() : null,
+                settings: {
+                    deckSize: game.settings.deckSize,
+                }
+            });
+        }
+    }
+
+    res.json(activeGamesList);
+});
+
+router.post('/games/:gameId/end', (req, res) => {
+    const { gameId } = req.params;
+    const reason = req.body?.reason;
+
+    const games = req.app.get('activeGames');
+    const io = req.app.get('socketio');
+    const logEvent = req.app.get('logEvent');
+    const broadcastGameState = req.app.get('broadcastGameState');
+    const i18n = req.app.get('i18next');
+
+    if (!games) {
+        return res.status(500).json({ error: "Internal server error: Games object not found" });
+    }
+    if (!io) {
+        return res.status(500).json({ error: "Internal server error: Socket.IO object not found" });
+    }
+
+    const game = games[gameId];
+
+    if (!game) {
+        return res.status(404).json({ error: `Game with ID "${gameId}" not found.` });
+    }
+
+    const adminUsername = (req.session.user && req.session.user.username) ? req.session.user.username : (i18n ? i18n.t('text_administrator', { ns: 'translation' }) : 'Адміністратор');
+    let terminationReason = i18n ? i18n.t('log_game_terminated_by_admin_default', { ns: 'translation', admin: adminUsername }) : `Гра завершена адміністратором ${adminUsername}.`;
+    if (reason) {
+        terminationReason = i18n ? i18n.t('log_game_terminated_by_admin_with_reason', { ns: 'translation', admin: adminUsername, reason: reason }) : `Гра завершена адміністратором ${adminUsername}. Причина: ${reason}`;
+    }
+
+    game.winner = {
+        reason: {
+            i18nKey: 'game_over_terminated_by_admin',
+            options: { reason: reason || (i18n ? i18n.t('admin_termination_no_reason', { ns: 'translation' }) : 'причина не вказана') }
+        }
+    };
+    game.lastAction = 'admin_terminate';
+
+    logEvent(game, null, { i18nKey: 'log_game_terminated_by_admin_event', options: { admin: adminUsername, reason: reason || (i18n ? i18n.t('admin_termination_no_reason_log', { ns: 'translation'}) : 'причина не вказана') }});
+
+    broadcastGameState(gameId);
+
+    setTimeout(() => {
+        if (games[gameId]) {
+            delete games[gameId];
+            console.log(`Гра ${gameId} була примусово завершена адміністратором ${adminUsername} і видалена з активних.`);
+        }
+    }, 1000);
+
+    res.json({ message: `Game ${gameId} has been terminated by admin. ${terminationReason}` });
+});
+
 module.exports = router;

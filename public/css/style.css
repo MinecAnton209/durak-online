@@ -176,6 +176,8 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 .ach-icon.ach-FIRST_WIN { transform: rotate(45deg); }
 .ach-icon.ach-FIRST_WIN::before { content: ''; position: absolute; width: 8px; height: 40px; background-color: #B0BEC5; border-radius: 4px; top: 5px; }
 .ach-icon.ach-FIRST_WIN::after { content: ''; position: absolute; width: 20px; height: 6px; background-color: #784e2c; border-radius: 3px; bottom: 18px; }
+.spectate-btn { position: absolute; top: 0.5rem; left: 7rem; z-index: 201; background: var(--primary-container-color); color: var(--on-primary-container-color); border-radius: 8px; padding: 0.5rem 1rem; font-size: 0.9rem; }
+.opponent-bottom-for-spectator { bottom: 1rem; left: 50%; transform: translateX(-50%); width: 40vw; }
 
 @media (max-width: 1024px) { 
     .toggle-chat-btn { display: none; }

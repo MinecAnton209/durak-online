@@ -35,6 +35,7 @@ i18next
         },
         preload: ['en', 'uk']
     });
+app.set('i18next', i18next);
 
 
 const PORT = process.env.PORT || 3000;
@@ -222,6 +223,7 @@ function broadcastGameState(gameId) {
 
             const stateForPlayer = {
                 gameId: game.id,
+                isSpectator: false,
                 players: game.playerOrder.map(id => {
                     const p = game.players[id];
                     if (!p) return null;
@@ -249,8 +251,42 @@ function broadcastGameState(gameId) {
             playerSocket.emit('gameStateUpdate', stateForPlayer);
         }
     });
+    game.spectators.forEach(spectatorSocketId => {
+        const spectatorSocket = io.sockets.sockets.get(spectatorSocketId);
+        if (spectatorSocket) {
+            const stateForSpectator = {
+                gameId: game.id,
+                isSpectator: true,
+                players: game.playerOrder.map(id => {
+                    const p = game.players[id];
+                    if (!p) return null;
+                    return {
+                        id: p.id,
+                        name: p.name,
+                        isVerified: p.isVerified,
+                        streak: p.streak || 0,
+                        cardBackStyle: p.cardBackStyle || 'default',
+                        cards: p.cards,
+                        isAttacker: p.id === game.attackerId,
+                        isDefender: p.id === game.defenderId,
+                    };
+                }).filter(p => p !== null),
+                table: game.table,
+                trumpCard: game.trumpCard,
+                trumpSuit: game.trumpSuit,
+                deckCardCount: game.deck.length,
+                isYourTurn: false,
+                canPass: false,
+                canTake: false,
+                winner: game.winner,
+                lastAction: game.lastAction
+            };
+            spectatorSocket.emit('gameStateUpdate', stateForSpectator);
+        }
+    });
 }
-
+app.set('logEvent', logEvent);
+app.set('broadcastGameState', broadcastGameState);
 io.on('connection', (socket) => {
     const sessionUser = socket.request.session.user;
 
@@ -277,7 +313,7 @@ io.on('connection', (socket) => {
         console.log(`Клієнт підключився: ${socket.id} (гість)`);
     }
 
-    socket.on('createGame', (settings) => { const { playerName } = settings; let gameId = (settings.customId || Math.random().toString(36).substr(2, 6)).toUpperCase(); if (games[gameId]) { return socket.emit('error', {i18nKey: 'error_game_exists', text: `Гра з ID "${gameId}" вже існує.`}); } socket.join(gameId); games[gameId] = { id: gameId, players: {}, playerOrder: [], hostId: socket.id, settings: settings, deck: [], table: [], discardPile: [], trumpCard: null, trumpSuit: null, attackerId: null, defenderId: null, turn: null, winner: null, rematchVotes: new Set(), log: [], lastAction: null, startTime: null }; addPlayerToGame(socket, games[gameId], playerName); socket.emit('gameCreated', { gameId, playerId: socket.id }); });
+    socket.on('createGame', (settings) => { const { playerName } = settings; let gameId = (settings.customId || Math.random().toString(36).substr(2, 6)).toUpperCase(); if (games[gameId]) { return socket.emit('error', {i18nKey: 'error_game_exists', text: `Гра з ID "${gameId}" вже існує.`}); } socket.join(gameId); games[gameId] = { id: gameId, players: {}, playerOrder: [], hostId: socket.id, settings: settings, deck: [], table: [], discardPile: [], trumpCard: null, trumpSuit: null, attackerId: null, defenderId: null, turn: null, winner: null, rematchVotes: new Set(), log: [], lastAction: null, startTime: null, spectators: [] }; addPlayerToGame(socket, games[gameId], playerName); socket.emit('gameCreated', { gameId, playerId: socket.id }); });
     socket.on('joinGame', ({ gameId, playerName }) => { if (!gameId) { return socket.emit('error', {i18nKey: 'error_no_game_id', text: 'ID гри не вказано.'}); } const upperCaseGameId = gameId.toUpperCase(); const game = games[upperCaseGameId]; if (game && game.playerOrder.length < game.settings.maxPlayers) { socket.join(upperCaseGameId); addPlayerToGame(socket, game, playerName); socket.emit('joinSuccess', { playerId: socket.id, gameId: upperCaseGameId }); io.to(upperCaseGameId).emit('playerJoined'); } else { socket.emit('error', {i18nKey: 'error_room_full_or_not_exist', text: 'Кімната не існує або вже повна.'}); } });
     socket.on('getLobbyState', ({ gameId }) => { const game = games[gameId]; if (game) { io.to(gameId).emit('lobbyStateUpdate', { players: Object.values(game.players), maxPlayers: game.settings.maxPlayers, hostId: game.hostId }); } });
     socket.on('forceStartGame', ({ gameId }) => { const game = games[gameId]; if (!game || game.hostId !== socket.id) return; if (game.playerOrder.length >= 2) { game.settings.maxPlayers = game.playerOrder.length; startGame(gameId); } });
@@ -415,6 +451,37 @@ io.on('connection', (socket) => {
                 break;
             }
         }
+    });
+    socket.on('adminSpectateGame', ({ gameId }) => {
+        const sessionUser = socket.request.session.user;
+        if (!sessionUser || !sessionUser.is_admin) {
+            return socket.emit('error', { i18nKey: 'error_forbidden_admin_only', text: 'Тільки адміністратори можуть спостерігати за іграми таким чином.' });
+        }
+
+        const game = games[gameId];
+        if (!game) {
+            return socket.emit('error', { i18nKey: 'error_game_not_found', text: `Гру з ID "${gameId}" не знайдено.` });
+        }
+
+        if (game.players[socket.id]) {
+            return socket.emit('error', { i18nKey: 'error_already_in_game_as_player', text: 'Ви вже є гравцем у цій грі.' });
+        }
+
+        if (game.spectators.includes(socket.id)) {
+            console.log(`Адмін ${sessionUser.username} вже спостерігає за грою ${gameId}. Надсилаємо стан.`);
+            broadcastGameState(gameId);
+            return;
+        }
+
+        game.spectators.push(socket.id);
+        socket.join(gameId);
+
+        console.log(`Адмін ${sessionUser.username} (socket ID: ${socket.id}) почав спостерігати за грою ${gameId}`);
+        logEvent(game, null, {i18nKey: 'log_admin_spectating', options: {adminName: sessionUser.username}});
+
+        broadcastGameState(gameId);
+
+        socket.emit('spectateSuccess', { gameId });
     });
 });
 
