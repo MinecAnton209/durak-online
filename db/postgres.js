@@ -110,6 +110,21 @@ pool.query(`
         $$;
     `).then(() => console.log('Перевірено наявність колонки is_admin в PostgreSQL.'))
         .catch(err => console.error('Помилка при перевірці/додаванні колонки is_admin в PostgreSQL:', err.stack));
+    pool.query(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='is_banned')
+            THEN
+                ALTER TABLE "users" ADD COLUMN is_banned BOOLEAN DEFAULT FALSE;
+            END IF;
+            IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='ban_reason')
+            THEN
+                ALTER TABLE "users" ADD COLUMN ban_reason TEXT;
+            END IF;
+        END;
+        $$;
+    `).then(() => console.log('Перевірено наявність колонок is_banned та ban_reason в PostgreSQL.'))
+        .catch(err => console.error('Помилка при перевірці/додаванні колонок is_banned/ban_reason в PostgreSQL:', err.stack));
 
     function formatSql(sql) {
         let i = 0;

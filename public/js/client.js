@@ -68,6 +68,10 @@ const VERIFIED_BADGE_SVG = `
     
 let playerId = null; let gameId = null; let lastGameState = null;
 
+socket.on('forceDisconnect', (data) => {
+    alert(i18next.t(data.i18nKey, data.options || {}));
+    window.location.reload(); 
+});
 function copyLink(inputElement, buttonElement) { if (!inputElement || !buttonElement) return; const textToCopy = inputElement.value; if (!textToCopy) return; navigator.clipboard.writeText(textToCopy).then(() => { const originalIcon = buttonElement.innerHTML; buttonElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-color)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`; setTimeout(() => { buttonElement.innerHTML = originalIcon; }, 2000); }).catch(err => { console.error('Не вдалося скопіювати текст: ', err); inputElement.select(); document.execCommand('copy'); }); }
 function openModal(mode) { authModal.style.display = 'flex'; authError.innerText = ''; authForm.reset(); if (mode === 'login') { modalTitle.innerHTML = i18next.t('login_modal_title'); authSubmitBtn.innerHTML = i18next.t('login_button'); authForm.dataset.mode = 'login'; } else { modalTitle.innerHTML = i18next.t('register_modal_title'); authSubmitBtn.innerHTML = i18next.t('register_button'); authForm.dataset.mode = 'register'; } }
 function closeModal() { authModal.style.display = 'none'; }
@@ -89,7 +93,7 @@ window.addEventListener('DOMContentLoaded', () => {
     showRegisterBtn.addEventListener('click', () => openModal('register'));
     closeModalBtn.addEventListener('click', closeModal);
     authModal.addEventListener('click', (e) => { if (e.target === authModal) closeModal(); });
-    authForm.addEventListener('submit', async (e) => { e.preventDefault(); const username = authUsernameInput.value; const password = authPasswordInput.value; const mode = authForm.dataset.mode; const endpoint = (mode === 'login') ? '/login' : '/register'; authSubmitBtn.disabled = true; authError.innerText = ''; try { const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const result = await response.json(); if (response.ok) { alert(i18next.t(result.i18nKey || 'alert_success')); closeModal(); if (result.user) { showUserProfile(result.user); } } else { authError.innerText = i18next.t(result.i18nKey || 'error_unknown'); } } catch (error) { authError.innerText = i18next.t('error_connection'); } finally { authSubmitBtn.disabled = false; } });
+    authForm.addEventListener('submit', async (e) => { e.preventDefault(); const username = authUsernameInput.value; const password = authPasswordInput.value; const mode = authForm.dataset.mode; const endpoint = (mode === 'login') ? '/login' : '/register'; authSubmitBtn.disabled = true; authError.innerText = ''; try { const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const result = await response.json(); if (response.ok) { alert(i18next.t(result.i18nKey || 'alert_success')); closeModal(); if (result.user) { showUserProfile(result.user); } } else { if (result.i18nKey) { authError.innerText = i18next.t(result.i18nKey, result.options || {}); } else {authError.innerText = i18next.t(result.i18nKey || 'error_unknown'); } } } catch (error) { authError.innerText = i18next.t('error_connection'); } finally { authSubmitBtn.disabled = false; } });
     showLogBtnMobile.addEventListener('click', () => gameLogContainer.classList.add('visible'));
     closeLogBtn.addEventListener('click', () => gameLogContainer.classList.remove('visible'));
     leaveGameBtn.addEventListener('click', () => {
@@ -117,11 +121,10 @@ window.addEventListener('DOMContentLoaded', () => {
         gameLogContainer.classList.add('collapsed');
     }
     async function showAchievements() {
-        achievementsList.innerHTML = 'Завантаження...'; // TODO: i18n
+        achievementsList.innerHTML = 'Завантаження...';
         achievementsModal.style.display = 'flex';
     
         try {
-            // Отримуємо два списки паралельно
             const [allAchievementsRes, myAchievementsRes] = await Promise.all([
                 fetch('/api/achievements/all'),
                 fetch('/api/achievements/my')
@@ -137,7 +140,7 @@ window.addEventListener('DOMContentLoaded', () => {
             
             const myAchievementsMap = new Map(myAchievements.map(ach => [ach.achievement_code, ach.unlocked_at]));
     
-            achievementsList.innerHTML = ''; // Очищуємо
+            achievementsList.innerHTML = '';
     
             allAchievements.forEach(ach => {
                 const isUnlocked = myAchievementsMap.has(ach.code);
@@ -149,15 +152,13 @@ window.addEventListener('DOMContentLoaded', () => {
                     item.classList.add('unlocked');
                 }
                 
-                // Створюємо тултіп з описом
                 const description = i18next.t(ach.description_key);
                 const unlockedDate = isUnlocked ? new Date(myAchievementsMap.get(ach.code)).toLocaleDateString() : '';
                 item.title = `${i18next.t(ach.name_key)}\n${description}${isUnlocked ? `\nОтримано: ${unlockedDate}` : ''}`;
     
                 const iconDiv = document.createElement('div');
                 iconDiv.className = 'ach-icon';
-                // TODO: Додати сюди CSS-іконки на основі ach.code
-    
+
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'ach-name';
                 nameSpan.textContent = i18next.t(ach.name_key);
@@ -169,7 +170,7 @@ window.addEventListener('DOMContentLoaded', () => {
     
         } catch (error) {
             console.error("Помилка завантаження ачівок:", error);
-            achievementsList.innerHTML = 'Не вдалося завантажити досягнення.'; // TODO: i18n
+            achievementsList.innerHTML = 'Не вдалося завантажити досягнення.';
         }
     }
     

@@ -98,6 +98,8 @@
   "error_invalid_move_toss_limit": "Can't toss in more cards than the defender has.",
   "error_unauthorized": "Unauthorized. Please log in.",
   "error_forbidden_admin_only": "Forbidden. Administrator access only.",
+  "error_account_banned_with_reason": "Your account has been banned. Reason: {{reason}}",
+  "ban_reason_not_specified": "Reason not specified",
 
   "ach_first_game_name": "Rookie",
   "ach_first_game_desc": "Complete your first game.",

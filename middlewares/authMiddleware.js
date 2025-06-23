@@ -19,6 +19,19 @@ function ensureAuthenticated(req, res, next) {
     });
 }
 
+function ensureAuthenticated(req, res, next) {
+    if (req.session.user.is_banned) {
+        const banReason = req.session.user.ban_reason;
+        req.session.destroy();
+        return res.status(403).json({
+            error: 'Forbidden',
+            i18nKey: 'error_account_banned_with_reason',
+            options: { reason: banReason || i18next.t('ban_reason_not_specified', { ns: 'translation'}) }
+        });
+    }
+    res.status(401).json({ error: 'Unauthorized', i18nKey: 'error_unauthorized' });
+}
+
 module.exports = {
     ensureAuthenticated,
     ensureAdmin

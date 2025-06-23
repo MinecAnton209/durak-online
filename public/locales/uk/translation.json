@@ -98,6 +98,8 @@
   "error_invalid_move_toss_limit": "Не можна підкидати більше карт, ніж є у захисника.",
   "error_unauthorized": "Не авторизовано. Будь ласка, увійдіть.",
   "error_forbidden_admin_only": "Доступ заборонено. Тільки для адміністраторів.",
+  "error_account_banned_with_reason": "Ваш акаунт заблоковано. Причина: {{reason}}",
+  "ban_reason_not_specified": "Причина не вказана",
 
   "ach_first_game_name": "Новачок",
   "ach_first_game_desc": "Зіграти свою першу гру до кінця.",

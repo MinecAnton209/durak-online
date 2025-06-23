@@ -128,6 +128,25 @@ const db = new sqlite3.Database(dbPath, (err) => {
             console.log('Таблиця "user_achievements" в SQLite готова.');
         }
     });
+    db.all(`PRAGMA table_info(users)`, (err, columns) => {
+        if (err) return console.error("Не вдалося отримати інформацію про таблицю users:", err.message);
+
+        const hasIsBannedColumn = columns && columns.some(col => col.name === 'is_banned');
+        if (!hasIsBannedColumn) {
+            db.run(`ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT FALSE`, (alterErr) => {
+                if (alterErr) console.error('Помилка додавання колонки is_banned:', alterErr.message);
+                else console.log('Колонка is_banned успішно додана в таблицю users.');
+            });
+        }
+
+        const hasBanReasonColumn = columns && columns.some(col => col.name === 'ban_reason');
+        if (!hasBanReasonColumn) {
+            db.run(`ALTER TABLE users ADD COLUMN ban_reason TEXT`, (alterErr) => {
+                if (alterErr) console.error('Помилка додавання колонки ban_reason:', alterErr.message);
+                else console.log('Колонка ban_reason успішно додана в таблицю users.');
+            });
+        }
+    });
 });
 
 module.exports = db;

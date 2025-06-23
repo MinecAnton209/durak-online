@@ -35,7 +35,13 @@ router.post('/login', (req, res) => {
             if (!user) { return res.status(401).json({ message: 'Неправильне ім\'я або пароль.' }); }
             const isMatch = await bcrypt.compare(password, user.password);
             if (isMatch) {
-                req.session.user = { id: user.id, username: user.username, wins: user.wins, losses: user.losses, streak: user.streak_count, is_admin: user.is_admin };
+                if (user.is_banned) {
+                    return res.status(403).json({
+                        i18nKey: 'error_account_banned_with_reason',
+                        options: { reason: user.ban_reason || i18next.t('ban_reason_not_specified', { ns: 'translation'}) }
+                    });
+                }
+                req.session.user = { id: user.id, username: user.username, wins: user.wins, losses: user.losses, streak: user.streak_count, is_admin: user.is_admin, is_banned: user.is_banned, ban_reason: user.ban_reason };
                 res.status(200).json({ message: 'Вхід успішний!', user: req.session.user });
             } else {
                 res.status(401).json({ message: 'Неправильне ім\'я або пароль.' });
@@ -60,7 +66,9 @@ router.get('/check-session', (req, res) => {
                 streak: user.streak_count,
                 card_back_style: user.card_back_style,
                 isVerified: user.is_verified,
-                is_admin: user.is_admin
+                is_admin: user.is_admin,
+                is_banned: user.is_banned,
+                ban_reason: user.ban_reason
             };
             req.session.save();
             res.status(200).json({ isLoggedIn: true, user: req.session.user });

@@ -7,28 +7,41 @@ const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
-const { seedAchievements } = require('./db/seed.js');
-const achievementService = require('./services/achievementService.js');
-const adminRoutes = require('./routes/admin.js');
+const i18next = require('i18next');
+const Backend = require('i18next-fs-backend');
 
 const db = require('./db');
 const authRoutes = require('./routes/auth.js');
 const achievementRoutes = require('./routes/achievements.js');
+const adminRoutes = require('./routes/admin.js');
+const { seedAchievements } = require('./db/seed.js');
+const achievementService = require('./services/achievementService.js');
+
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*" } });
-achievementService.init(io);
+
+app.set('socketio', io);
+
+i18next
+    .use(Backend)
+    .init({
+        fallbackLng: 'en',
+        ns: ['translation'],
+        defaultNS: 'translation',
+        backend: {
+            loadPath: path.join(__dirname, 'public/locales/{{lng}}/{{ns}}.json'),
+        },
+        preload: ['en', 'uk']
+    });
+
 
 const PORT = process.env.PORT || 3000;
-setTimeout(seedAchievements, 1000);
 
-const VERIFIED_BADGE_SVG = `
-    <span class="verified-badge" title="Верифікований гравець">
-        <svg viewBox="0 0 20 22" xmlns="http://www.w3.org/2000/svg">
-            <path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z" fill="#1d9bf0"></path>
-        </svg>
-    </span>`;
+setTimeout(seedAchievements, 1000);
+achievementService.init(io);
+
 
 const sessionMiddleware = session({
     store: (process.env.DB_CLIENT === 'postgres' && process.env.DATABASE_URL) ?
@@ -50,19 +63,29 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.static('public'));
 app.use(sessionMiddleware);
+
 app.use('/', authRoutes);
 app.use('/api/achievements', achievementRoutes);
+app.use('/api/admin', adminRoutes);
+
+
 app.get('/settings', (req, res) => {
     if (!req.session.user) {
         return res.redirect('/');
     }
     res.sendFile(path.join(__dirname, 'public', 'settings.html'));
 });
-app.use('/api/admin', adminRoutes);
 
 io.use((socket, next) => {
     sessionMiddleware(socket.request, {}, next);
 });
+
+const VERIFIED_BADGE_SVG = `
+    <span class="verified-badge" title="Верифікований гравець">
+        <svg viewBox="0 0 20 22" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z" fill="#1d9bf0"></path>
+        </svg>
+    </span>`;
 
 const RANK_VALUES = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
 let games = {};
@@ -71,11 +94,29 @@ function createDeck(deckSize = 36) { const SUITS = ['♦', '♥', '♠', '♣'];
 function canBeat(attackCard, defendCard, trumpSuit) { if (!attackCard || !defendCard) return false; if (attackCard.suit === defendCard.suit) return RANK_VALUES[defendCard.rank] > RANK_VALUES[attackCard.rank]; if (defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit) return true; return false; }
 function getNextPlayerIndex(currentIndex, totalPlayers) { if (totalPlayers === 0) return 0; return (currentIndex + 1) % totalPlayers; }
 function updateTurn(game, newAttackerIndex) { if (game.playerOrder.length === 0) return; const safeIndex = newAttackerIndex % game.playerOrder.length; game.attackerId = game.playerOrder[safeIndex]; const defenderIndex = getNextPlayerIndex(safeIndex, game.playerOrder.length); game.defenderId = game.playerOrder[defenderIndex]; game.turn = game.attackerId; }
-function addPlayerToGame(socket, game, playerName) { const sessionUser = socket.request.session.user; game.players[socket.id] = { id: socket.id, name: sessionUser ? sessionUser.username : playerName, dbId: sessionUser ? sessionUser.id : null, isGuest: !sessionUser, cardBackStyle: sessionUser ? sessionUser.card_back_style : 'default', streak: sessionUser ? sessionUser.streak : 0, isVerified: sessionUser ? sessionUser.isVerified : false, cards: [], gameStats: {cardsTaken: 0, successfulDefenses: 0, cardsBeatenInDefense: 0 } }; game.playerOrder.push(socket.id); }
+function addPlayerToGame(socket, game, playerName) {
+    const sessionUser = socket.request.session.user;
+    game.players[socket.id] = {
+        id: socket.id,
+        name: sessionUser ? sessionUser.username : playerName,
+        dbId: sessionUser ? sessionUser.id : null,
+        isGuest: !sessionUser,
+        cardBackStyle: sessionUser ? sessionUser.card_back_style : 'default',
+        streak: sessionUser ? sessionUser.streak : 0,
+        isVerified: sessionUser ? sessionUser.isVerified : false,
+        cards: [],
+        gameStats: {
+            cardsTaken: 0,
+            successfulDefenses: 0,
+            cardsBeatenInDefense: 0
+        }
+    };
+    game.playerOrder.push(socket.id);
+}
 function logEvent(game, message, options = {}) {
     if (!game.log) game.log = [];
     const timestamp = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    
+
     const logEntry = { timestamp, ...options };
     if(typeof message === 'string' && !options.i18nKey) {
         logEntry.message = message;
@@ -97,13 +138,22 @@ function updateStatsAfterGame(game) {
         if (player && !player.isGuest) {
             db.get(`SELECT streak_count, last_played_date, wins, losses, win_streak FROM users WHERE id = ?`, [player.dbId], (err, userData) => {
                 if (err || !userData) return;
-                achievementService.checkPostGameAchievements(game, player, userData)
+
+                const isWinner = winners.some(w => w.id === player.id);
+                let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
+
+                achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
+
                 const today = new Date().toISOString().slice(0, 10); const lastPlayed = userData.last_played_date; let newStreak = 1;
                 if (lastPlayed) { const lastDate = new Date(lastPlayed); const todayDate = new Date(today); const diffTime = Math.abs(todayDate - lastDate); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); if (diffDays === 0) newStreak = userData.streak_count; else if (diffDays === 1) newStreak = userData.streak_count + 1; }
-                const isWinner = winners.some(w => w.id === player.id);
-                let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0; 
-                const query = isWinner ? `UPDATE users SET wins = wins + 1, streak_count = ?, last_played_date = ?, win_streak = ? WHERE id = ?` : `UPDATE users SET losses = losses + 1, streak_count = ?, last_played_date = ?, win_streak = 0 WHERE id = ?`;
-                const params = isWinner ? [newStreak, today, newWinStreak, player.dbId] : [newStreak, today, player.dbId]
+
+                const query = isWinner
+                    ? `UPDATE users SET wins = wins + 1, streak_count = ?, last_played_date = ?, win_streak = ? WHERE id = ?`
+                    : `UPDATE users SET losses = losses + 1, streak_count = ?, last_played_date = ?, win_streak = 0 WHERE id = ?`;
+                const params = isWinner
+                    ? [newStreak, today, newWinStreak, player.dbId]
+                    : [newStreak, today, player.dbId];
+
                 db.run(query, params, (updateErr) => {
                     if (updateErr) console.error("Помилка оновлення статистики:", updateErr.message);
                     else {
@@ -111,12 +161,11 @@ function updateStatsAfterGame(game) {
                         if (playerSocket && playerSocket.request.session.user) {
                             if (isWinner) playerSocket.request.session.user.wins++; else playerSocket.request.session.user.losses++;
                             playerSocket.request.session.user.streak = newStreak;
+                            playerSocket.request.session.user.win_streak = newWinStreak;
                             playerSocket.request.session.save();
                         }
                     }
                 });
-
-                achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
             });
         }
     });
@@ -124,14 +173,38 @@ function updateStatsAfterGame(game) {
 function broadcastGameState(gameId) { const game = games[gameId]; if (!game) return; game.playerOrder.forEach(playerId => { const playerSocket = io.sockets.sockets.get(playerId); if (playerSocket) { const stateForPlayer = { gameId: game.id, players: game.playerOrder.map(id => { const p = game.players[id]; if(!p) return null; return { id: p.id, name: p.name, isVerified: p.isVerified, streak: p.streak || 0, cardBackStyle: p.cardBackStyle || 'default', cards: p.id === playerId ? p.cards : p.cards.map(() => ({ hidden: true })), isAttacker: p.id === game.attackerId, isDefender: p.id === game.defenderId, } }).filter(p => p !== null), table: game.table, trumpCard: game.trumpCard, trumpSuit: game.trumpSuit, deckCardCount: game.deck.length, isYourTurn: playerId === game.turn, canPass: playerId === game.attackerId && game.table.length > 0 && game.table.length % 2 === 0, canTake: playerId === game.defenderId && game.table.length > 0, winner: game.winner, lastAction: game.lastAction }; playerSocket.emit('gameStateUpdate', stateForPlayer); } }); }
 
 io.on('connection', (socket) => {
-    socket.on('createGame', (settings) => { const { playerName } = settings; let gameId = (settings.customId || Math.random().toString(36).substr(2, 6)).toUpperCase(); if (games[gameId]) { return socket.emit('error', `Гра з ID "${gameId}" вже існує.`); } socket.join(gameId); games[gameId] = { id: gameId, players: {}, playerOrder: [], hostId: socket.id, settings: settings, deck: [], table: [], discardPile: [], trumpCard: null, trumpSuit: null, attackerId: null, defenderId: null, turn: null, winner: null, rematchVotes: new Set(), log: [], lastAction: null, startTime: null }; addPlayerToGame(socket, games[gameId], playerName); socket.emit('gameCreated', { gameId, playerId: socket.id }); });
-    socket.on('joinGame', ({ gameId, playerName }) => { if (!gameId) { return socket.emit('error', 'ID гри не вказано.'); } const upperCaseGameId = gameId.toUpperCase(); const game = games[upperCaseGameId]; if (game && game.playerOrder.length < game.settings.maxPlayers) { socket.join(upperCaseGameId); addPlayerToGame(socket, game, playerName); socket.emit('joinSuccess', { playerId: socket.id, gameId: upperCaseGameId }); io.to(upperCaseGameId).emit('playerJoined'); } else { socket.emit('error', 'Кімната не існує або вже повна.'); } });
+    const sessionUser = socket.request.session.user;
+
+    if (sessionUser) {
+        db.get('SELECT is_banned, ban_reason FROM users WHERE id = ?', [sessionUser.id], (err, dbUser) => {
+            if (err) {
+                console.error(`Помилка перевірки статусу бану для користувача ${sessionUser.id}:`, err.message);
+                socket.disconnect(true);
+                return;
+            }
+            if (dbUser && dbUser.is_banned) {
+                const reasonText = dbUser.ban_reason || i18next.t('ban_reason_not_specified');
+                console.log(`Користувач ${sessionUser.username} (ID: ${sessionUser.id}) забанений. Причина: ${reasonText}. Відключення сокету.`);
+                socket.emit('forceDisconnect', {
+                    i18nKey: 'error_account_banned_with_reason',
+                    options: { reason: reasonText }
+                });
+                socket.disconnect(true);
+                return;
+            }
+            console.log(`Клієнт підключився: ${socket.id}, користувач: ${sessionUser.username}`);
+        });
+    } else {
+        console.log(`Клієнт підключився: ${socket.id} (гість)`);
+    }
+
+    socket.on('createGame', (settings) => { const { playerName } = settings; let gameId = (settings.customId || Math.random().toString(36).substr(2, 6)).toUpperCase(); if (games[gameId]) { return socket.emit('error', {i18nKey: 'error_game_exists', text: `Гра з ID "${gameId}" вже існує.`}); } socket.join(gameId); games[gameId] = { id: gameId, players: {}, playerOrder: [], hostId: socket.id, settings: settings, deck: [], table: [], discardPile: [], trumpCard: null, trumpSuit: null, attackerId: null, defenderId: null, turn: null, winner: null, rematchVotes: new Set(), log: [], lastAction: null, startTime: null }; addPlayerToGame(socket, games[gameId], playerName); socket.emit('gameCreated', { gameId, playerId: socket.id }); });
+    socket.on('joinGame', ({ gameId, playerName }) => { if (!gameId) { return socket.emit('error', {i18nKey: 'error_no_game_id', text: 'ID гри не вказано.'}); } const upperCaseGameId = gameId.toUpperCase(); const game = games[upperCaseGameId]; if (game && game.playerOrder.length < game.settings.maxPlayers) { socket.join(upperCaseGameId); addPlayerToGame(socket, game, playerName); socket.emit('joinSuccess', { playerId: socket.id, gameId: upperCaseGameId }); io.to(upperCaseGameId).emit('playerJoined'); } else { socket.emit('error', {i18nKey: 'error_room_full_or_not_exist', text: 'Кімната не існує або вже повна.'}); } });
     socket.on('getLobbyState', ({ gameId }) => { const game = games[gameId]; if (game) { io.to(gameId).emit('lobbyStateUpdate', { players: Object.values(game.players), maxPlayers: game.settings.maxPlayers, hostId: game.hostId }); } });
     socket.on('forceStartGame', ({ gameId }) => { const game = games[gameId]; if (!game || game.hostId !== socket.id) return; if (game.playerOrder.length >= 2) { game.settings.maxPlayers = game.playerOrder.length; startGame(gameId); } });
-    
     socket.on('sendMessage', ({ gameId, message }) => {
         const game = games[gameId];
-        const player = game.players[socket.id];
+        const player = game ? game.players[socket.id] : null;
         if (!game || !player || !message) return;
         const trimmedMessage = message.trim();
         if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) {
@@ -143,7 +216,6 @@ io.on('connection', (socket) => {
             logEvent(game, chatMessage);
         }
     });
-
     socket.on('makeMove', ({ gameId, card }) => {
         const game = games[gameId]; if (!game || !game.players[socket.id] || game.winner) return;
         game.lastAction = 'move';
@@ -168,11 +240,18 @@ io.on('connection', (socket) => {
         broadcastGameState(gameId);
     });
     socket.on('passTurn', ({ gameId }) => {
-        const defender = game.players[game.defenderId];
-        if (defender) { const defenderStats = defender.gameStats; defenderStats.successfulDefenses += 1; defenderStats.cardsBeatenInDefense += game.table.length / 2; achievementService.checkInGameAchievements(game, game.defenderId, 'passTurn'); }
         const game = games[gameId]; if (!game || game.attackerId !== socket.id || game.table.length === 0 || game.table.length % 2 !== 0 || game.winner) return;
         game.lastAction = 'pass'; const defenderIdBeforeRefill = game.defenderId;
-        if(game.players[defenderIdBeforeRefill]) logEvent(game, null, { i18nKey: 'log_pass', options: { name: game.players[defenderIdBeforeRefill].name } });
+
+        const defender = game.players[defenderIdBeforeRefill];
+        if (defender) {
+            const defenderStats = defender.gameStats;
+            defenderStats.successfulDefenses += 1;
+            defenderStats.cardsBeatenInDefense += game.table.length / 2;
+            achievementService.checkInGameAchievements(game, defenderIdBeforeRefill, 'passTurn');
+            logEvent(game, null, { i18nKey: 'log_pass', options: { name: defender.name } });
+        }
+
         game.discardPile.push(...game.table); game.table = [];
         refillHands(game);
         if (checkGameOver(game)) { updateStatsAfterGame(game); return broadcastGameState(gameId); }
@@ -184,10 +263,17 @@ io.on('connection', (socket) => {
     });
     socket.on('takeCards', ({ gameId }) => {
         const game = games[gameId]; if (!game || game.defenderId !== socket.id || game.table.length === 0 || game.winner) return;
-        game.lastAction = 'take'; logEvent(game, null, { i18nKey: 'log_take', options: { name: game.players[game.defenderId].name } });
-        const defenderStats = game.players[game.defenderId].gameStats;
-        defenderStats.cardsTaken += game.table.length;
-        game.players[game.defenderId].cards.push(...game.table); game.table = [];
+        game.lastAction = 'take';
+
+        const defender = game.players[game.defenderId];
+        if(defender) {
+            const defenderStats = defender.gameStats;
+            defenderStats.cardsTaken += game.table.length;
+            logEvent(game, null, { i18nKey: 'log_take', options: { name: defender.name } });
+            defender.cards.push(...game.table);
+        }
+        game.table = [];
+
         refillHands(game);
         if (checkGameOver(game)) { updateStatsAfterGame(game); return broadcastGameState(gameId); }
         const defenderIndex = game.playerOrder.indexOf(game.defenderId);
@@ -198,65 +284,50 @@ io.on('connection', (socket) => {
     socket.on('requestRematch', ({ gameId }) => { const game = games[gameId]; if (!game || !game.players[socket.id]) return; game.rematchVotes.add(socket.id); const remainingPlayers = Object.keys(game.players); io.to(gameId).emit('rematchUpdate', { votes: game.rematchVotes.size, total: remainingPlayers.length }); if (game.rematchVotes.size === remainingPlayers.length && remainingPlayers.length >= 2) { game.table = []; game.discardPile = []; game.winner = null; game.rematchVotes.clear(); game.playerOrder.sort(() => Math.random() - 0.5); setTimeout(() => startGame(gameId), 1000); } });
     socket.on('disconnect', () => {
         console.log(`Клієнт відключився: ${socket.id}`);
-        
         for (const gameId in games) {
             const game = games[gameId];
-            
             if (game.players[socket.id]) {
                 const disconnectedPlayer = game.players[socket.id];
                 console.log(`Гравець ${disconnectedPlayer.name} (${socket.id}) відключився з гри ${gameId}`);
-    
                 delete game.players[socket.id];
                 game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
                 game.rematchVotes.delete(socket.id);
-        
                 if (!game.trumpSuit) {
                     if (game.hostId === socket.id) {
-                        io.to(gameId).emit('error', 'Хост вийшов. Гру скасовано.');
+                        io.to(gameId).emit('error', { i18nKey: 'error_host_left_lobby', text: 'Хост вийшов. Гру скасовано.' });
                         delete games[gameId];
                         console.log(`Хост вийшов з лобі ${gameId}. Гру видалено.`);
                     } else {
                         io.to(gameId).emit('playerJoined');
                     }
-                }
-                else if (!game.winner) {
+                } else if (!game.winner) {
                     if (game.playerOrder.length < 2) {
+                        logEvent(game, null, { i18nKey: 'log_player_left_game_over', options: { name: disconnectedPlayer.name } });
                         game.winner = { reason: { i18nKey: 'game_over_player_left', options: { player: disconnectedPlayer.name } } };
-                        broadcastGameState(gameId);
                     } else {
+                        logEvent(game, null, { i18nKey: 'log_player_left_continue', options: { name: disconnectedPlayer.name } });
                         if (game.turn === socket.id) {
                             const attackerIndex = game.playerOrder.indexOf(game.attackerId);
                             if (socket.id === game.attackerId || attackerIndex === -1) {
                                 const defenderIndex = game.playerOrder.indexOf(game.defenderId);
                                 updateTurn(game, defenderIndex !== -1 ? defenderIndex : 0);
-                            } else { 
-                                const nextPlayerIndex = getNextPlayerIndex(attackerIndex, game.playerOrder.length);
-                                updateTurn(game, nextPlayerIndex);
+                            } else {
+                                const currentTurnIndex = game.playerOrder.indexOf(game.turn);
+                                updateTurn(game, currentTurnIndex !== -1 ? currentTurnIndex : 0);
                             }
                         }
-                        broadcastGameState(gameId);
                     }
-                }
-                else {
+                    broadcastGameState(gameId);
+                } else {
                     const remainingPlayers = Object.keys(game.players);
                     if (remainingPlayers.length > 0) {
-                        io.to(gameId).emit('rematchUpdate', {
-                            votes: game.rematchVotes.size,
-                            total: remainingPlayers.length
-                        });
-                        if (game.rematchVotes.size === remainingPlayers.length && remainingPlayers.length >= 2) {
-                            game.table = []; game.discardPile = []; game.winner = null; game.rematchVotes.clear();
-                            game.playerOrder.sort(() => Math.random() - 0.5);
-                            setTimeout(() => startGame(gameId), 1000);
-                        }
+                        io.to(gameId).emit('rematchUpdate', { votes: game.rematchVotes.size, total: remainingPlayers.length });
                     }
                 }
-    
-                if (game.playerOrder.length === 0) {
+                if (game.playerOrder.length === 0 && Object.keys(game.players).length === 0) {
                     console.log(`Гра ${gameId} порожня, видаляємо.`);
                     delete games[gameId];
                 }
-    
                 break;
             }
         }
