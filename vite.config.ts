@@ -7,5 +7,6 @@ export default defineConfig({
   server: {
     port: 10000,
     host: true,
+    allowedHosts: 'durak-admin.onrender.com',
   }
 })
