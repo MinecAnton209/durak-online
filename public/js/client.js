@@ -96,6 +96,39 @@ window.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const joinGameId = urlParams.get('gameId')?.toUpperCase();
     if (joinGameId) { document.getElementById('join-game-section').style.display = 'block'; gameId = joinGameId; }
+    const spectateRequestedGameId = urlParams.get('spectateGameId')?.toUpperCase();
+    const isAdminSpectatorRequest = urlParams.get('adminSpectator') === 'true';
+    fetch('/check-session')
+        .then(res => res.json())
+        .then(data => {
+            if (data.isLoggedIn) {
+                showUserProfile(data.user);
+
+                if (spectateRequestedGameId && isAdminSpectatorRequest && data.user.is_admin) {
+                    console.log(`Автоматичний запит на спостереження за грою ${spectateRequestedGameId} як адмін.`);
+                    if(welcomeScreen) welcomeScreen.style.display = 'none';
+                    if(lobbyScreen) lobbyScreen.style.display = 'none';
+                    if(gameScreen) gameScreen.style.display = 'block';
+
+                    requestSpectateGame(spectateRequestedGameId);
+                }
+            } else {
+                showGuestLogin();
+                if (spectateRequestedGameId && isAdminSpectatorRequest) {
+                    alert(i18next.t('error_admin_spectate_unauthorized'));
+                    window.location.href = '/';
+                }
+            }
+
+            if (joinGameId && (!spectateRequestedGameId || !isAdminSpectatorRequest)) {
+                document.getElementById('join-game-section').style.display = 'block';
+                gameId = joinGameId;
+            }
+
+        }).catch(error => {
+        console.error('Помилка перевірки сесії при спробі спостереження:', error);
+        showGuestLogin();
+    });
     createGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = i18next.t('error_enter_name'); return; } const settings = { playerName: playerNameValue, deckSize: parseInt(document.getElementById('deckSize').value, 10), maxPlayers: parseInt(document.getElementById('maxPlayers').value, 10), customId: document.getElementById('customGameId').value.trim().toUpperCase() }; socket.emit('createGame', settings); });
     joinGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = i18next.t('error_enter_name'); return; } socket.emit('joinGame', { gameId, playerName: playerNameValue }); });
     rematchBtn.addEventListener('click', () => { socket.emit('requestRematch', { gameId }); rematchBtn.disabled = true; rematchBtn.innerHTML = i18next.t('rematch_waiting_button'); });

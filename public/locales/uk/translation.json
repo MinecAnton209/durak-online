@@ -115,6 +115,7 @@
   "log_game_terminated_by_admin_default": "Гра завершена адміністратором {{admin}}.",
   "log_game_terminated_by_admin_with_reason": "Гра завершена адміністратором {{admin}}. Причина: {{reason}}",
   "text_administrator": "Адміністратор",
+  "error_admin_spectate_unauthorized": "Тільки авторизовані адміністратори можуть спостерігати за іграми. Будь ласка, увійдіть як адміністратор.",
 
   "ach_first_game_name": "Новачок",
   "ach_first_game_desc": "Зіграти свою першу гру до кінця.",

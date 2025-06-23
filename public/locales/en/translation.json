@@ -115,6 +115,7 @@
   "log_game_terminated_by_admin_default": "Game terminated by administrator {{admin}}.",
   "log_game_terminated_by_admin_with_reason": "Game terminated by administrator {{admin}}. Reason: {{reason}}",
   "text_administrator": "Administrator",
+  "error_admin_spectate_unauthorized": "Only authorized administrators can spectate games. Please log in as an administrator.",
 
   "ach_first_game_name": "Rookie",
   "ach_first_game_desc": "Complete your first game.",
