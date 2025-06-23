@@ -292,4 +292,49 @@ router.get('/stats/dashboard-overview', ensureAdmin, async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+router.get('/games/history', ensureAdmin, (req, res) => {
+    const page = parseInt(req.query.page, 10) || 0;
+    const pageSize = parseInt(req.query.pageSize, 10) || 25;
+    const offset = page * pageSize;
+
+    const countSql = `SELECT COUNT(*) as total FROM games WHERE end_time IS NOT NULL`;
+
+    db.get(countSql, [], (countErr, countRow) => {
+        if (countErr) {
+            console.error("Помилка отримання кількості ігор в історії:", countErr.message);
+            return res.status(500).json({ error: 'Internal server error while fetching count.' });
+        }
+
+        const totalRowCount = countRow ? countRow.total : 0;
+
+        if (totalRowCount === 0) {
+            return res.json({ rows: [], rowCount: 0 });
+        }
+
+        const dataSql = `
+            SELECT g.id, g.game_type, g.duration_seconds, g.end_time,
+                   winner.username as winner_username,
+                   loser.username as loser_username
+            FROM games g
+            LEFT JOIN users winner ON g.winner_user_id = winner.id
+            LEFT JOIN users loser ON g.loser_user_id = loser.id
+            WHERE g.end_time IS NOT NULL
+            ORDER BY g.end_time DESC
+            LIMIT ? OFFSET ?
+        `;
+
+        db.all(dataSql, [pageSize, offset], (dataErr, rows) => {
+            if (dataErr) {
+                console.error("Помилка отримання історії ігор:", dataErr.message);
+                return res.status(500).json({ error: 'Internal server error while fetching rows.' });
+            }
+
+            res.json({
+                rows: rows || [],
+                rowCount: totalRowCount
+            });
+        });
+    });
+});
 module.exports = router;
