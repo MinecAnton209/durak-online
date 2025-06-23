@@ -1,4 +1,3 @@
-// src/pages/DashboardPage.tsx
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import {
@@ -164,9 +163,7 @@ const DashboardPage: React.FC = () => {
                                     <Typography variant="h4" component="div" fontWeight="bold">
                                         {item.value.toLocaleString()}
                                     </Typography>
-                                    {/* Заглушка для відсотків */}
                                     <Typography variant="caption" color="text.disabled" component="div" sx={{ height: '20px' }}>
-                                        {/* +N% */}
                                     </Typography>
                                 </Box>
                             </Box>
