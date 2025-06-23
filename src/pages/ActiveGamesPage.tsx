@@ -6,8 +6,8 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import StopCircleIcon from '@mui/icons-material/StopCircle';
 
-const API_BASE_URL = 'http://localhost:3000';
-const GAME_CLIENT_URL = 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+export const GAME_CLIENT_URL = import.meta.env.VITE_GAME_CLIENT_URL;
 
 interface PlayerInfo {
     id: string;
