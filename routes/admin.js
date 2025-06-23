@@ -3,6 +3,16 @@ const router = express.Router();
 const db = require('../db');
 const { ensureAdmin } = require('../middlewares/authMiddleware');
 
+function getLastNDates(days = 7) {
+    const dates = [];
+    for (let i = days - 1; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        dates.push(d.toISOString().slice(0, 10));
+    }
+    return dates;
+}
+
 router.get('/users', ensureAdmin, (req, res) => {
     const sql = `SELECT id, username, wins, losses, streak_count, last_played_date, is_verified, is_admin, is_banned, ban_reason, is_muted FROM users ORDER BY id ASC`;    db.all(sql, [], (err, users) => {
         if (err) {
@@ -473,25 +483,9 @@ router.get('/stats/registrations-by-day', ensureAdmin, (req, res) => {
     let sql;
 
     if (dbClient === 'postgres') {
-        sql = `
-            SELECT 
-                TO_CHAR(created_at, 'YYYY-MM-DD') as date,
-                COUNT(*) as count
-            FROM users
-            WHERE created_at >= current_date - interval '7 days'
-            GROUP BY date
-            ORDER BY date ASC;
-        `;
+        sql = `SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as count FROM users WHERE created_at >= current_date - interval '7 days' GROUP BY date;`;
     } else {
-        sql = `
-            SELECT 
-                STRFTIME('%Y-%m-%d', created_at) as date,
-                COUNT(*) as count
-            FROM users
-            WHERE created_at >= DATE('now', '-7 days')
-            GROUP BY date
-            ORDER BY date ASC;
-        `;
+        sql = `SELECT STRFTIME('%Y-%m-%d', created_at) as date, COUNT(*) as count FROM users WHERE created_at >= DATE('now', '-7 days') GROUP BY date;`;
     }
 
     db.all(sql, [], (err, rows) => {
@@ -499,7 +493,42 @@ router.get('/stats/registrations-by-day', ensureAdmin, (req, res) => {
             console.error("Помилка отримання статистики реєстрацій:", err.message);
             return res.status(500).json({ error: 'Internal server error' });
         }
-        res.json(rows);
+
+        const dataMap = new Map(rows.map(row => [row.date, row.count]));
+
+        const last7Days = getLastNDates(7);
+        const result = last7Days.map(date => ({
+            date: date,
+            count: dataMap.get(date) || 0
+        }));
+
+        res.json(result);
+    });
+});
+router.get('/stats/games-by-day', ensureAdmin, (req, res) => {
+    const dbClient = process.env.DB_CLIENT || 'sqlite';
+    let sql;
+
+    if (dbClient === 'postgres') {
+        sql = `SELECT TO_CHAR(end_time, 'YYYY-MM-DD') as date, COUNT(*) as count FROM games WHERE end_time >= current_date - interval '7 days' GROUP BY date;`;
+    } else {
+        sql = `SELECT STRFTIME('%Y-%m-%d', end_time) as date, COUNT(*) as count FROM games WHERE end_time >= DATE('now', '-7 days') GROUP BY date;`;
+    }
+
+    db.all(sql, [], (err, rows) => {
+        if (err) {
+            console.error("Помилка отримання статистики ігор по днях:", err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+
+        const dataMap = new Map(rows.map(row => [row.date, row.count]));
+        const last7Days = getLastNDates(7);
+        const result = last7Days.map(date => ({
+            date: date,
+            count: dataMap.get(date) || 0
+        }));
+
+        res.json(result);
     });
 });
 
