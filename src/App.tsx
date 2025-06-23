@@ -32,6 +32,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import HistoryIcon from '@mui/icons-material/History';
 import GamesHistoryPage from './pages/GamesHistoryPage';
+import UserDetailPage from './pages/UserDetailPage'; 
 
 const ProtectedRoute: React.FC = () => {
   const adminUser = localStorage.getItem('adminUser');
@@ -244,6 +245,7 @@ function App() {
         <Route element={<AdminLayout />}>
             <Route index element={<DashboardPage />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="/users/:userId" element={<UserDetailPage />} />
             <Route path="active-games" element={<ActiveGamesPage />} />
             <Route path="/games-history" element={<GamesHistoryPage />} />
         </Route>
