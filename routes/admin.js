@@ -468,4 +468,39 @@ router.post('/users/:userId/unverify', ensureAdmin, (req, res) => {
     });
 });
 
+router.get('/stats/registrations-by-day', ensureAdmin, (req, res) => {
+    const dbClient = process.env.DB_CLIENT || 'sqlite';
+    let sql;
+
+    if (dbClient === 'postgres') {
+        sql = `
+            SELECT 
+                TO_CHAR(created_at, 'YYYY-MM-DD') as date,
+                COUNT(*) as count
+            FROM users
+            WHERE created_at >= current_date - interval '7 days'
+            GROUP BY date
+            ORDER BY date ASC;
+        `;
+    } else {
+        sql = `
+            SELECT 
+                STRFTIME('%Y-%m-%d', created_at) as date,
+                COUNT(*) as count
+            FROM users
+            WHERE created_at >= DATE('now', '-7 days')
+            GROUP BY date
+            ORDER BY date ASC;
+        `;
+    }
+
+    db.all(sql, [], (err, rows) => {
+        if (err) {
+            console.error("Помилка отримання статистики реєстрацій:", err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        res.json(rows);
+    });
+});
+
 module.exports = router;

@@ -194,6 +194,18 @@ pool.query(`
     `).then(() => console.log('Таблиця "system_stats_daily" в PostgreSQL готова.'))
         .catch(err => console.error('Помилка створення таблиці "system_stats_daily" в PostgreSQL:', err.stack));
 
+    pool.query(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='created_at')
+            THEN
+                ALTER TABLE "users" ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW();
+            END IF;
+        END;
+        $$;
+    `).then(() => console.log('Перевірено наявність колонки created_at в PostgreSQL.'))
+        .catch(err => console.error('Помилка при перевірці/додаванні колонки created_at в PostgreSQL:', err.stack));
+
     function formatSql(sql) {
         let i = 0;
         return sql.replace(/\?/g, () => `$${++i}`);

@@ -24,8 +24,11 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*" } });
 
+app.set('trust proxy', 1);
+
+console.log('CORS Origin is set to:', process.env.ADMIN_CORS_ORIGIN);
 app.use(cors({
-    origin: 'http://localhost:5173',
+    origin: process.env.ADMIN_CORS_ORIGIN || 'http://localhost:5173',
     credentials: true
 }));
 
@@ -67,7 +70,6 @@ if (process.env.DB_CLIENT === 'postgres' && process.env.DATABASE_URL) {
     console.log("Сесії будуть зберігатися в SQLite.");
 }
 
-app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.static('public'));
 app.use(sessionMiddleware);
