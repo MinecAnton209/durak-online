@@ -210,7 +210,46 @@ function updateStatsAfterGame(game) {
         }
     });
 }
-function broadcastGameState(gameId) { const game = games[gameId]; if (!game) return; game.playerOrder.forEach(playerId => { const playerSocket = io.sockets.sockets.get(playerId); if (playerSocket) { const stateForPlayer = { gameId: game.id, players: game.playerOrder.map(id => { const p = game.players[id]; if(!p) return null; return { id: p.id, name: p.name, isVerified: p.isVerified, streak: p.streak || 0, cardBackStyle: p.cardBackStyle || 'default', cards: p.id === playerId ? p.cards : p.cards.map(() => ({ hidden: true })), isAttacker: p.id === game.attackerId, isDefender: p.id === game.defenderId, } }).filter(p => p !== null), table: game.table, trumpCard: game.trumpCard, trumpSuit: game.trumpSuit, deckCardCount: game.deck.length, isYourTurn: playerId === game.turn && p.cards.length > 0, canPass: playerId === game.attackerId && game.table.length > 0 && game.table.length % 2 === 0, canTake: playerId === game.defenderId && game.table.length > 0, winner: game.winner, lastAction: game.lastAction }; playerSocket.emit('gameStateUpdate', stateForPlayer); } }); }
+function broadcastGameState(gameId) {
+    const game = games[gameId];
+    if (!game) return;
+
+    game.playerOrder.forEach(playerId => {
+        const playerSocket = io.sockets.sockets.get(playerId);
+        if (playerSocket) {
+            const playerForWhomStateIs = game.players[playerId];
+            if (!playerForWhomStateIs) return;
+
+            const stateForPlayer = {
+                gameId: game.id,
+                players: game.playerOrder.map(id => {
+                    const p = game.players[id];
+                    if (!p) return null;
+                    return {
+                        id: p.id,
+                        name: p.name,
+                        isVerified: p.isVerified,
+                        streak: p.streak || 0,
+                        cardBackStyle: p.cardBackStyle || 'default',
+                        cards: p.id === playerId ? p.cards : p.cards.map(() => ({ hidden: true })),
+                        isAttacker: p.id === game.attackerId,
+                        isDefender: p.id === game.defenderId,
+                    };
+                }).filter(p => p !== null),
+                table: game.table,
+                trumpCard: game.trumpCard,
+                trumpSuit: game.trumpSuit,
+                deckCardCount: game.deck.length,
+                isYourTurn: playerId === game.turn && playerForWhomStateIs.cards.length > 0,
+                canPass: playerId === game.attackerId && game.table.length > 0 && game.table.length % 2 === 0,
+                canTake: playerId === game.defenderId && game.table.length > 0,
+                winner: game.winner,
+                lastAction: game.lastAction
+            };
+            playerSocket.emit('gameStateUpdate', stateForPlayer);
+        }
+    });
+}
 
 io.on('connection', (socket) => {
     const sessionUser = socket.request.session.user;
