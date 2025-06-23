@@ -12,9 +12,9 @@ console.log('Використовується база даних PostgreSQL.');
 
 pool.query(`
     CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,fw
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
+        id SERIAL PRIMARY KEY,
+        username text UNIQUE NOT NULL,
+        password text NOT NULL,
         wins INTEGER DEFAULT 0,
         losses INTEGER DEFAULT 0,
         streak_count INTEGER DEFAULT 0,
@@ -25,14 +25,18 @@ pool.query(`
 
 pool.query(`
     CREATE TABLE IF NOT EXISTS "user_sessions" (
-        "sid" varchar NOT NULL COLLATE "default",
-        "sess" json NOT NULL,
-        "expire" timestamp(6) NOT NULL
-    )
-    WITH (OIDS=FALSE);
-    ALTER TABLE "user_sessions" ADD CONSTRAINT "user_sessions_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE;
-`).then(() => console.log('Таблиця "user_sessions" готова до роботи.'))
-    .catch(err => console.error('Помилка створення таблиці "user_sessions":', err));
+                                                   "sid" varchar NOT NULL COLLATE "default",
+                                                   "sess" json NOT NULL,
+                                                   "expire" timestamp(6) NOT NULL,
+        CONSTRAINT "user_sessions_pkey" PRIMARY KEY ("sid")
+        )
+        WITH (OIDS=FALSE);
+`).then(() => console.log('Таблиця "user_sessions" в PostgreSQL готова до роботи.'))
+    .catch(err => {
+        if (err.code !== '42P07') {
+            console.error('Помилка створення таблиці "user_sessions":', err.stack);
+        }
+    });
 
 pool.query(`
         DO $$
@@ -41,7 +45,7 @@ pool.query(`
                 FROM information_schema.columns
                 WHERE table_name='users' and column_name='card_back_style')
             THEN
-                ALTER TABLE "users" ADD COLUMN card_back_style TEXT DEFAULT 'default';
+                ALTER TABLE "users" ADD COLUMN card_back_style text DEFAULT 'default';
             END IF;
         END;
         $$;
@@ -119,7 +123,7 @@ pool.query(`
             END IF;
             IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='ban_reason')
             THEN
-                ALTER TABLE "users" ADD COLUMN ban_reason TEXT;
+                ALTER TABLE "users" ADD COLUMN ban_reason text;
             END IF;
         END;
         $$;
