@@ -163,6 +163,21 @@ const db = new sqlite3.Database(dbPath, (err) => {
             });
         }
     });
+    db.run(`
+    CREATE TABLE IF NOT EXISTS games_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_id TEXT UNIQUE,
+        start_time TEXT,
+        end_time TEXT,
+        duration_seconds INTEGER,
+        players_count INTEGER,
+        is_suspicious BOOLEAN DEFAULT FALSE
+        -- можна додати winner_id, loser_id тощо
+    )
+`, (err) => {
+        if (err) console.error('Помилка створення таблиці "games_history" в SQLite', err.message);
+        else console.log('Таблиця "games_history" в SQLite готова.');
+    });
 });
 
 module.exports = db;

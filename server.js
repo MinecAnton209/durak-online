@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
+const cors = require('cors');
 const i18next = require('i18next');
 const Backend = require('i18next-fs-backend');
 
@@ -21,6 +22,11 @@ const achievementService = require('./services/achievementService.js');
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*" } });
+
+app.use(cors({
+    origin: 'http://localhost:5173',
+    credentials: true
+}));
 
 app.set('socketio', io);
 

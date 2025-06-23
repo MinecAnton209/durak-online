@@ -137,6 +137,19 @@ pool.query(`
     `).then(() => console.log('Перевірено наявність колонки is_muted в PostgreSQL.'))
         .catch(err => console.error('Помилка при перевірці/додаванні колонки is_muted в PostgreSQL:', err.stack));
 
+    pool.query(`
+        CREATE TABLE IF NOT EXISTS games_history (
+            id SERIAL PRIMARY KEY,
+            game_id TEXT UNIQUE,
+            start_time TIMESTAMPTZ,
+            end_time TIMESTAMPTZ,
+            duration_seconds INTEGER,
+            players_count INTEGER,
+            is_suspicious BOOLEAN DEFAULT FALSE
+        );
+    `).then(() => console.log('Таблиця "games_history" в PostgreSQL готова.'))
+        .catch(err => console.error('Помилка створення таблиці "games_history" в PostgreSQL:', err.stack));
+
     function formatSql(sql) {
         let i = 0;
         return sql.replace(/\?/g, () => `$${++i}`);

@@ -71,7 +71,7 @@ router.post('/users/:userId/unban', ensureAdmin, (req, res) => {
     });
 });
 
-router.post('/users/:userId/mute', (req, res) => {
+router.post('/users/:userId/mute', ensureAdmin, (req, res) => {
     const { userId } = req.params;
     const io = req.app.get('socketio');
     const games = req.app.get('activeGames');
@@ -109,7 +109,7 @@ router.post('/users/:userId/mute', (req, res) => {
     });
 });
 
-router.post('/users/:userId/unmute', (req, res) => {
+router.post('/users/:userId/unmute', ensureAdmin, (req, res) => {
     const { userId } = req.params;
     const io = req.app.get('socketio');
     const games = req.app.get('activeGames');
@@ -189,7 +189,7 @@ router.get('/games/active', ensureAdmin, (req, res) => {
     res.json(activeGamesList);
 });
 
-router.post('/games/:gameId/end', (req, res) => {
+router.post('/games/:gameId/end', ensureAdmin, (req, res) => {
     const { gameId } = req.params;
     const reason = req.body?.reason;
 
@@ -238,6 +238,70 @@ router.post('/games/:gameId/end', (req, res) => {
     }, 1000);
 
     res.json({ message: `Game ${gameId} has been terminated by admin. ${terminationReason}` });
+});
+
+router.get('/stats/dashboard-overview', ensureAdmin, async (req, res) => {
+    const io = req.app.get('socketio');
+    const games = req.app.get('activeGames');
+
+    try {
+        const usersCountPromise = new Promise((resolve, reject) => {
+            db.get("SELECT COUNT(*) as count FROM users", [], (err, row) => {
+                if (err) return reject(err);
+                resolve(row ? row.count : 0);
+            });
+        });
+
+        const activeGamesCount = games ? Object.keys(games).length : 0;
+
+        let onlineUsersCount = 0;
+        if (io) {
+            const sockets = await io.fetchSockets();
+            const uniqueUserIds = new Set();
+            sockets.forEach(socket => {
+                if (socket.request.session.user && socket.request.session.user.id) {
+                    uniqueUserIds.add(socket.request.session.user.id);
+                }
+            });
+            onlineUsersCount = uniqueUserIds.size;
+        }
+
+        const gamesTodayPromise = new Promise((resolve, reject) => {
+            db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='games_history'", [], (err, table) => {
+                if (err) return reject(err);
+                if (!table) {
+                    console.warn("Таблиця 'games_history' не знайдена, статистика ігор за сьогодні буде 0.");
+                    return resolve(0);
+                }
+
+                const todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0);
+                const todayStartISO = todayStart.toISOString();
+
+                db.get("SELECT COUNT(*) as count FROM games_history WHERE start_time >= ?", [todayStartISO], (err, row) => {
+                    if (err) return reject(err);
+                    resolve(row ? row.count : 0);
+                });
+            });
+        });
+
+
+        const [totalUsers, gamesPlayedToday] = await Promise.all([
+            usersCountPromise,
+            gamesTodayPromise
+        ]);
+
+        res.json({
+            totalUsers,
+            activeGames: activeGamesCount,
+            onlineUsers: onlineUsersCount,
+            gamesPlayedToday
+        });
+
+    } catch (error) {
+        console.error("Помилка отримання статистики для дашборду:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 module.exports = router;
