@@ -12,6 +12,8 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import RemoveModeratorIcon from '@mui/icons-material/RemoveModerator';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import GppBadIcon from '@mui/icons-material/GppBad';
 
 const API_BASE_URL = 'http://localhost:3000';
 
@@ -84,6 +86,26 @@ const UserDetailPage: React.FC = () => {
                 alert('Не вдалося виконати дію.');
             }
             console.error('Admin toggle error:', err);
+        }
+    };
+
+    const handleVerificationToggle = async (isCurrentlyVerified: boolean) => {
+        const action = isCurrentlyVerified ? 'unverify' : 'verify';
+        const actionText = isCurrentlyVerified ? 'зняти верифікацію з' : 'верифікувати';
+
+        if (!confirm(`Ви впевнені, що хочете ${actionText} користувача ${data?.details.username}?`)) {
+            return;
+        }
+
+        try {
+            await axios.post(`${API_BASE_URL}/api/admin/users/${userId}/${action}`, {}, {
+                withCredentials: true
+            });
+            alert('Статус верифікації успішно змінено!');
+            refetch();
+        } catch (err) {
+            alert('Не вдалося змінити статус верифікації.');
+            console.error('Verification toggle error:', err);
         }
     };
 
@@ -165,6 +187,25 @@ const UserDetailPage: React.FC = () => {
                                     onClick={() => handleAdminToggle(false)}
                                 >
                                     Призначити адміном
+                                </Button>
+                            )}
+                            {details.is_verified ? (
+                                <Button
+                                    variant="outlined"
+                                    color="error"
+                                    startIcon={<GppBadIcon />}
+                                    onClick={() => handleVerificationToggle(true)}
+                                >
+                                    Зняти верифікацію
+                                </Button>
+                            ) : (
+                                <Button
+                                    variant="contained"
+                                    color="success"
+                                    startIcon={<VerifiedUserIcon />}
+                                    onClick={() => handleVerificationToggle(false)}
+                                >
+                                    Верифікувати
                                 </Button>
                             )}
                         </Box>
