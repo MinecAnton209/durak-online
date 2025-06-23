@@ -94,7 +94,45 @@ app.set('activeGames', games);
 function createDeck(deckSize = 36) { const SUITS = ['♦', '♥', '♠', '♣']; let ranks; switch (deckSize) { case 52: ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']; break; case 24: ranks = ['9', '10', 'J', 'Q', 'K', 'A']; break; default: ranks = ['6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']; break; } const deck = []; for (const suit of SUITS) { for (const rank of ranks) { deck.push({ suit, rank }); } } for (let i = deck.length - 1; i > 0; i--) { const j = crypto.randomInt(0, i + 1); [deck[i], deck[j]] = [deck[j], deck[i]]; } return deck; }
 function canBeat(attackCard, defendCard, trumpSuit) { if (!attackCard || !defendCard) return false; if (attackCard.suit === defendCard.suit) return RANK_VALUES[defendCard.rank] > RANK_VALUES[attackCard.rank]; if (defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit) return true; return false; }
 function getNextPlayerIndex(currentIndex, totalPlayers) { if (totalPlayers === 0) return 0; return (currentIndex + 1) % totalPlayers; }
-function updateTurn(game, newAttackerIndex) { if (game.playerOrder.length === 0) return; const safeIndex = newAttackerIndex % game.playerOrder.length; game.attackerId = game.playerOrder[safeIndex]; const defenderIndex = getNextPlayerIndex(safeIndex, game.playerOrder.length); game.defenderId = game.playerOrder[defenderIndex]; game.turn = game.attackerId; }
+function updateTurn(game, intendedAttackerIndex) {
+    if (game.playerOrder.length < 2) return;
+
+    let currentAttackerIndex = intendedAttackerIndex % game.playerOrder.length;
+    let attempts = 0;
+
+    while (game.players[game.playerOrder[currentAttackerIndex]] && game.players[game.playerOrder[currentAttackerIndex]].cards.length === 0 && attempts < game.playerOrder.length) {
+        currentAttackerIndex = getNextPlayerIndex(currentAttackerIndex, game.playerOrder.length);
+        attempts++;
+    }
+    if (attempts >= game.playerOrder.length) {
+        console.warn(`[updateTurn] Не знайдено гравця з картами для атаки в грі ${game.id}`);
+        return; 
+    }
+
+    game.attackerId = game.playerOrder[currentAttackerIndex];
+
+    let currentDefenderIndex = getNextPlayerIndex(currentAttackerIndex, game.playerOrder.length);
+    attempts = 0;
+
+    while (
+        (game.players[game.playerOrder[currentDefenderIndex]] && game.players[game.playerOrder[currentDefenderIndex]].cards.length === 0 && game.playerOrder.length > 1) &&
+        attempts < game.playerOrder.length
+    ) {
+        currentDefenderIndex = getNextPlayerIndex(currentDefenderIndex, game.playerOrder.length);
+        attempts++;
+        if(game.playerOrder.length > 1 && currentDefenderIndex === currentAttackerIndex) {
+            currentDefenderIndex = getNextPlayerIndex(currentDefenderIndex, game.playerOrder.length);
+        }
+    }
+    if (attempts >= game.playerOrder.length || (game.playerOrder.length > 1 && currentDefenderIndex === currentAttackerIndex) ) {
+        console.warn(`[updateTurn] Не знайдено гравця з картами для захисту в грі ${game.id} або захисник = атакуючий.`);
+         game.defenderId = null;
+    } else {
+        game.defenderId = game.playerOrder[currentDefenderIndex];
+    }
+    
+    game.turn = game.attackerId;
+}
 function addPlayerToGame(socket, game, playerName) {
     const sessionUser = socket.request.session.user;
     game.players[socket.id] = {
@@ -172,7 +210,7 @@ function updateStatsAfterGame(game) {
         }
     });
 }
-function broadcastGameState(gameId) { const game = games[gameId]; if (!game) return; game.playerOrder.forEach(playerId => { const playerSocket = io.sockets.sockets.get(playerId); if (playerSocket) { const stateForPlayer = { gameId: game.id, players: game.playerOrder.map(id => { const p = game.players[id]; if(!p) return null; return { id: p.id, name: p.name, isVerified: p.isVerified, streak: p.streak || 0, cardBackStyle: p.cardBackStyle || 'default', cards: p.id === playerId ? p.cards : p.cards.map(() => ({ hidden: true })), isAttacker: p.id === game.attackerId, isDefender: p.id === game.defenderId, } }).filter(p => p !== null), table: game.table, trumpCard: game.trumpCard, trumpSuit: game.trumpSuit, deckCardCount: game.deck.length, isYourTurn: playerId === game.turn, canPass: playerId === game.attackerId && game.table.length > 0 && game.table.length % 2 === 0, canTake: playerId === game.defenderId && game.table.length > 0, winner: game.winner, lastAction: game.lastAction }; playerSocket.emit('gameStateUpdate', stateForPlayer); } }); }
+function broadcastGameState(gameId) { const game = games[gameId]; if (!game) return; game.playerOrder.forEach(playerId => { const playerSocket = io.sockets.sockets.get(playerId); if (playerSocket) { const stateForPlayer = { gameId: game.id, players: game.playerOrder.map(id => { const p = game.players[id]; if(!p) return null; return { id: p.id, name: p.name, isVerified: p.isVerified, streak: p.streak || 0, cardBackStyle: p.cardBackStyle || 'default', cards: p.id === playerId ? p.cards : p.cards.map(() => ({ hidden: true })), isAttacker: p.id === game.attackerId, isDefender: p.id === game.defenderId, } }).filter(p => p !== null), table: game.table, trumpCard: game.trumpCard, trumpSuit: game.trumpSuit, deckCardCount: game.deck.length, isYourTurn: playerId === game.turn && p.cards.length > 0, canPass: playerId === game.attackerId && game.table.length > 0 && game.table.length % 2 === 0, canTake: playerId === game.defenderId && game.table.length > 0, winner: game.winner, lastAction: game.lastAction }; playerSocket.emit('gameStateUpdate', stateForPlayer); } }); }
 
 io.on('connection', (socket) => {
     const sessionUser = socket.request.session.user;
