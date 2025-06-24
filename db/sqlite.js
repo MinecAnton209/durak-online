@@ -31,6 +31,10 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 is_banned BOOLEAN DEFAULT FALSE,
                 ban_reason TEXT,
                 is_muted BOOLEAN DEFAULT FALSE,
+                rating REAL DEFAULT 1500.0,
+                rd REAL DEFAULT 350.0,
+                vol REAL DEFAULT 0.06,
+                last_game_timestamp TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `, (err) => {
