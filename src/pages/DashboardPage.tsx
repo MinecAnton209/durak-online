@@ -130,12 +130,11 @@ const DashboardPage: React.FC = () => {
     ];
 
     return (
-
-        <Container maxWidth="xl" sx={{ py: 2 }}>
+        <Container maxWidth={false} sx={{ py: 2, px: { xs: 2, sm: 3 } }}>
             <Typography variant="h4" sx={{ mb: 3, mt: 0 }}>
                 Огляд Системи
             </Typography>
-
+            
             <Grid container spacing={3}>
                 {statItems.map((item, index) => (
                     <Grid item xs={12} sm={6} md={4} lg={2.4} key={index}>
@@ -159,24 +158,25 @@ const DashboardPage: React.FC = () => {
                                     backgroundColor: alpha(theme.palette[item.icon.props.color || 'primary'].main, 0.12),
                                     borderRadius: '50%'
                                 }}>
-                                    {React.cloneElement(item.icon, { sx: { ...item.icon.props.sx, fontSize: 28, color: `${item.icon.props.color || 'primary'}.main` } })}
+                                    {React.cloneElement(item.icon, { sx: { ...item.icon.props.sx, fontSize: 28, color: `${item.icon.props.color || 'primary'}.main` }})}
                                 </Box>
                             </Box>
                         </Card>
                     </Grid>
                 ))}
             </Grid>
-            <Grid container spacing={3} sx={{ mt: 2 }}>
-                <Grid item xs={12}>
+
+            <Box sx={{ mt: 4 }}>
+                <Box mb={4}>
                     <Typography variant="h6" sx={{ mb: 2 }}>Нові реєстрації (7 днів)</Typography>
                     <Paper elevation={0} sx={{ p: { xs: 1, sm: 2 }, borderRadius: '16px', backgroundColor: theme.palette.background.paper, height: 350 }}>
                         {isLoadingRegistrations ? (
                             <Skeleton variant="rectangular" width="100%" height="100%" sx={{ borderRadius: '16px' }} />
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={registrationsData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                <LineChart data={registrationsData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-                                    <XAxis dataKey="date" stroke={theme.palette.text.secondary} tick={{ fontSize: 12 }} tickFormatter={formatDateForAxis} />
+                                    <XAxis dataKey="date" stroke={theme.palette.text.secondary} tick={{ fontSize: 12 }} tickFormatter={(tick) => new Date(tick).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })} />
                                     <YAxis stroke={theme.palette.text.secondary} tick={{ fontSize: 12 }} allowDecimals={false} />
                                     <Tooltip
                                         contentStyle={{
@@ -191,18 +191,18 @@ const DashboardPage: React.FC = () => {
                             </ResponsiveContainer>
                         )}
                     </Paper>
-                </Grid>
+                </Box>
 
-                <Grid item xs={12} lg={6}>
+                <Box>
                     <Typography variant="h6" sx={{ mb: 2 }}>Зіграно ігор (7 днів)</Typography>
                     <Paper elevation={0} sx={{ p: { xs: 1, sm: 2 }, borderRadius: '16px', backgroundColor: theme.palette.background.paper, height: 350 }}>
                         {isLoadingGames ? (
                             <Skeleton variant="rectangular" width="100%" height="100%" sx={{ borderRadius: '16px' }} />
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={gamesData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                <BarChart data={gamesData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-                                    <XAxis dataKey="date" stroke={theme.palette.text.secondary} tick={{ fontSize: 12 }} tickFormatter={formatDateForAxis} />
+                                    <XAxis dataKey="date" stroke={theme.palette.text.secondary} tick={{ fontSize: 12 }} tickFormatter={(tick) => new Date(tick).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })} />
                                     <YAxis stroke={theme.palette.text.secondary} tick={{ fontSize: 12 }} allowDecimals={false} />
                                     <Tooltip
                                         contentStyle={{
@@ -218,8 +218,8 @@ const DashboardPage: React.FC = () => {
                             </ResponsiveContainer>
                         )}
                     </Paper>
-                </Grid>
-            </Grid>
+                </Box>
+            </Box>
         </Container>
     );
 };
