@@ -532,4 +532,49 @@ router.get('/stats/games-by-day', ensureAdmin, (req, res) => {
     });
 });
 
+router.get('/stats/leaderboard', ensureAdmin, (req, res) => {
+    const type = req.query.type || 'wins';
+    const limit = parseInt(req.query.limit, 10) || 100;
+
+    const allowedSortTypes = {
+        wins: 'wins',
+        rating: 'rating',
+        losses: 'losses',
+        win_streak: 'win_streak',
+        streak_count: 'streak_count',
+        games_played: '(wins + losses)'
+    };
+
+    const orderByColumn = allowedSortTypes[type];
+
+    if (!orderByColumn) {
+        return res.status(400).json({ error: 'Invalid leaderboard type specified.' });
+    }
+
+    const safeLimit = Math.min(Math.max(1, limit), 200);
+
+    const sql = `
+        SELECT 
+            id,
+            username,
+            wins,
+            losses,
+            win_streak,
+            streak_count,
+            rating,
+            (wins + losses) as games_played
+        FROM users
+        ORDER BY ${orderByColumn} DESC
+        LIMIT ?
+    `;
+
+    db.all(sql, [safeLimit], (err, rows) => {
+        if (err) {
+            console.error(`Помилка отримання лідерборду (type: ${type}):`, err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        res.json(rows);
+    });
+});
+
 module.exports = router;
