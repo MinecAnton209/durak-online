@@ -25,6 +25,9 @@ interface User {
     ban_reason?: string;
     is_muted: boolean;
     last_played_date?: string;
+    rating: number;
+    rd: number;
+    vol: number;
 }
 
 const UsersPage: React.FC = () => {
@@ -130,6 +133,21 @@ const UsersPage: React.FC = () => {
         { field: 'wins', headerName: 'Перемог', type: 'number', width: 100 },
         { field: 'losses', headerName: 'Поразок', type: 'number', width: 100 },
         { field: 'streak_count', headerName: 'Стрік', type: 'number', width: 90 },
+        {
+            field: 'rating',
+            headerName: 'Рейтинг',
+            width: 150,
+            sortable: true,
+            renderCell: (params: GridRenderCellParams<User, number>) => {
+                const rating = Math.round(params.value || 1500);
+                const rd = Math.round(params.row.rd || 350);
+                return (
+                    <Tooltip title={`Відхилення (RD): ${rd}`}>
+                        <strong>{rating}</strong>
+                    </Tooltip>
+                );
+            }
+        },
         { 
             field: 'is_verified', 
             headerName: 'Верифікований', 
