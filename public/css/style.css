@@ -186,6 +186,34 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 #leaderboard-content th { font-weight: 500; color: var(--on-surface-variant-color); }
 #leaderboard-content tr:last-child td { border-bottom: none; }
 #leaderboard-content .rank { font-weight: bold; width: 50px; }
+.music-btn { bottom: 1rem; left: 1rem; display: flex; }
+.music-panel { position: fixed; bottom: 5rem; left: 1rem; width: 300px; background: var(--surface-color); border: 1px solid var(--outline-color); border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);z-index: 150; padding: 1rem; display: none; }
+.music-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.music-panel-header h4 { margin: 0; }
+.close-panel-btn { font-size: 1.5rem; cursor: pointer; line-height: 1; }
+#current-track-info { font-size: 0.9rem; margin-bottom: 1rem; }
+#host-music-controls input[type="text"] { width: 100%; margin-bottom: 0.5rem; }
+#host-music-controls button { width: 100%; padding: 0.5rem; margin-bottom: 1rem; }
+.playback-controls { display: flex; align-items: center; gap: 1rem; }
+.playback-controls #toggle-playback-btn { width: 40px; height: 40px; padding: 0; }
+.playback-controls #volume-slider { flex-grow: 1; }
+#suggestions-list-container { margin-top: 1rem; }
+#suggestions-list { list-style: none; padding: 0; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 8px; }
+#suggestions-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid var(--outline-color); }
+#suggestions-list li:last-child { border-bottom: none; }
+#suggestions-list .suggestion-text { font-size: 0.85rem; }
+#suggestions-list .suggestion-text small { color: var(--on-surface-variant-color); }
+#suggestions-list .set-suggestion-btn { font-size: 0.8rem; padding: 0.25rem 0.5rem; width: auto; margin: 0; }
+.track-progress { text-align: center; font-size: 0.9rem; color: var(--on-surface-variant-color); margin-bottom: 1rem; font-family: monospace; }
+.track-progress { display: flex; justify-content: center; align-items: center; font-family: monospace; font-size: 1.1rem; gap: 0.5rem; }
+.time-display { display: flex; align-items: center; }
+.time-display .minutes,
+.time-display .time-separator,
+.time-display .digit-container { line-height: 1.2em; }
+.digit-container { width: 0.6em; height: 1.2em; overflow: hidden; position: relative; display: inline-block; vertical-align: middle; }
+.digit-reel { position: absolute; top: 0; left: 0; width: 100%; text-align: center; display: flex; flex-direction: column; transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55); }
+.digit-reel span { height: 1.2em; display: flex; align-items: center; justify-content: center; }
+.guest-actions { text-align: center; margin-top: 1rem; margin-bottom: 1rem; }
 
 @media (max-width: 1024px) { 
     .toggle-chat-btn { display: none; }
