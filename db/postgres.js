@@ -12,17 +12,24 @@ console.log('Використовується база даних PostgreSQL.');
 
 pool.query(`
     CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username text UNIQUE NOT NULL,
-        password text NOT NULL,
-        wins INTEGER DEFAULT 0,
-        losses INTEGER DEFAULT 0,
-        streak_count INTEGER DEFAULT 0,
-        last_played_date DATE
-    );
-`).then(() => console.log('Таблиця "users" в PostgreSQL готова до роботи.'))
-    .catch(err => console.error('Помилка створення таблиці "users" в PostgreSQL:', err));
-
+                                         id SERIAL PRIMARY KEY,
+                                         username text UNIQUE NOT NULL,
+                                         password text NOT NULL,
+                                         wins INTEGER DEFAULT 0,
+                                         losses INTEGER DEFAULT 0,
+                                         streak_count INTEGER DEFAULT 0,
+                                         last_played_date DATE,
+                                         card_back_style text DEFAULT 'default',
+                                         is_verified BOOLEAN DEFAULT FALSE,
+                                         win_streak INTEGER DEFAULT 0,
+                                         is_admin BOOLEAN DEFAULT FALSE,
+                                         is_banned BOOLEAN DEFAULT FALSE,
+                                         ban_reason text,
+                                         is_muted BOOLEAN DEFAULT FALSE,
+                                         created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+`).then(() => console.log('Таблиця "users" в PostgreSQL готова до роботи з повною структурою.'))
+    .catch(err => console.error('Помилка створення/оновлення таблиці "users" в PostgreSQL:', err.stack));
 pool.query(`
     CREATE TABLE IF NOT EXISTS "user_sessions" (
                                                    "sid" varchar NOT NULL COLLATE "default",
