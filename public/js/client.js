@@ -59,7 +59,11 @@ const achievementsBtn = document.getElementById('achievementsBtn');
 const achievementsModal = document.getElementById('achievements-modal');
 const closeAchievementsModalBtn = document.getElementById('close-achievements-modal-btn');
 const achievementsList = document.getElementById('achievements-list');
-
+const leaderboardBtn = document.getElementById('leaderboardBtn');
+const leaderboardModal = document.getElementById('leaderboard-modal');
+const closeLeaderboardModalBtn = document.getElementById('close-leaderboard-modal-btn');
+const leaderboardContent = document.getElementById('leaderboard-content');
+const leaderboardTabs = document.querySelectorAll('.tab-link');
 
 const VERIFIED_BADGE_SVG = `
     <span class="verified-badge" title="Верифікований гравець">
@@ -76,6 +80,71 @@ let amISpectator = false;
 function copyLink(inputElement, buttonElement) { if (!inputElement || !buttonElement) return; const textToCopy = inputElement.value; if (!textToCopy) return; navigator.clipboard.writeText(textToCopy).then(() => { const originalIcon = buttonElement.innerHTML; buttonElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-color)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`; setTimeout(() => { buttonElement.innerHTML = originalIcon; }, 2000); }).catch(err => { console.error('Не вдалося скопіювати текст: ', err); inputElement.select(); document.execCommand('copy'); }); }
 function openModal(mode) { authModal.style.display = 'flex'; authError.innerText = ''; authForm.reset(); if (mode === 'login') { modalTitle.innerHTML = i18next.t('login_modal_title'); authSubmitBtn.innerHTML = i18next.t('login_button'); authForm.dataset.mode = 'login'; } else { modalTitle.innerHTML = i18next.t('register_modal_title'); authSubmitBtn.innerHTML = i18next.t('register_button'); authForm.dataset.mode = 'register'; } }
 function closeModal() { authModal.style.display = 'none'; }
+
+
+async function fetchAndDisplayLeaderboard(type = 'rating') {
+    if (!leaderboardContent) return;
+    leaderboardContent.innerHTML = `<p>${i18next.t('loading_leaderboards')}</p>`;
+
+    try {
+        const response = await fetch(`/api/public/leaderboard?type=${type}&limit=100`);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const data = await response.json();
+
+        let tableHTML = '<table><thead><tr><th>#</th><th>Гравець</th><th>Показник</th></tr></thead><tbody>';
+        if (data.length === 0) {
+            tableHTML += `<tr><td colspan="3" style="text-align: center;">${i18next.t('leaderboard_empty')}</td></tr>`;
+        } else {
+            data.forEach((player, index) => {
+                let value;
+                switch(type) {
+                    case 'wins': value = player.wins; break;
+                    case 'win_streak': value = player.win_streak; break;
+                    default: value = player.rating;
+                }
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1;
+                tableHTML += `
+                    <tr>
+                        <td class="rank">${medal}</td>
+                        <td class="player-name">${player.username} ${player.is_verified ? VERIFIED_BADGE_SVG : ''}</td>
+                        <td style="text-align: right; font-weight: bold;">${value}</td>
+                    </tr>
+                `;
+            });
+        }
+        tableHTML += '</tbody></table>';
+        leaderboardContent.innerHTML = tableHTML;
+    } catch (error) {
+        leaderboardContent.innerHTML = `<p class="error">${i18next.t('error_loading_leaderboards')}</p>`;
+        console.error('Fetch leaderboard error:', error);
+    }
+}
+
+if (leaderboardBtn) {
+    leaderboardBtn.addEventListener('click', () => {
+        leaderboardModal.style.display = 'flex';
+        fetchAndDisplayLeaderboard('rating');
+    });
+}
+
+if (closeLeaderboardModalBtn) {
+    closeLeaderboardModalBtn.addEventListener('click', () => leaderboardModal.style.display = 'none');
+}
+
+if (leaderboardModal) {
+    leaderboardModal.addEventListener('click', (e) => {
+        if (e.target === leaderboardModal) leaderboardModal.style.display = 'none';
+    });
+}
+
+leaderboardTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+        leaderboardTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const type = tab.dataset.type;
+        fetchAndDisplayLeaderboard(type);
+    });
+});
 
 function showUserProfile(user) { 
     guestLogin.style.display = 'none'; 

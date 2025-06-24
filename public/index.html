@@ -23,6 +23,7 @@
                 <span><span data-i18n="profile_wins">🏆 Перемог:</span> <b id="profile-wins">0</b></span>
                 <span><span data-i18n="profile_losses">💔 Поразок:</span> <b id="profile-losses">0</b></span>
             </div>
+            <button id="leaderboardBtn" class="secondary-btn" data-i18n="leaderboard_button">🏆 Лідерборди</button>
             <button id="achievementsBtn" class="secondary-btn" data-i18n="achievements_button">🏆 Досягнення</button>
             <a href="/settings"><button class="secondary-btn" data-i18n="settings_button">Налаштування</button></a>
             <button id="logoutBtn" class="secondary-btn" data-i18n="logout_button">Вийти</button>
@@ -96,6 +97,20 @@
             <span id="close-achievements-modal-btn" class="close-modal-btn">×</span>
             <h2 data-i18n="achievements_modal_title">Досягнення</h2>
             <div id="achievements-list" class="achievements-grid">
+            </div>
+        </div>
+    </div>
+
+    <div id="leaderboard-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content large">
+            <span id="close-leaderboard-modal-btn" class="close-modal-btn">×</span>
+            <h2 data-i18n="leaderboard_modal_title">Лідерборди</h2>
+            <div class="tabs">
+                <button class="tab-link active" data-type="rating" data-i18n="leaderboard_tab_rating">За Рейтингом</button>
+                <button class="tab-link" data-type="wins" data-i18n="leaderboard_tab_wins">За Перемогами</button>
+                <button class="tab-link" data-type="win_streak" data-i18n="leaderboard_tab_win_streak">За Серією Перемог</button>
+            </div>
+            <div id="leaderboard-content">
             </div>
         </div>
     </div>

@@ -12,6 +12,7 @@ const i18next = require('i18next');
 const Backend = require('i18next-fs-backend');
 const statsService = require('./services/statsService.js');
 const ratingService = require('./services/ratingService.js');
+const publicRoutes = require('./routes/public.js');
 
 const db = require('./db');
 const authRoutes = require('./routes/auth.js');
@@ -85,13 +86,15 @@ app.use('/', authRoutes);
 app.use('/api/achievements', achievementRoutes);
 app.use('/api/admin', adminRoutes);
 
-
 app.get('/settings', (req, res) => {
     if (!req.session.user) {
         return res.redirect('/');
     }
     res.sendFile(path.join(__dirname, 'public', 'settings.html'));
 });
+
+app.use('/api/public', publicRoutes);
+
 
 io.use((socket, next) => {
     sessionMiddleware(socket.request, {}, next);
