@@ -20,6 +20,7 @@ const {seedAchievements} = require('./db/seed.js');
 const achievementService = require('./services/achievementService.js');
 const ratingService = require('./services/ratingService.js');
 const statsService = require('./services/statsService.js');
+const censorService = require('./services/censorService.js');
 
 const app = express();
 const server = http.createServer(app);
@@ -294,7 +295,7 @@ function checkGameOver(game) {
     return false;
 }
 
-function updateStatsAfterGame(game) {
+async function updateStatsAfterGame(game) {
     if (!game.winner || !game.startTime) return;
     if (!game.winner.winners || !game.winner.hasOwnProperty('loser')) {
         console.log(`[updateStatsAfterGame] Гру ${game.id} завершено з причини, статистика гравців та рейтинг не оновлюються.`);
@@ -308,38 +309,42 @@ function updateStatsAfterGame(game) {
         });
         return;
     }
-    console.log(`[updateStatsAfterGame] Початок транзакції для гри ${game.id}`);
-    db.run("BEGIN TRANSACTION");
-    const endTime = new Date();
-    const durationSeconds = Math.round((endTime - game.startTime) / 1000);
-    const {winners, loser} = game.winner;
-    const winnerId = (winners.length === 1 && !winners[0].isGuest) ? winners[0].dbId : null;
-    const loserId = (loser && !loser.isGuest) ? loser.dbId : null;
-    db.run(`UPDATE games
-            SET end_time         = ?,
-                duration_seconds = ?,
-                winner_user_id   = ?,
-                loser_user_id    = ?
-            WHERE id = ?`, [endTime.toISOString(), durationSeconds, winnerId, loserId, game.id], (err) => {
-        if (err) return db.run("ROLLBACK", () => console.error(`Помилка оновлення гри ${game.id} в 'games':`, err.message));
-        statsService.incrementDailyCounter('games_played');
-    });
-    const allPlayersInGame = [...winners, loser].filter(p => p);
-    allPlayersInGame.forEach(player => {
-        if (player && !player.isGuest) {
-            const outcome = winners.some(w => w.id === player.id) ? 'win' : 'loss';
-            db.run(`UPDATE game_participants
-                    SET outcome      = ?,
-                        cards_at_end = ?
-                    WHERE game_id = ?
-                      AND user_id = ?`, [outcome, player.cards.length, game.id, player.dbId], (err) => {
-                if (err) return db.run("ROLLBACK", () => console.error(`Помилка оновлення учасника ${player.name}:`, err.message));
+    try {
+        await new Promise((resolve, reject) => {
+            db.run("BEGIN TRANSACTION", [], (err) => {
+                if (err) reject(err); else resolve();
             });
-            db.get(`SELECT streak_count, last_played_date, wins, losses, win_streak
-                    FROM users
-                    WHERE id = ?`, [player.dbId], (err, userData) => {
-                if (err) return db.run("ROLLBACK", () => console.error(`Помилка отримання даних гравця ${player.name}:`, err.message));
-                if (!userData) return;
+        });
+        const endTime = new Date();
+        const durationSeconds = Math.round((endTime - game.startTime) / 1000);
+        const {winners, loser} = game.winner;
+        const winnerId = (winners.length === 1 && !winners[0].isGuest) ? winners[0].dbId : null;
+        const loserId = (loser && !loser.isGuest) ? loser.dbId : null;
+        await new Promise((resolve, reject) => {
+            db.run(`UPDATE games
+                    SET end_time         = ?,
+                        duration_seconds = ?,
+                        winner_user_id   = ?,
+                        loser_user_id    = ?
+                    WHERE id = ?`, [endTime.toISOString(), durationSeconds, winnerId, loserId, game.id], (err) => {
+                if (err) return reject(err);
+                statsService.incrementDailyCounter('games_played');
+                resolve();
+            });
+        });
+        const allPlayersInGame = [...winners, loser].filter(p => p);
+        for (const player of allPlayersInGame) {
+            if (player && !player.isGuest) {
+                const outcome = winners.some(w => w.id === player.id) ? 'win' : 'loss';
+                await new Promise((resolve, reject) => db.run(`UPDATE game_participants
+                                                               SET outcome      = ?,
+                                                                   cards_at_end = ?
+                                                               WHERE game_id = ?
+                                                                 AND user_id = ?`, [outcome, player.cards.length, game.id, player.dbId], err => err ? reject(err) : resolve()));
+                const userData = await new Promise((resolve, reject) => db.get(`SELECT streak_count, last_played_date, wins, losses, win_streak
+                                                                                FROM users
+                                                                                WHERE id = ?`, [player.dbId], (err, row) => err ? reject(err) : resolve(row)));
+                if (!userData) continue;
                 const isWinner = outcome === 'win';
                 let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
                 achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
@@ -365,31 +370,23 @@ function updateStatsAfterGame(game) {
                                                                win_streak       = 0
                                                            WHERE id = ?`;
                 const params = isWinner ? [newStreak, today, newWinStreak, player.dbId] : [newStreak, today, player.dbId];
-                db.run(query, params, (updateErr) => {
-                    if (updateErr) return db.run("ROLLBACK", () => console.error("Помилка оновлення статистики:", updateErr.message));
-                    const playerSocket = io.sockets.sockets.get(player.id);
-                    if (playerSocket && playerSocket.request.session.user) {
-                        if (isWinner) playerSocket.request.session.user.wins++; else playerSocket.request.session.user.losses++;
-                        playerSocket.request.session.user.streak = newStreak;
-                        playerSocket.request.session.user.win_streak = newWinStreak;
-                        playerSocket.request.session.save();
-                    }
-                });
-            });
-        }
-    });
-    ratingService.updateRatingsAfterGame(game).then(() => {
-        db.run("COMMIT", [], (commitErr) => {
-            if (commitErr) {
-                console.error("Помилка фіксації транзакції:", commitErr.message);
-            } else {
-                console.log(`[updateStatsAfterGame] Транзакція для гри ${game.id} успішно завершена.`);
+                await new Promise((resolve, reject) => db.run(query, params, err => err ? reject(err) : resolve()));
+                const playerSocket = io.sockets.sockets.get(player.id);
+                if (playerSocket && playerSocket.request.session.user) {
+                    if (isWinner) playerSocket.request.session.user.wins++; else playerSocket.request.session.user.losses++;
+                    playerSocket.request.session.user.streak = newStreak;
+                    playerSocket.request.session.user.win_streak = newWinStreak;
+                    playerSocket.request.session.save();
+                }
             }
-        });
-    }).catch(err => {
-        console.error("Помилка в ratingService, відкат транзакції:", err);
-        db.run("ROLLBACK");
-    });
+        }
+        await ratingService.updateRatingsAfterGame(game);
+        await new Promise((resolve, reject) => db.run("COMMIT", [], err => err ? reject(err) : resolve()));
+        console.log(`[updateStatsAfterGame] Транзакція для гри ${game.id} успішно завершена.`);
+    } catch (error) {
+        console.error(`Помилка в транзакції для гри ${game.id}, відкат:`, error.message);
+        await new Promise((resolve, reject) => db.run("ROLLBACK", [], err => err ? reject(err) : resolve()));
+    }
 }
 
 function broadcastGameState(gameId) {
@@ -495,6 +492,9 @@ io.on('connection', (socket) => {
     }
     socket.on('createGame', (settings) => {
         const {playerName} = settings;
+        if (!censorService.isClean(playerName)) {
+            return socket.emit('error', {i18nKey: 'error_inappropriate_username'});
+        }
         let gameId = (settings.customId || Math.random().toString(36).substr(2, 6)).toUpperCase();
         if (games[gameId]) {
             return socket.emit('error', {i18nKey: 'error_game_exists', text: `Гра з ID "${gameId}" вже існує.`});
@@ -536,7 +536,9 @@ io.on('connection', (socket) => {
         if (!gameId) {
             return socket.emit('error', {i18nKey: 'error_no_game_id'});
         }
-
+        if (!censorService.isClean(playerName)) {
+            return socket.emit('error', {i18nKey: 'error_inappropriate_username'});
+        }
         const upperCaseGameId = gameId.toUpperCase();
         const game = games[upperCaseGameId];
         if (game && game.playerOrder.length < game.settings.maxPlayers) {
@@ -585,11 +587,12 @@ io.on('connection', (socket) => {
         }
         const trimmedMessage = message.trim();
         if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) {
+            const cleanedMessage = censorService.clean(trimmedMessage);
             let authorHTML = player.name;
             if (player.isVerified) {
                 authorHTML += VERIFIED_BADGE_SVG;
             }
-            const chatMessage = `<span class="message-author">${authorHTML}:</span> <span class="message-text">${trimmedMessage}</span>`;
+            const chatMessage = `<span class="message-author">${authorHTML}:</span> <span class="message-text">${cleanedMessage}</span>`;
             logEvent(game, chatMessage);
         }
     });
