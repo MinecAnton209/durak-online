@@ -20,7 +20,6 @@ const {seedAchievements} = require('./db/seed.js');
 const achievementService = require('./services/achievementService.js');
 const ratingService = require('./services/ratingService.js');
 const statsService = require('./services/statsService.js');
-const censorService = require('./services/censorService.js');
 
 const app = express();
 const server = http.createServer(app);
@@ -349,10 +348,9 @@ async function updateStatsAfterGame(game) {
                 let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
                 achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
                 const today = new Date().toISOString().slice(0, 10);
-                const lastPlayed = userData.last_played_date;
                 let newStreak = 1;
-                if (lastPlayed) {
-                    const lastDate = new Date(lastPlayed);
+                if (userData.last_played_date) {
+                    const lastDate = new Date(userData.last_played_date);
                     const todayDate = new Date(today);
                     const diffTime = Math.abs(todayDate - lastDate);
                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -492,9 +490,6 @@ io.on('connection', (socket) => {
     }
     socket.on('createGame', (settings) => {
         const {playerName} = settings;
-        if (!censorService.isClean(playerName)) {
-            return socket.emit('error', {i18nKey: 'error_inappropriate_username'});
-        }
         let gameId = (settings.customId || Math.random().toString(36).substr(2, 6)).toUpperCase();
         if (games[gameId]) {
             return socket.emit('error', {i18nKey: 'error_game_exists', text: `Гра з ID "${gameId}" вже існує.`});
@@ -535,9 +530,6 @@ io.on('connection', (socket) => {
     socket.on('joinGame', ({gameId, playerName}) => {
         if (!gameId) {
             return socket.emit('error', {i18nKey: 'error_no_game_id'});
-        }
-        if (!censorService.isClean(playerName)) {
-            return socket.emit('error', {i18nKey: 'error_inappropriate_username'});
         }
         const upperCaseGameId = gameId.toUpperCase();
         const game = games[upperCaseGameId];
