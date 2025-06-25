@@ -294,7 +294,7 @@ function checkGameOver(game) {
     return false;
 }
 
-async function updateStatsAfterGame(game) {
+function updateStatsAfterGame(game) {
     if (!game.winner || !game.startTime) return;
     if (!game.winner.winners || !game.winner.hasOwnProperty('loser')) {
         console.log(`[updateStatsAfterGame] Гру ${game.id} завершено з причини, статистика гравців та рейтинг не оновлюються.`);
@@ -308,83 +308,90 @@ async function updateStatsAfterGame(game) {
         });
         return;
     }
-    try {
-        await new Promise((resolve, reject) => {
-            db.run("BEGIN TRANSACTION", [], (err) => {
-                if (err) reject(err); else resolve();
-            });
-        });
+    db.serialize(() => {
+        console.log(`[updateStatsAfterGame] Початок транзакції для гри ${game.id}`);
+        db.run("BEGIN TRANSACTION");
         const endTime = new Date();
         const durationSeconds = Math.round((endTime - game.startTime) / 1000);
         const {winners, loser} = game.winner;
         const winnerId = (winners.length === 1 && !winners[0].isGuest) ? winners[0].dbId : null;
         const loserId = (loser && !loser.isGuest) ? loser.dbId : null;
-        await new Promise((resolve, reject) => {
-            db.run(`UPDATE games
-                    SET end_time         = ?,
-                        duration_seconds = ?,
-                        winner_user_id   = ?,
-                        loser_user_id    = ?
-                    WHERE id = ?`, [endTime.toISOString(), durationSeconds, winnerId, loserId, game.id], (err) => {
-                if (err) return reject(err);
-                statsService.incrementDailyCounter('games_played');
-                resolve();
-            });
+        db.run(`UPDATE games
+                SET end_time         = ?,
+                    duration_seconds = ?,
+                    winner_user_id   = ?,
+                    loser_user_id    = ?
+                WHERE id = ?`, [endTime.toISOString(), durationSeconds, winnerId, loserId, game.id], (err) => {
+            if (err) return db.run("ROLLBACK", () => console.error(`Помилка оновлення гри ${game.id} в 'games':`, err.message));
+            statsService.incrementDailyCounter('games_played');
         });
         const allPlayersInGame = [...winners, loser].filter(p => p);
-        for (const player of allPlayersInGame) {
+        allPlayersInGame.forEach(player => {
             if (player && !player.isGuest) {
                 const outcome = winners.some(w => w.id === player.id) ? 'win' : 'loss';
-                await new Promise((resolve, reject) => db.run(`UPDATE game_participants
-                                                               SET outcome      = ?,
-                                                                   cards_at_end = ?
-                                                               WHERE game_id = ?
-                                                                 AND user_id = ?`, [outcome, player.cards.length, game.id, player.dbId], err => err ? reject(err) : resolve()));
-                const userData = await new Promise((resolve, reject) => db.get(`SELECT streak_count, last_played_date, wins, losses, win_streak
-                                                                                FROM users
-                                                                                WHERE id = ?`, [player.dbId], (err, row) => err ? reject(err) : resolve(row)));
-                if (!userData) continue;
-                const isWinner = outcome === 'win';
-                let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
-                achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
-                const today = new Date().toISOString().slice(0, 10);
-                let newStreak = 1;
-                if (userData.last_played_date) {
-                    const lastDate = new Date(userData.last_played_date);
-                    const todayDate = new Date(today);
-                    const diffTime = Math.abs(todayDate - lastDate);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    if (diffDays === 0) newStreak = userData.streak_count; else if (diffDays === 1) newStreak = userData.streak_count + 1;
-                }
-                const query = isWinner ? `UPDATE users
-                                          SET wins             = wins + 1,
-                                              streak_count     = ?,
-                                              last_played_date = ?,
-                                              win_streak       = ?
-                                          WHERE id = ?` : `UPDATE users
-                                                           SET losses           = losses + 1,
-                                                               streak_count     = ?,
-                                                               last_played_date = ?,
-                                                               win_streak       = 0
-                                                           WHERE id = ?`;
-                const params = isWinner ? [newStreak, today, newWinStreak, player.dbId] : [newStreak, today, player.dbId];
-                await new Promise((resolve, reject) => db.run(query, params, err => err ? reject(err) : resolve()));
-                const playerSocket = io.sockets.sockets.get(player.id);
-                if (playerSocket && playerSocket.request.session.user) {
-                    if (isWinner) playerSocket.request.session.user.wins++; else playerSocket.request.session.user.losses++;
-                    playerSocket.request.session.user.streak = newStreak;
-                    playerSocket.request.session.user.win_streak = newWinStreak;
-                    playerSocket.request.session.save();
-                }
+                db.run(`UPDATE game_participants
+                        SET outcome      = ?,
+                            cards_at_end = ?
+                        WHERE game_id = ?
+                          AND user_id = ?`, [outcome, player.cards.length, game.id, player.dbId], (err) => {
+                    if (err) return db.run("ROLLBACK", () => console.error(`Помилка оновлення учасника ${player.name}:`, err.message));
+                });
+                db.get(`SELECT streak_count, last_played_date, wins, losses, win_streak
+                        FROM users
+                        WHERE id = ?`, [player.dbId], (err, userData) => {
+                    if (err) return db.run("ROLLBACK", () => console.error(`Помилка отримання даних гравця ${player.name}:`, err.message));
+                    if (!userData) return;
+                    const isWinner = outcome === 'win';
+                    let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
+                    achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
+                    const today = new Date().toISOString().slice(0, 10);
+                    const lastPlayed = userData.last_played_date;
+                    let newStreak = 1;
+                    if (lastPlayed) {
+                        const lastDate = new Date(lastPlayed);
+                        const todayDate = new Date(today);
+                        const diffTime = Math.abs(todayDate - lastDate);
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        if (diffDays === 0) newStreak = userData.streak_count; else if (diffDays === 1) newStreak = userData.streak_count + 1;
+                    }
+                    const query = isWinner ? `UPDATE users
+                                              SET wins             = wins + 1,
+                                                  streak_count     = ?,
+                                                  last_played_date = ?,
+                                                  win_streak       = ?
+                                              WHERE id = ?` : `UPDATE users
+                                                               SET losses           = losses + 1,
+                                                                   streak_count     = ?,
+                                                                   last_played_date = ?,
+                                                                   win_streak       = 0
+                                                               WHERE id = ?`;
+                    const params = isWinner ? [newStreak, today, newWinStreak, player.dbId] : [newStreak, today, player.dbId];
+                    db.run(query, params, (updateErr) => {
+                        if (updateErr) return db.run("ROLLBACK", () => console.error("Помилка оновлення статистики:", updateErr.message));
+                        const playerSocket = io.sockets.sockets.get(player.id);
+                        if (playerSocket && playerSocket.request.session.user) {
+                            if (isWinner) playerSocket.request.session.user.wins++; else playerSocket.request.session.user.losses++;
+                            playerSocket.request.session.user.streak = newStreak;
+                            playerSocket.request.session.user.win_streak = newWinStreak;
+                            playerSocket.request.session.save();
+                        }
+                    });
+                });
             }
-        }
-        await ratingService.updateRatingsAfterGame(game);
-        await new Promise((resolve, reject) => db.run("COMMIT", [], err => err ? reject(err) : resolve()));
-        console.log(`[updateStatsAfterGame] Транзакція для гри ${game.id} успішно завершена.`);
-    } catch (error) {
-        console.error(`Помилка в транзакції для гри ${game.id}, відкат:`, error.message);
-        await new Promise((resolve, reject) => db.run("ROLLBACK", [], err => err ? reject(err) : resolve()));
-    }
+        });
+        ratingService.updateRatingsAfterGame(game).then(() => {
+            db.run("COMMIT", [], (commitErr) => {
+                if (commitErr) {
+                    console.error("Помилка фіксації транзакції:", commitErr.message);
+                } else {
+                    console.log(`[updateStatsAfterGame] Транзакція для гри ${game.id} успішно завершена.`);
+                }
+            });
+        }).catch(err => {
+            console.error("Помилка в ratingService, відкат транзакції:", err);
+            db.run("ROLLBACK");
+        });
+    });
 }
 
 function broadcastGameState(gameId) {
@@ -579,7 +586,7 @@ io.on('connection', (socket) => {
         }
         const trimmedMessage = message.trim();
         if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) {
-            const cleanedMessage = censorService.clean(trimmedMessage);
+            const cleanedMessage = trimmedMessage;
             let authorHTML = player.name;
             if (player.isVerified) {
                 authorHTML += VERIFIED_BADGE_SVG;
@@ -632,29 +639,25 @@ io.on('connection', (socket) => {
         const game = games[gameId];
         if (!game || game.attackerId !== socket.id || game.table.length === 0 || game.table.length % 2 !== 0 || game.winner) return;
         game.lastAction = 'pass';
-        const defenderWhoJustDefendedId = game.defenderId;
-        const defenderPlayerObject = game.players[defenderWhoJustDefendedId];
-        if (defenderPlayerObject) {
-            const defenderStats = defenderPlayerObject.gameStats;
+        const defenderIdBeforeRefill = game.defenderId;
+        const defender = game.players[defenderIdBeforeRefill];
+        if (defender) {
+            const defenderStats = defender.gameStats;
             defenderStats.successfulDefenses += 1;
             defenderStats.cardsBeatenInDefense += game.table.length / 2;
-            achievementService.checkInGameAchievements(game, defenderWhoJustDefendedId, 'passTurn');
-            logEvent(game, null, {i18nKey: 'log_pass', options: {name: defenderPlayerObject.name}});
+            achievementService.checkInGameAchievements(game, defenderIdBeforeRefill, 'passTurn');
+            logEvent(game, null, {i18nKey: 'log_pass', options: {name: defender.name}});
         }
         game.discardPile.push(...game.table);
         game.table = [];
-        let nextAttackerIndex = game.playerOrder.indexOf(defenderWhoJustDefendedId);
-        if (nextAttackerIndex === -1) {
-            const currentDefenderOriginalIndex = game.playerOrder.indexOf(game.defenderId);
-            nextAttackerIndex = getNextPlayerIndex(currentDefenderOriginalIndex !== -1 ? currentDefenderOriginalIndex : 0, game.playerOrder.length);
-        }
         refillHands(game);
         if (checkGameOver(game)) {
             updateStatsAfterGame(game);
-            broadcastGameState(gameId);
-            return;
+            return broadcastGameState(gameId);
         }
-        updateTurn(game, nextAttackerIndex);
+        let defenderIndex = game.playerOrder.indexOf(defenderIdBeforeRefill);
+        if (defenderIndex === -1) defenderIndex = 0;
+        updateTurn(game, defenderIndex);
         broadcastGameState(gameId);
     });
     socket.on('takeCards', ({gameId}) => {
@@ -759,7 +762,7 @@ io.on('connection', (socket) => {
                         });
                     }
                 }
-                if (Object.keys(game.players).length === 0 && game.spectators.length === 0) {
+                if (Object.keys(game.players).length === 0) {
                     console.log(`Гра ${gameId} порожня, видаляємо.`);
                     delete games[gameId];
                 }
