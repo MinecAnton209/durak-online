@@ -161,7 +161,6 @@ function updateTurn(game, intendedAttackerIndex) {
         attempts++;
     }
     if (attempts >= game.playerOrder.length) {
-        console.warn(`[updateTurn] Не знайдено гравця з картами для атаки в грі ${game.id}`);
         return;
     }
     game.attackerId = game.playerOrder[currentAttackerIndex];
@@ -175,7 +174,6 @@ function updateTurn(game, intendedAttackerIndex) {
         }
     }
     if (attempts >= game.playerOrder.length || (game.playerOrder.length > 1 && currentDefenderIndex === currentAttackerIndex)) {
-        console.warn(`[updateTurn] Не знайдено гравця з картами для захисту в грі ${game.id}.`);
         game.defenderId = null;
     } else {
         game.defenderId = game.playerOrder[currentDefenderIndex];
@@ -540,6 +538,7 @@ io.on('connection', (socket) => {
         if (!gameId) {
             return socket.emit('error', {i18nKey: 'error_no_game_id'});
         }
+
         const upperCaseGameId = gameId.toUpperCase();
         const game = games[upperCaseGameId];
         if (game && game.playerOrder.length < game.settings.maxPlayers) {
@@ -592,8 +591,7 @@ io.on('connection', (socket) => {
             if (player.isVerified) {
                 authorHTML += VERIFIED_BADGE_SVG;
             }
-            const chatMessage = `<span class="message-author">${authorHTML}:</span> <span class="message-text">${cleanedMessage}</span>`;
-            logEvent(game, chatMessage);
+        const chatMessage = `<span class="message-author">${authorHTML}:</span> <span class="message-text">${trimmedMessage}</span>`;            logEvent(game, chatMessage);
         }
     });
     socket.on('makeMove', ({gameId, card}) => {
