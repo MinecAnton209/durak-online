@@ -232,7 +232,9 @@ function showUserProfile(user) {
     userProfile.style.display = 'block';
     let profileNameHTML = user.username;
     if (user.isVerified) { profileNameHTML += VERIFIED_BADGE_SVG; }
-    if (user.streak > 0) { profileNameHTML += ` <span class="streak-fire">🔥${user.streak}</span>`; }
+    if (user.streak >= 3) {
+        profileNameHTML += ` <span class="streak-fire">🔥${user.streak}</span>`;
+    }
     profileUsername.innerHTML = profileNameHTML;
     profileWins.innerText = user.wins;
     profileLosses.innerText = user.losses;

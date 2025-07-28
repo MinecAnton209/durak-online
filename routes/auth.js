@@ -60,12 +60,33 @@ router.get('/check-session', (req, res) => {
         const sql = `SELECT * FROM users WHERE id = ?`;
         db.get(sql, [req.session.user.id], (err, user) => {
             if (err || !user) { return res.status(200).json({ isLoggedIn: false }); }
+
+            const today = new Date();
+            const lastPlayed = user.last_played_date ? new Date(user.last_played_date) : null;
+            let currentStreak = user.streak_count;
+
+            if (lastPlayed) {
+                today.setHours(0, 0, 0, 0);
+                lastPlayed.setHours(0, 0, 0, 0);
+
+                const diffTime = today - lastPlayed;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays > 1) {
+                    currentStreak = 0;
+                    db.run(`UPDATE users SET streak_count = 0 WHERE id = ?`, [user.id], (updateErr) => {
+                        if (updateErr) console.error("Помилка скидання стріку для користувача:", user.id, updateErr.message);
+                        else console.log(`Стрік для користувача ${user.username} (ID: ${user.id}) скинуто через неактивність.`);
+                    });
+                }
+            }
+
             req.session.user = {
                 id: user.id,
                 username: user.username,
                 wins: user.wins,
                 losses: user.losses,
-                streak: user.streak_count,
+                streak: user.currentStreak,
                 card_back_style: user.card_back_style,
                 isVerified: user.is_verified,
                 is_admin: user.is_admin,
