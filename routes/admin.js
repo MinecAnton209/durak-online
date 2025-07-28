@@ -576,5 +576,51 @@ router.get('/stats/leaderboard', ensureAdmin, (req, res) => {
         res.json(rows);
     });
 });
+router.get('/games/:gameId/details', ensureAdmin, async (req, res) => {
+    const { gameId } = req.params;
+
+    try {
+        const [gameDetails, gameParticipants] = await Promise.all([
+            new Promise((resolve, reject) => {
+                const sql = `
+                    SELECT g.*, winner.username as winner_username, loser.username as loser_username
+                    FROM games g
+                    LEFT JOIN users winner ON g.winner_user_id = winner.id
+                    LEFT JOIN users loser ON g.loser_user_id = loser.id
+                    WHERE g.id = ?
+                `;
+                db.get(sql, [gameId], (err, row) => {
+                    if (err) return reject(err);
+                    if (!row) return reject(new Error('Game not found'));
+                    resolve(row);
+                });
+            }),
+            new Promise((resolve, reject) => {
+                const sql = `
+                    SELECT gp.*, u.username
+                    FROM game_participants gp
+                    LEFT JOIN users u ON gp.user_id = u.id
+                    WHERE gp.game_id = ?
+                `;
+                db.all(sql, [gameId], (err, rows) => {
+                    if (err) return reject(err);
+                    resolve(rows);
+                });
+            })
+        ]);
+
+        res.json({
+            details: gameDetails,
+            participants: gameParticipants
+        });
+
+    } catch (error) {
+        console.error(`Помилка отримання деталей для гри ${gameId}:`, error.message);
+        if (error.message === 'Game not found') {
+            return res.status(404).json({ error: 'Game not found' });
+        }
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 module.exports = router;
