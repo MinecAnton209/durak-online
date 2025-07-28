@@ -3,6 +3,7 @@ import { DataGrid, type GridColDef, type GridRenderCellParams, type GridPaginati
 import { Container, Typography, Box, Alert } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
+import { Link as RouterLink } from 'react-router-dom';
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -44,7 +45,16 @@ const GamesHistoryPage: React.FC = () => {
     });
 
     const columns: GridColDef<GameHistoryRow>[] = [
-        { field: 'id', headerName: 'ID Гри', width: 150 },
+        {
+            field: 'id',
+            headerName: 'ID Гри',
+            width: 150,
+            renderCell: (params: GridRenderCellParams<GameHistoryRow>) => (
+                <RouterLink to={`/games-history/${params.value}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                    {params.value}
+                </RouterLink>
+            )
+        },
         { field: 'game_type', headerName: 'Тип гри', width: 130 },
         { field: 'winner_username', headerName: 'Переможець', flex: 1, minWidth: 150, renderCell: (params) => params.value || '-' },
         { field: 'loser_username', headerName: 'Програвший', flex: 1, minWidth: 150, renderCell: (params) => params.value || '-' },

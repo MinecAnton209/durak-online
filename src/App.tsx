@@ -7,6 +7,7 @@ import ActiveGamesPage from './pages/ActiveGamesPage';
 import GamesHistoryPage from './pages/GamesHistoryPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import UserDetailPage from './pages/UserDetailPage';
+import GameDetailPage from './pages/GameDetailPage';
 
 import {
     AppBar,
@@ -225,6 +226,7 @@ function App() {
                     <Route path="users/:userId" element={<UserDetailPage />} />
                     <Route path="active-games" element={<ActiveGamesPage />} />
                     <Route path="games-history" element={<GamesHistoryPage />} />
+                    <Route path="/games-history/:gameId" element={<GameDetailPage />} />
                     <Route path="leaderboards" element={<LeaderboardPage />} />
                 </Route>
             </Route>
