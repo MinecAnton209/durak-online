@@ -1,0 +1,163 @@
+﻿<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ой, щось пішло не так!</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            text-align: center;
+            overflow: hidden;
+            position: relative;
+            background-color: var(--background-color);
+        }
+        .error-container {
+            z-index: 10;
+            position: relative;
+            background-color: rgba(46, 49, 47, 0.85);
+            padding: 2rem 3rem;
+            border-radius: 28px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .error-code {
+            font-size: 6rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin: 0;
+            text-shadow: 0 0 20px var(--primary-color);
+        }
+        .error-message {
+            font-size: 1.5rem;
+            margin: 1rem 0;
+        }
+        .error-description {
+            color: var(--on-surface-variant-color);
+            margin-bottom: 2rem;
+            max-width: 400px;
+        }
+
+        .card-scene {
+            position: absolute;
+            width: 90px;
+            height: 126px;
+            perspective: 800px;
+            will-change: transform;
+        }
+
+        .card-flipper {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            animation: spin-card 15s infinite linear;
+        }
+
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            font-weight: 700;
+            color: var(--on-surface-color);
+        }
+
+        .card-front {
+            background-color: #fdfdfd;
+            color: var(--surface-color);
+        }
+
+        .card-back {
+            background: linear-gradient(135deg, #6B7280, #4B5563);
+            transform: rotateY(180deg);
+        }
+
+        .card-1 { top: 10%; left: 5%; animation: float-card-1 22s infinite ease-in-out alternate; }
+        .card-1 .card-flipper { animation-duration: 18s; }
+
+        .card-2 { top: 15%; right: 10%; animation: float-card-2 18s infinite ease-in-out alternate; }
+        .card-2 .card-flipper { animation-duration: 12s; animation-delay: -2s; }
+
+        .card-3 { bottom: 20%; left: 20%; animation: float-card-3 25s infinite ease-in-out alternate; }
+        .card-3 .card-flipper { animation-duration: 20s; animation-delay: -8s; }
+
+        .card-4 { bottom: 10%; right: 5%; animation: float-card-4 15s infinite ease-in-out alternate; }
+        .card-4 .card-flipper { animation-duration: 13s; animation-delay: -6s; }
+
+        .card-5 { top: 70%; left: 8%; animation: float-card-5 28s infinite ease-in-out alternate; }
+        .card-5 .card-flipper { animation-duration: 22s; animation-delay: -12s; }
+
+        @keyframes spin-card {
+            from { transform: rotateY(0deg) rotateX(5deg) rotateZ(-3deg); }
+            to { transform: rotateY(360deg) rotateX(-5deg) rotateZ(3deg); }
+        }
+
+        @keyframes float-card-1 {
+            from { transform: translate(0, 0) rotate(-15deg); }
+            to { transform: translate(10vw, 30vh) rotate(15deg); }
+        }
+        @keyframes float-card-2 {
+            from { transform: translate(0, 0) rotate(20deg); }
+            to { transform: translate(-20vw, -10vh) rotate(-20deg); }
+        }
+        @keyframes float-card-3 {
+            from { transform: translate(0, 0) rotate(10deg); }
+            to { transform: translate(30vw, -40vh) rotate(-10deg); }
+        }
+        @keyframes float-card-4 {
+            from { transform: translate(0, 0) rotate(-25deg); }
+            to { transform: translate(-15vw, 20vh) rotate(25deg); }
+        }
+        @keyframes float-card-5 {
+            from { transform: translate(0, 0) rotate(5deg); }
+            to { transform: translate(25vw, -50vh) rotate(-5deg); }
+        }
+
+        @media (max-width: 768px) {
+            .card-scene { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div class="card-scene card-1"><div class="card-flipper"><div class="card-face card-front">?</div><div class="card-face card-back"></div></div></div>
+<div class="card-scene card-2"><div class="card-flipper"><div class="card-face card-front">?</div><div class="card-face card-back"></div></div></div>
+<div class="card-scene card-3"><div class="card-flipper"><div class="card-face card-front">?</div><div class="card-face card-back"></div></div></div>
+<div class="card-scene card-4"><div class="card-flipper"><div class="card-face card-front">?</div><div class="card-face card-back"></div></div></div>
+<div class="card-scene card-5"><div class="card-flipper"><div class="card-face card-front">?</div><div class="card-face card-back"></div></div></div>
+
+<div class="error-container">
+    <h1 id="error-code" class="error-code">404</h1>
+    <p id="error-message" class="error-message">Сторінку не знайдено</p>
+    <p id="error-description" class="error-description">
+        Здається, ви заблукали. Карта, яку ви шукали, знаходиться в іншій колоді.
+    </p>
+    <a href="/"><button>Повернутися на головну</button></a>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const msg = urlParams.get('msg');
+        const desc = urlParams.get('desc');
+
+        if (code) document.getElementById('error-code').textContent = code;
+        if (msg) document.getElementById('error-message').textContent = msg;
+        if (desc) document.getElementById('error-description').textContent = desc;
+    });
+</script>
+</body>
+</html>
