@@ -8,6 +8,8 @@ import GamesHistoryPage from './pages/GamesHistoryPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import UserDetailPage from './pages/UserDetailPage';
 import GameDetailPage from './pages/GameDetailPage';
+import SecurityIcon from '@mui/icons-material/Security';
+import AuditLogPage from './pages/AuditLogPage';
 
 import {
     AppBar,
@@ -88,6 +90,7 @@ const AdminLayout: React.FC = () => {
         { text: 'Активні Ігри', path: '/active-games', icon: <SportsEsportsIcon /> },
         { text: 'Історія Ігор', path: '/games-history', icon: <HistoryIcon /> },
         { text: 'Лідерборди', path: '/leaderboards', icon: <LeaderboardIcon /> },
+        { text: 'Аудит Адмінів', path: '/audit-log', icon: <SecurityIcon /> },
     ];
 
     const drawer = (
@@ -228,6 +231,7 @@ function App() {
                     <Route path="games-history" element={<GamesHistoryPage />} />
                     <Route path="/games-history/:gameId" element={<GameDetailPage />} />
                     <Route path="leaderboards" element={<LeaderboardPage />} />
+                    <Route path="/audit-log" element={<AuditLogPage />} />
                 </Route>
             </Route>
             <Route path="*" element={<Navigate to={localStorage.getItem('adminUser') ? "/" : "/login"} replace />} />
