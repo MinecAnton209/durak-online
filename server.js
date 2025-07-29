@@ -85,6 +85,25 @@ app.use('/api/public', publicRoutes);
 app.use('/api/achievements', achievementRoutes);
 app.use('/api/admin', adminRoutes);
 
+app.use((req, res, next) => {
+    if (req.originalUrl.startsWith('/api/')) {
+        return res.status(404).json({ error: 'Not Found' });
+    }
+    res.status(404).sendFile(path.join(__dirname, 'public', 'error.html'));
+});
+
+app.use((err, req, res, next) => {
+    console.error("Critical server error:");
+    console.error(err.stack);
+
+    if (req.originalUrl.startsWith('/api/')) {
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+
+    res.status(500).sendFile(path.join(__dirname, 'public', 'error.html'));
+});
+
+
 app.get('/settings', (req, res) => {
     if (!req.session.user) {
         return res.redirect('/');

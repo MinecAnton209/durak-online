@@ -217,6 +217,28 @@ pool.query(`
     `).then(() => console.log('Перевірено наявність колонки created_at в PostgreSQL.'))
     .catch(err => console.error('Помилка при перевірці/додаванні колонки created_at в PostgreSQL:', err.stack));
 
+pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_audit_log (
+        id SERIAL PRIMARY KEY,
+        "timestamp" TIMESTAMPTZ DEFAULT NOW(),
+        admin_id INTEGER NOT NULL,
+        admin_username TEXT NOT NULL,
+        action_type TEXT NOT NULL,
+        target_user_id INTEGER,
+        target_username TEXT,
+        reason TEXT,
+        CONSTRAINT fk_admin
+            FOREIGN KEY(admin_id) 
+            REFERENCES users(id)
+            ON DELETE SET NULL,
+        CONSTRAINT fk_target_user
+            FOREIGN KEY(target_user_id) 
+            REFERENCES users(id)
+            ON DELETE SET NULL
+    );
+`).then(() => console.log('Таблиця "admin_audit_log" в PostgreSQL готова.'))
+    .catch(err => console.error('Помилка створення таблиці "admin_audit_log" в PostgreSQL:', err.stack));
+
 function formatSql(sql) {
     let i = 0;
     return sql.replace(/\?/g, () => `$${++i}`);

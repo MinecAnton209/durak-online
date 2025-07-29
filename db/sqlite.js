@@ -113,6 +113,23 @@ const db = new sqlite3.Database(dbPath, (err) => {
             if (err) console.error('Помилка створення таблиці "system_stats_daily":', err.message);
             else console.log('Таблиця "system_stats_daily" готова.');
         });
+        db.run(`
+            CREATE TABLE IF NOT EXISTS admin_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                admin_id INTEGER NOT NULL,
+                admin_username TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                target_user_id INTEGER,
+                target_username TEXT,
+                reason TEXT,
+                FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL
+            )
+`, (err) => {
+            if (err) console.error('Помилка створення таблиці "admin_audit_log" в SQLite', err.message);
+            else console.log('Таблиця "admin_audit_log" в SQLite готова.');
+        });
     });
 });
 
