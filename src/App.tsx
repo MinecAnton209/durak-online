@@ -38,6 +38,8 @@ import HistoryIcon from '@mui/icons-material/History';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
+import BuildIcon from '@mui/icons-material/Build';
+import MaintenancePage from './pages/MaintenancePage';
 
 const ProtectedRoute: React.FC = () => {
     const adminUser = localStorage.getItem('adminUser');
@@ -91,6 +93,7 @@ const AdminLayout: React.FC = () => {
         { text: 'Історія Ігор', path: '/games-history', icon: <HistoryIcon /> },
         { text: 'Лідерборди', path: '/leaderboards', icon: <LeaderboardIcon /> },
         { text: 'Аудит Адмінів', path: '/audit-log', icon: <SecurityIcon /> },
+        { text: 'Тех. Роботи', path: '/maintenance', icon: <BuildIcon /> },
     ];
 
     const drawer = (
@@ -232,6 +235,7 @@ function App() {
                     <Route path="/games-history/:gameId" element={<GameDetailPage />} />
                     <Route path="leaderboards" element={<LeaderboardPage />} />
                     <Route path="/audit-log" element={<AuditLogPage />} />
+                    <Route path="/maintenance" element={<MaintenancePage />} />
                 </Route>
             </Route>
             <Route path="*" element={<Navigate to={localStorage.getItem('adminUser') ? "/" : "/login"} replace />} />
