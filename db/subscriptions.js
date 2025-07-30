@@ -8,7 +8,7 @@ async function saveSubscription(userId, subscriptionData) {
             ON CONFLICT(user_id) DO UPDATE SET
                 subscription_data = excluded.subscription_data;
         `;
-        db.run(query, [userId, JSON.stringify(subscriptionData)], (err) => {
+        db.run(query, [userId, subscriptionData], (err) => {
             if (err) return reject(err);
             resolve();
         });
