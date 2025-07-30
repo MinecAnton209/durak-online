@@ -27,6 +27,17 @@ const io = socketIo(server, {cors: {origin: "*"}});
 
 let games = {};
 
+let isMaintenanceScheduled = false;
+
+let maintenanceMode = {
+    enabled: false,
+    message: "На сайті проводяться технічні роботи. Будь ласка, зайдіть пізніше.",
+    timer: null,
+    startTime: null,
+    warningMessage: ""
+};
+app.set('maintenanceMode', maintenanceMode);
+
 app.set('socketio', io);
 app.set('activeGames', games);
 app.set('logEvent', logEvent);
@@ -72,13 +83,54 @@ if (process.env.DB_CLIENT === 'postgres' && process.env.DATABASE_URL) {
 }
 
 app.set('trust proxy', 1);
+
+app.use((req, res, next) => {
+    const maintenanceMode = req.app.get('maintenanceMode');
+
+    if (maintenanceMode.enabled) {
+        if (req.originalUrl.startsWith('/api/admin') ||
+            req.session?.user?.is_admin ||
+            req.originalUrl.startsWith('/maintenance') ||
+            req.originalUrl.startsWith('/css') ||
+            req.originalUrl.startsWith('/js') ||
+            req.originalUrl.startsWith('/locales')) {
+            return next();
+        }
+
+        if (req.originalUrl.startsWith('/api/')) {
+            return res.status(503).json({ i18nKey: 'error_maintenance_mode' });
+        }
+
+        const msg = encodeURIComponent(maintenanceMode.message);
+        const eta = maintenanceMode.endTime || null;
+
+        let redirectUrl = `/maintenance?msg=${msg}`;
+        if (eta) {
+            redirectUrl += `&eta=${eta}`;
+        }
+        return res.redirect(redirectUrl);
+    }
+
+    next();
+});
+
 app.use(cors({
     origin: process.env.ADMIN_CORS_ORIGIN || 'http://localhost:5173',
     credentials: true
 }));
 app.use(express.json());
-app.use(express.static('public'));
+app.get('/maintenance', (req, res) => {
+    const maintenanceMode = req.app.get('maintenanceMode');
+
+    if (!maintenanceMode.enabled) {
+        return res.redirect('/');
+    }
+
+    res.sendFile(path.join(__dirname, 'public', 'maintenance-page.html'));
+});
 app.use(sessionMiddleware);
+
+app.use(express.static('public'));
 
 app.use('/', authRoutes);
 app.use('/api/public', publicRoutes);
@@ -515,6 +567,11 @@ io.on('connection', (socket) => {
         console.log(`Клієнт підключився: ${socket.id} (гість)`);
     }
     socket.on('createGame', (settings) => {
+        const maintenanceMode = app.get('maintenanceMode');
+
+        if (maintenanceMode.startTime && Date.now() < maintenanceMode.startTime) {
+            return socket.emit('error', { i18nKey: 'error_maintenance_scheduled' });
+        }
         const {playerName} = settings;
         let gameId = (settings.customId || Math.random().toString(36).substr(2, 6)).toUpperCase();
         if (games[gameId]) {
@@ -554,6 +611,10 @@ io.on('connection', (socket) => {
         socket.emit('gameCreated', {gameId, playerId: socket.id});
     });
     socket.on('joinGame', ({gameId, playerName}) => {
+        const maintenanceMode = app.get('maintenanceMode');
+        if (maintenanceMode.startTime && Date.now() < maintenanceMode.startTime) {
+            return socket.emit('error', { i18nKey: 'error_maintenance_scheduled' });
+        }
         if (!gameId) {
             return socket.emit('error', {i18nKey: 'error_no_game_id'});
         }
@@ -843,7 +904,52 @@ io.on('connection', (socket) => {
             hostSocket.emit('trackSuggested', {trackId, trackTitle, suggesterName: suggester.name});
         }
     });
+    let maintenanceCountdownInterval = null;
 
+    socket.on('maintenanceWarning', ({ message, startTime }) => {
+        isMaintenanceScheduled = true;
+
+        const maintenanceBanner = document.getElementById('maintenance-banner');
+        const maintenanceBannerMessage = document.getElementById('maintenance-banner-message');
+        const maintenanceBannerCountdown = document.getElementById('maintenance-banner-countdown');
+
+        if (!maintenanceBanner || !maintenanceBannerMessage || !maintenanceBannerCountdown) return;
+
+        maintenanceBannerMessage.textContent = message;
+        maintenanceBanner.style.display = 'block';
+
+        if (maintenanceCountdownInterval) clearInterval(maintenanceCountdownInterval);
+
+        const updateCountdown = () => {
+            const timeLeft = startTime - Date.now();
+            if (timeLeft <= 0) {
+                maintenanceBannerCountdown.textContent = "Роботи почалися!";
+                clearInterval(maintenanceCountdownInterval);
+                setTimeout(() => window.location.reload(), 2000);
+                return;
+            }
+            const minutes = Math.floor((timeLeft / 1000 / 60) % 60);
+            const seconds = Math.floor((timeLeft / 1000) % 60);
+            maintenanceBannerCountdown.textContent = `До початку: ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        };
+
+        maintenanceCountdownInterval = setInterval(updateCountdown, 1000);
+        updateCountdown();
+
+        if(createGameBtn) createGameBtn.disabled = true;
+        if(joinGameBtn) joinGameBtn.disabled = true;
+    });
+
+    socket.on('maintenanceCancelled', () => {
+        isMaintenanceScheduled = false;
+
+        const maintenanceBanner = document.getElementById('maintenance-banner');
+        if (maintenanceBanner) maintenanceBanner.style.display = 'none';
+        if (maintenanceCountdownInterval) clearInterval(maintenanceCountdownInterval);
+
+        if(createGameBtn) createGameBtn.disabled = false;
+        if(joinGameBtn) joinGameBtn.disabled = false;
+    });
 });
 
 server.listen(PORT, '0.0.0.0', () => {

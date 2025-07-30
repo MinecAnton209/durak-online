@@ -124,6 +124,8 @@
   "loading_leaderboards": "Loading...",
   "leaderboard_empty": "Nothing to see here yet.",
   "error_loading_leaderboards": "Failed to load leaderboards.",
+  "error_maintenance_mode": "The server is temporarily down for maintenance. Please try again later.",
+  "error_maintenance_scheduled": "Maintenance is scheduled. Creating new games is temporarily unavailable.",
 
   "ach_first_game_name": "Rookie",
   "ach_first_game_desc": "Complete your first game.",

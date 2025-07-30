@@ -1,0 +1,141 @@
+﻿<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Технічні роботи</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            text-align: center;
+            overflow: hidden;
+            background-color: var(--surface-color);
+            color: var(--on-surface-color);
+        }
+        .maintenance-container {
+            max-width: 600px;
+            padding: 2rem 3rem;
+            background-color: rgba(0,0,0,0.2);
+            border-radius: 28px;
+            border: 1px solid var(--outline-color);
+        }
+        .gear-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 2rem;
+        }
+        .gear {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            font-size: 120px;
+            line-height: 1;
+            color: var(--primary-color);
+            text-shadow: 0 0 15px var(--primary-color);
+            animation: spin 10s linear infinite;
+        }
+        .gear.two {
+            width: 60%;
+            height: 60%;
+            font-size: 72px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation: spin-reverse 8s linear infinite;
+            opacity: 0.8;
+        }
+        .maintenance-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0;
+        }
+        .maintenance-message {
+            font-size: 1.1rem;
+            color: var(--on-surface-variant-color);
+            margin: 1.5rem 0;
+            line-height: 1.6;
+        }
+        .timer {
+            font-size: 1.2rem;
+            font-weight: 700;
+            background-color: rgba(0,0,0,0.3);
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
+            margin-top: 1.5rem;
+            display: none;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        @keyframes spin-reverse {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to { transform: translate(-50%, -50%) rotate(-360deg); }
+        }
+    </style>
+</head>
+<body>
+<div class="maintenance-container">
+    <div class="gear-container">
+        <div class="gear one">⚙️</div>
+        <div class="gear two">🔧</div>
+    </div>
+    <h1 id="maintenance-title" class="maintenance-title">Ведуться технічні роботи</h1>
+    <p id="maintenance-message" class="maintenance-message">
+        Ми оновлюємо сервери, щоб гра стала ще кращою! Будь ласка, зайдіть трохи пізніше.
+    </p>
+    <div id="countdown-timer" class="timer">
+        Орієнтовний час завершення: <span id="countdown">--:--:--</span>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const msg = urlParams.get('msg');
+        const etaTimestamp = urlParams.get('eta'); // eta = End Time Approximate (timestamp)
+
+        if (msg) {
+            document.getElementById('maintenance-message').textContent = decodeURIComponent(msg);
+        }
+
+        if (etaTimestamp) {
+            const timerDiv = document.getElementById('countdown-timer');
+            const countdownSpan = document.getElementById('countdown');
+            const endTime = parseInt(etaTimestamp, 10);
+
+            if (timerDiv && countdownSpan) {
+                timerDiv.style.display = 'inline-block';
+
+                const updateCountdown = () => {
+                    const now = Date.now();
+                    const timeLeft = endTime - now;
+
+                    if (timeLeft <= 0) {
+                        countdownSpan.textContent = "Скоро завершимо!";
+                        clearInterval(interval);
+                        return;
+                    }
+
+                    const hours = Math.floor((timeLeft / (1000 * 60 * 60)) % 24);
+                    const minutes = Math.floor((timeLeft / 1000 / 60) % 60);
+                    const seconds = Math.floor((timeLeft / 1000) % 60);
+
+                    countdownSpan.textContent =
+                        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                };
+
+                const interval = setInterval(updateCountdown, 1000);
+                updateCountdown();
+            }
+        }
+    });
+</script>
+</body>
+</html>

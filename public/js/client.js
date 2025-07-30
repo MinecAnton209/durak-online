@@ -575,7 +575,36 @@ socket.on('achievementUnlocked', ({ code }) => { const name = i18next.t(`ach_${c
 socket.on('mutedStatusUpdate', ({ isMuted, reason }) => { const me = lastGameState?.players?.find(p => p.id === playerId); if (isMuted) { chatInput.disabled = true; chatInput.placeholder = i18next.t('chat_placeholder_muted'); if (me && me.id === playerId) { errorToast.innerText = i18next.t('info_you_are_muted'); errorToast.classList.add('visible', 'info'); setTimeout(() => errorToast.classList.remove('visible', 'info'), 3000); } } else { chatInput.disabled = false; chatInput.placeholder = i18next.t('chat_placeholder'); if (me && me.id === playerId) { errorToast.innerText = i18next.t('info_mute_lifted'); errorToast.classList.remove('error'); errorToast.classList.add('visible', 'info'); setTimeout(() => errorToast.classList.remove('visible', 'info'), 3000); } } });
 socket.on('forceDisconnect', (data) => { alert(i18next.t(data.i18nKey, data.options || {})); window.location.reload(); });
 socket.on('spectateSuccess', ({ gameId: spectatedGameId }) => { amISpectator = true; gameId = spectatedGameId; console.log(`Ви успішно почали спостерігати за грою: ${gameId}`); welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'none'; gameScreen.style.display = 'block'; if (playerArea) playerArea.style.display = 'none'; if (actionButtons) actionButtons.style.display = 'none'; if (turnStatus) turnStatus.innerText = i18next.t('spectator_mode_status'); });
+let maintenanceCountdownInterval = null;
 
+socket.on('maintenanceWarning', ({ message, startTime }) => {
+    if (!maintenanceBanner) return;
+
+    maintenanceBannerMessage.textContent = message;
+    maintenanceBanner.style.display = 'block';
+
+    if (maintenanceCountdownInterval) clearInterval(maintenanceCountdownInterval);
+
+    const updateCountdown = () => {
+        const timeLeft = startTime - Date.now();
+        if (timeLeft <= 0) {
+            maintenanceBannerCountdown.textContent = "Роботи почалися!";
+            clearInterval(maintenanceCountdownInterval);
+            return;
+        }
+        const minutes = Math.floor((timeLeft / 1000 / 60) % 60);
+        const seconds = Math.floor((timeLeft / 1000) % 60);
+        maintenanceBannerCountdown.textContent = `До початку: ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    };
+
+    maintenanceCountdownInterval = setInterval(updateCountdown, 1000);
+    updateCountdown();
+});
+
+socket.on('maintenanceCancelled', () => {
+    if (maintenanceBanner) maintenanceBanner.style.display = 'none';
+    if (maintenanceCountdownInterval) clearInterval(maintenanceCountdownInterval);
+});
 
 function playSound(soundFile) { try { new Audio(`/sounds/${soundFile}`).play(); } catch (e) { } }
 function animateTrumpReveal(trumpCard) { if (!trumpCard) return; centerAnimationContainer.innerHTML = `<div class="flipper"><div class="front card card-back"></div><div class="back">${createCardDiv(trumpCard).outerHTML}</div></div>`; const flipper = centerAnimationContainer.querySelector('.flipper'); setTimeout(() => flipper.classList.add('flipped'), 100); setTimeout(() => { flipper.style.transition = 'opacity 0.5s, transform 0.5s'; flipper.style.opacity = '0'; flipper.style.transform = 'scale(0.8)'; setTimeout(() => centerAnimationContainer.innerHTML = '', 500); }, 1500); }

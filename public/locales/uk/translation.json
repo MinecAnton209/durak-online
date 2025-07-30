@@ -124,6 +124,8 @@
   "loading_leaderboards": "Завантаження...",
   "leaderboard_empty": "Тут поки що порожньо.",
   "error_loading_leaderboards": "Не вдалося завантажити лідерборди.",
+  "error_maintenance_mode": "Сервер тимчасово на технічному обслуговуванні. Спробуйте пізніше.",
+  "error_maintenance_scheduled": "Заплановано технічні роботи. Створення нових ігор тимчасово недоступне.",
 
   "ach_first_game_name": "Новачок",
   "ach_first_game_desc": "Зіграти свою першу гру до кінця.",

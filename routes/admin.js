@@ -228,4 +228,62 @@ router.get('/audit-log', ensureAdmin, (req, res) => {
     });
 });
 
+router.get('/maintenance/status', ensureAdmin, (req, res) => {
+    const maintenanceMode = req.app.get('maintenanceMode');
+    res.json({
+        enabled: maintenanceMode.enabled,
+        message: maintenanceMode.enabled ? maintenanceMode.message : maintenanceMode.warningMessage,
+        startTime: maintenanceMode.startTime
+    });
+});
+
+router.post('/maintenance/enable', ensureAdmin, (req, res) => {
+    const { message, minutesUntilStart = 0 } = req.body;
+    const maintenanceMode = req.app.get('maintenanceMode');
+    const io = req.app.get('socketio');
+
+    const startTime = Date.now() + minutesUntilStart * 60 * 1000;
+    maintenanceMode.startTime = startTime;
+    maintenanceMode.warningMessage = message || "Незабаром розпочнуться планові технічні роботи.";
+
+    if (minutesUntilStart > 0) {
+        io.emit('maintenanceWarning', {
+            message: maintenanceMode.warningMessage,
+            startTime: maintenanceMode.startTime
+        });
+
+        if (maintenanceMode.timer) clearTimeout(maintenanceMode.timer);
+        maintenanceMode.timer = setTimeout(() => {
+            maintenanceMode.enabled = true;
+            maintenanceMode.message = maintenanceMode.warningMessage;
+            console.log("РЕЖИМ ТЕХНІЧНИХ РОБІТ УВІМКНЕНО.");
+        }, minutesUntilStart * 60 * 1000);
+
+        res.json({ status: 'warning_scheduled', message: `Технічні роботи заплановано через ${minutesUntilStart} хв.` });
+    } else {
+        maintenanceMode.enabled = true;
+        maintenanceMode.message = message || "На сайті проводяться технічні роботи. Будь ласка, зайдіть пізніше.";
+        console.log("РЕЖИМ ТЕХНІЧНИХ РОБІТ УВІМКНЕНО НЕГАЙНО.");
+        res.json({ status: 'enabled', message: 'Режим технічних робіт увімкнено.' });
+    }
+});
+
+router.post('/maintenance/disable', ensureAdmin, (req, res) => {
+    const maintenanceMode = req.app.get('maintenanceMode');
+    const io = req.app.get('socketio');
+
+    maintenanceMode.enabled = false;
+    maintenanceMode.startTime = null;
+    maintenanceMode.warningMessage = "";
+    if (maintenanceMode.timer) {
+        clearTimeout(maintenanceMode.timer);
+        maintenanceMode.timer = null;
+    }
+
+    io.emit('maintenanceCancelled');
+
+    console.log("Режим технічних робіт вимкнено.");
+    res.json({ status: 'disabled', message: 'Режим технічних робіт вимкнено.' });
+});
+
 module.exports = router;

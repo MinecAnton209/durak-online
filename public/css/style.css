@@ -216,11 +216,17 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 .digit-reel { position: absolute; top: 0; left: 0; width: 100%; text-align: center; display: flex; flex-direction: column; transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55); }
 .digit-reel span { height: 1.2em; display: flex; align-items: center; justify-content: center; }
 .guest-actions { text-align: center; margin: 1rem 0; }
+.maintenance-banner { position: fixed; top: 0; left: 0; width: 100%; background-color: #ff9800; color: black; text-align: center; padding: 0.75rem; z-index: 9999; font-weight: 500; box-shadow: 0 4px 8px rgba(0,0,0,0.3); animation: slide-down 0.5s ease-out; }
+#maintenance-banner-countdown { margin-left: 1rem; font-weight: 700; }
 
-@media (max-width: 1024px) { 
+@keyframes slide-down {
+    from { transform: translateY(-100%); }
+    to { transform: translateY(0); }
+}
+@media (max-width: 1024px) {
     .toggle-chat-btn { display: none; }
-    #game-log-container { display: none; } 
-    #show-log-btn-mobile { display: flex; } 
+    #game-log-container { display: none; }
+    #show-log-btn-mobile { display: flex; }
 }
 @media (max-width: 768px) {
     body { padding: 0.5rem; }
