@@ -302,13 +302,16 @@ function formatSql(sql) {
 
 module.exports = {
     run: (sql, params, callback) => {
-        pool.query(formatSql(sql), params, (err, res) => callback(err));
+        const formattedParams = params.map(p => (typeof p === 'object' && p !== null) ? JSON.stringify(p) : p);
+        pool.query(formatSql(sql), formattedParams, (err, res) => callback(err));
     },
     get: (sql, params, callback) => {
-        pool.query(formatSql(sql), params, (err, res) => callback(err, res ? res.rows[0] : null));
+        const formattedParams = params.map(p => (typeof p === 'object' && p !== null) ? JSON.stringify(p) : p);
+        pool.query(formatSql(sql), formattedParams, (err, res) => callback(err, res ? res.rows[0] : null));
     },
     all: (sql, params, callback) => {
-        pool.query(formatSql(sql), params, (err, res) => callback(err, res ? res.rows : []));
+        const formattedParams = params.map(p => (typeof p === 'object' && p !== null) ? JSON.stringify(p) : p);
+        pool.query(formatSql(sql), formattedParams, (err, res) => callback(err, res ? res.rows : []));
     },
     pool: pool
 };
