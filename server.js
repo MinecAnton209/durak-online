@@ -25,6 +25,8 @@ const statsService = require('./services/statsService.js');
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {cors: {origin: "*"}});
+const onlineUsers = new Map();
+app.set('onlineUsers', onlineUsers);
 
 let games = {};
 
@@ -41,6 +43,7 @@ app.set('maintenanceMode', maintenanceMode);
 
 app.set('socketio', io);
 app.set('activeGames', games);
+app.set('onlineUsers', onlineUsers);
 app.set('logEvent', logEvent);
 app.set('broadcastGameState', broadcastGameState);
 app.set('i18next', i18next);
@@ -547,8 +550,12 @@ function broadcastGameState(gameId) {
 }
 
 io.on('connection', (socket) => {
-    const sessionUser = socket.request.session.user;
-    if (sessionUser) {
+    const session = socket.request.session;
+    const sessionUser = session?.user;
+    if (sessionUser && sessionUser.id) {
+        onlineUsers.set(parseInt(sessionUser.id, 10), socket.id);
+        console.log(`[Online Status] User connected: ${sessionUser.username} (ID: ${sessionUser.id}). Total online: ${onlineUsers.size}`);
+
         db.get('SELECT is_banned, ban_reason FROM users WHERE id = ?', [sessionUser.id], (err, dbUser) => {
             if (err) {
                 socket.disconnect(true);
@@ -561,9 +568,7 @@ io.on('connection', (socket) => {
                     options: {reason: reasonText}
                 });
                 socket.disconnect(true);
-                return;
             }
-            console.log(`Клієнт підключився: ${socket.id}, користувач: ${sessionUser.username}`);
         });
     } else {
         console.log(`Клієнт підключився: ${socket.id} (гість)`);
@@ -787,7 +792,22 @@ io.on('connection', (socket) => {
         }
     });
     socket.on('disconnect', () => {
-        console.log(`Клієнт відключився: ${socket.id}`);
+        let disconnectedUserId = null;
+        let disconnectedUsername = "Гість";
+
+        for (const [userId, socketId] of onlineUsers.entries()) {
+            if (socketId === socket.id) {
+                disconnectedUserId = userId;
+                onlineUsers.delete(userId);
+                break;
+            }
+        }
+
+        if (disconnectedUserId) {
+            console.log(`[Online Status] User with ID ${disconnectedUserId} disconnected. Total online: ${onlineUsers.size}`);
+        } else {
+            console.log(`Клієнт відключився: ${socket.id} (гість)`);
+        }
         for (const gameId in games) {
             const game = games[gameId];
             const spectatorIndex = game.spectators.indexOf(socket.id);
@@ -797,6 +817,7 @@ io.on('connection', (socket) => {
             }
             if (game.players[socket.id]) {
                 const disconnectedPlayer = game.players[socket.id];
+                disconnectedUsername = disconnectedPlayer.name;
                 console.log(`Гравець ${disconnectedPlayer.name} (${socket.id}) відключився з гри ${gameId}`);
                 delete game.players[socket.id];
                 game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
@@ -951,6 +972,35 @@ io.on('connection', (socket) => {
 
         if(createGameBtn) createGameBtn.disabled = false;
         if(joinGameBtn) joinGameBtn.disabled = false;
+    });
+    socket.on('friend:invite', ({ toUserId, gameId }) => {
+        const sessionUser = socket.request.session?.user;
+        if (!sessionUser || !sessionUser.id || !toUserId || !gameId) {
+            console.warn('[Invites] Invalid invite request received.');
+            return;
+        }
+
+        const game = games[gameId];
+        if (!game) return;
+
+        const targetUserId = parseInt(toUserId, 10);
+        const friendSocketId = onlineUsers.get(targetUserId);
+
+        if (friendSocketId) {
+            const friendSocket = io.sockets.sockets.get(friendSocketId);
+            if (friendSocket) {
+                console.log(`[Invites] User ${sessionUser.username} invites user ID ${targetUserId} to game ${gameId}`);
+                friendSocket.emit('friend:receiveInvite', {
+                    fromUser: {
+                        id: sessionUser.id,
+                        username: sessionUser.username
+                    },
+                    gameId: gameId
+                });
+            }
+        } else {
+            console.warn(`[Invites] Could not find online user with ID: ${targetUserId}`);
+        }
     });
 });
 

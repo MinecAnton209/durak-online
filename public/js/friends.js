@@ -2,9 +2,10 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     const friendsBtn = document.getElementById('friendsBtn');
+    const friendsBtnLobby = document.getElementById('friendsBtnLobby');
     const friendsModal = document.getElementById('friends-modal');
 
-    if (!friendsBtn || !friendsModal) {
+    if ((!friendsBtn && !friendsBtnLobby) || !friendsModal) {
         return;
     }
 
@@ -20,8 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const findFriendInput = document.getElementById('find-friend-input');
     const findFriendBtn = document.getElementById('find-friend-btn');
     const searchMessage = document.getElementById('search-message');
-
-    const incomingRequestsCountBadge = document.querySelector('#incoming-requests-tab .notification-badge');
 
     let friendsData = {
         accepted: [],
@@ -70,8 +69,13 @@ document.addEventListener('DOMContentLoaded', () => {
             li.dataset.userId = user.id;
 
             let buttonsHtml = '';
+
+            if (type === 'friend' && user.isOnline) {
+                buttonsHtml += `<button class="action-btn invite-friend-btn" title="${i18next.t('friends_invite_tooltip')}">✉️</button>`;
+            }
+
             switch (type) {
-                case 'friend':   buttonsHtml = `<button class="action-btn remove-friend-btn" title="${i18next.t('friends_remove_tooltip')}">❌</button>`; break;
+                case 'friend':   buttonsHtml += `<button class="action-btn remove-friend-btn" title="${i18next.t('friends_remove_tooltip')}">❌</button>`; break;
                 case 'incoming': buttonsHtml = `<button class="action-btn accept-request-btn" title="${i18next.t('friends_accept_tooltip')}">✅</button><button class="action-btn reject-request-btn" title="${i18next.t('friends_reject_tooltip')}">❌</button>`; break;
                 case 'outgoing': buttonsHtml = `<button class="action-btn cancel-request-btn" title="${i18next.t('friends_cancel_tooltip')}">❌</button>`; break;
                 case 'search':   buttonsHtml = `<button class="action-btn add-friend-btn" title="${i18next.t('friends_add_tooltip')}">+</button>`; break;
@@ -79,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             li.innerHTML = `
                 <div class="user-info">
-                    <span class="user-nickname">${user.nickname}</span>
+                    <span class="user-nickname ${user.isOnline ? 'online' : ''}">${user.nickname}</span>
                     <span class="user-rating">${i18next.t('rating_label')}: ${Math.round(user.rating || 1500)}</span>
                 </div>
                 <div class="user-actions">${buttonsHtml}</div>
@@ -93,11 +97,14 @@ document.addEventListener('DOMContentLoaded', () => {
         renderList(incomingList, friendsData.incoming, 'incoming');
         renderList(outgoingList, friendsData.outgoing, 'outgoing');
 
+        const badge = document.querySelector('#incoming-requests-tab .notification-badge');
+        if (!badge) return;
+
         if (friendsData.incoming.length > 0) {
-            incomingRequestsCountBadge.textContent = friendsData.incoming.length;
-            incomingRequestsCountBadge.style.display = 'inline-block';
+            badge.textContent = friendsData.incoming.length;
+            badge.style.display = 'inline-block';
         } else {
-            incomingRequestsCountBadge.style.display = 'none';
+            badge.style.display = 'none';
         }
     };
 
@@ -120,8 +127,10 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('/api/friends/');
             if (!response.ok) {
-                if (response.status === 401) return;
-                throw new Error(`Failed to fetch friends, status: ${response.status}`);
+                if (response.status !== 401) {
+                    console.error(`Failed to fetch friends, status: ${response.status}`);
+                }
+                return;
             }
             friendsData = await response.json();
             renderAllLists();
@@ -152,11 +161,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateUIText = () => {
         if (!window.i18next.isInitialized) return;
 
+        const badge = document.querySelector('#incoming-requests-tab .notification-badge');
+        const badgeHTML = badge ? badge.outerHTML : `<span class="notification-badge" style="display: none;"></span>`;
+        const incomingTab = tabsContainer.querySelector('[data-tab="incoming-requests-tab"]');
+
         friendsModal.querySelector('h2').textContent = i18next.t('friends_modal_title');
         tabsContainer.querySelector('[data-tab="friends-list-tab"]').textContent = i18next.t('friends_tab_friends');
-        const incomingTab = tabsContainer.querySelector('[data-tab="incoming-requests-tab"]');
-        const badgeHTML = incomingRequestsCountBadge ? incomingRequestsCountBadge.outerHTML : `<span id="incoming-requests-count" class="notification-badge" style="display: none;"></span>`;
-        incomingTab.innerHTML = `${i18next.t('friends_tab_incoming')} ${badgeHTML}`;
+        if (incomingTab) incomingTab.innerHTML = `${i18next.t('friends_tab_incoming')} ${badgeHTML}`;
         tabsContainer.querySelector('[data-tab="outgoing-requests-tab"]').textContent = i18next.t('friends_tab_outgoing');
         tabsContainer.querySelector('[data-tab="add-friend-tab"]').textContent = i18next.t('friends_tab_add');
 
@@ -170,7 +181,9 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAllLists();
     };
 
-    friendsBtn.addEventListener('click', openModal);
+    if (friendsBtn) friendsBtn.addEventListener('click', openModal);
+    if (friendsBtnLobby) friendsBtnLobby.addEventListener('click', openModal);
+
     closeModalBtn.addEventListener('click', closeModal);
     friendsModal.addEventListener('click', (e) => { if (e.target === friendsModal) closeModal(); });
     tabsContainer.addEventListener('click', (e) => { if (e.target.classList.contains('tab-link')) switchTab(e.target.dataset.tab); });
@@ -180,20 +193,33 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!target) return;
 
         const li = target.closest('.user-list-item');
+        if (!li) return;
         const userId = li.dataset.userId;
         const userNickname = li.querySelector('.user-nickname').textContent;
 
+        if (target.classList.contains('invite-friend-btn')) {
+            if (!window.currentGameId) {
+                showFriendsToast(i18next.t('friends_invite_not_in_lobby_error'), true);
+                return;
+            }
+            if (window.socket) {
+                window.socket.emit('friend:invite', { toUserId: userId, gameId: window.currentGameId });
+                showFriendsToast(i18next.t('friends_invite_sent', { nickname: userNickname }));
+                target.disabled = true;
+                setTimeout(() => { if(target) target.disabled = false; }, 5000);
+            }
+            return;
+        }
+
         if (target.classList.contains('remove-friend-btn')) {
-            const confirmationMessage = i18next.t('friends_confirm_remove', { nickname: userNickname });
-            if (window.confirm(confirmationMessage)) {
+            if (window.confirm(i18next.t('friends_confirm_remove', { nickname: userNickname }))) {
                 handleFriendAction('/api/friends/remove', 'DELETE', { otherUserId: userId });
             }
             return;
         }
 
         if (target.classList.contains('reject-request-btn')) {
-            const confirmationMessage = i18next.t('friends_confirm_reject', { nickname: userNickname });
-            if (window.confirm(confirmationMessage)) {
+            if (window.confirm(i18next.t('friends_confirm_reject', { nickname: userNickname }))) {
                 handleFriendAction('/api/friends/remove', 'DELETE', { otherUserId: userId });
             }
             return;
@@ -223,20 +249,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleSocketEvents = (socket) => {
         socket.on('newFriendRequest', (data) => {
             showFriendsToast(`${data.from.nickname} ${i18next.t('toast_friend_request_received')}`);
-            if (friendsModal.style.display === 'flex') {
-                fetchFriends();
-            } else {
-                fetchFriends();
-            }
+            fetchFriends();
         });
 
         socket.on('friendRequestAccepted', (data) => {
             showFriendsToast(`${data.by.nickname} ${i18next.t('toast_friend_request_accepted')}`);
-            if (friendsModal.style.display === 'flex') fetchFriends();
+            fetchFriends();
         });
 
         socket.on('friendshipRemoved', () => {
-            if (friendsModal.style.display === 'flex') fetchFriends();
+            fetchFriends();
         });
     };
 

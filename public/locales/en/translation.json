@@ -152,6 +152,13 @@
   "friends_confirm_remove": "Are you sure you want to remove {{nickname}} from your friends list?",
   "friends_confirm_reject": "Are you sure you want to decline the friend request from {{nickname}}?",
   "rating_label": "Rating",
+  "friends_invite_tooltip": "Invite to game",
+  "friends_invite_not_in_lobby_error": "You must be in a game room (lobby) to invite friends!",
+  "friends_invite_sent": "Invitation sent to {{nickname}}.",
+  "invite_title": "Game Invitation",
+  "invite_text": "Player <strong>{{username}}</strong> invites you to join!",
+  "invite_accept_btn": "Accept",
+  "invite_decline_btn": "Decline",
 
   "ach_first_game_name": "Rookie",
   "ach_first_game_desc": "Complete your first game.",

@@ -1,4 +1,5 @@
 const socket = io({ transports: ['websocket'] });
+window.socket = socket;
 const welcomeScreen = document.getElementById('welcome-screen');
 const gameScreen = document.getElementById('game-screen');
 const lobbyScreen = document.getElementById('lobby-screen');
@@ -79,6 +80,7 @@ const VERIFIED_BADGE_SVG = `
 
 let playerId = null;
 let gameId = null;
+window.currentGameId = null
 let lastGameState = null;
 let amISpectator = false;
 
@@ -360,31 +362,28 @@ window.addEventListener('DOMContentLoaded', () => {
         .then(data => {
             if (data.isLoggedIn) {
                 showUserProfile(data.user);
-
-                if (spectateRequestedGameId && isAdminSpectatorRequest && data.user.is_admin) {
-                    console.log(`Автоматичний запит на спостереження за грою ${spectateRequestedGameId} як адмін.`);
-                    if (welcomeScreen) welcomeScreen.style.display = 'none';
-                    if (lobbyScreen) lobbyScreen.style.display = 'none';
-                    if (gameScreen) gameScreen.style.display = 'block';
-
-                    requestSpectateGame(spectateRequestedGameId);
-                }
             } else {
                 showGuestLogin();
-                if (spectateRequestedGameId && isAdminSpectatorRequest) {
-                    alert(i18next.t('error_admin_spectate_unauthorized'));
-                    window.location.href = '/';
-                }
             }
 
-            if (joinGameId && (!spectateRequestedGameId || !isAdminSpectatorRequest)) {
+            socket.emit('user:ready');
+
+            if (data.isLoggedIn && spectateRequestedGameId && isAdminSpectatorRequest && data.user.is_admin) {
+                requestSpectateGame(spectateRequestedGameId);
+            } else if (joinGameId) {
                 document.getElementById('join-game-section').style.display = 'block';
                 gameId = joinGameId;
             }
 
-        }).catch(error => {
-            console.error('Помилка перевірки сесії при спробі спостереження:', error);
+            if (!data.isLoggedIn && isAdminSpectatorRequest) {
+                alert(i18next.t('error_admin_spectate_unauthorized'));
+                window.location.href = '/';
+            }
+        })
+        .catch(error => {
+            console.error('Помилка ініціалізації додатку:', error);
             showGuestLogin();
+            socket.emit('user:ready');
         });
     createGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = i18next.t('error_enter_name'); return; } const settings = { playerName: playerNameValue, deckSize: parseInt(document.getElementById('deckSize').value, 10), maxPlayers: parseInt(document.getElementById('maxPlayers').value, 10), customId: document.getElementById('customGameId').value.trim().toUpperCase() }; socket.emit('createGame', settings); });
     joinGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = i18next.t('error_enter_name'); return; } socket.emit('joinGame', { gameId, playerName: playerNameValue }); });
@@ -525,8 +524,8 @@ socket.on('trackSuggested', ({ trackId, trackTitle, suggesterName }) => {
     li.appendChild(setBtn);
     suggestionsList.prepend(li);
 });
-socket.on('gameCreated', (data) => { amISpectator = false; gameId = data.gameId; playerId = data.playerId; welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'block'; lobbyGameId.innerText = gameId; const link = `${window.location.origin}?gameId=${gameId}`; lobbyInviteLink.value = link; inviteLink.value = link; socket.emit('getLobbyState', { gameId }); });
-socket.on('joinSuccess', (data) => { amISpectator = false; playerId = data.playerId; gameId = data.gameId; welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'block'; lobbyGameId.innerText = gameId; const link = `${window.location.origin}?gameId=${gameId}`; lobbyInviteLink.value = link; inviteLink.value = link; socket.emit('getLobbyState', { gameId }); });
+socket.on('gameCreated', (data) => { gameId = data.gameId; window.currentGameId = data.gameId; amISpectator = false; gameId = data.gameId; playerId = data.playerId; welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'block'; lobbyGameId.innerText = gameId; const link = `${window.location.origin}?gameId=${gameId}`; lobbyInviteLink.value = link; inviteLink.value = link; socket.emit('getLobbyState', { gameId }); });
+socket.on('joinSuccess', (data) => { gameId = data.gameId; window.currentGameId = data.gameId; amISpectator = false; playerId = data.playerId; gameId = data.gameId; welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'block'; lobbyGameId.innerText = gameId; const link = `${window.location.origin}?gameId=${gameId}`; lobbyInviteLink.value = link; inviteLink.value = link; socket.emit('getLobbyState', { gameId }); });
 socket.on('playerJoined', () => { if (gameId) socket.emit('getLobbyState', { gameId }); });
 socket.on('lobbyStateUpdate', ({ players, maxPlayers, hostId }) => { playerList.innerHTML = ''; let hostName = ''; players.forEach(player => { const li = document.createElement('li'); let playerLabelHTML = player.name; if (player.isVerified) { playerLabelHTML += VERIFIED_BADGE_SVG; } if (player.streak > 0) { playerLabelHTML += ` <span class="streak-fire">🔥${player.streak}</span>`; } if (player.id === hostId) { playerLabelHTML += ` <span data-i18n="host_badge">👑 (Хост)</span>`; hostName = player.name; } li.innerHTML = playerLabelHTML; playerList.appendChild(li); }); if (playerId === hostId) { hostControls.style.display = 'block'; if (players.length >= 2) { startGameBtn.disabled = false; startGameBtn.innerHTML = i18next.t('start_game_button_count', { count: players.length }); } else { startGameBtn.disabled = true; startGameBtn.innerHTML = i18next.t('start_game_button_waiting'); } } else { hostControls.style.display = 'none'; lobbyStatus.innerHTML = i18next.t('lobby_waiting_for_host', { host: hostName || 'хост', count: players.length, max: maxPlayers }); } });
 socket.on('error', (message) => { errorMessage.style.display = 'block'; let errorText = ''; if (typeof message === 'string') { errorText = message; } else if (message.i18nKey) { errorText = i18next.t(message.i18nKey, message.options || { text: message.text }); } else { errorText = message.text || i18next.t('error_unknown'); } errorMessage.innerText = errorText; welcomeScreen.classList.add('shake'); setTimeout(() => welcomeScreen.classList.remove('shake'), 500); });
@@ -604,6 +603,58 @@ socket.on('maintenanceWarning', ({ message, startTime }) => {
 socket.on('maintenanceCancelled', () => {
     if (maintenanceBanner) maintenanceBanner.style.display = 'none';
     if (maintenanceCountdownInterval) clearInterval(maintenanceCountdownInterval);
+});
+
+socket.on('friend:receiveInvite', ({ fromUser, gameId }) => {
+    console.log(`[INVITE RECEIVED] Got an invite from ${fromUser.username} for game ${gameId}!`);
+    const inviteToast = document.getElementById('game-invite-toast');
+    const inviteTitle = document.getElementById('invite-title');
+    const inviteText = document.getElementById('invite-text');
+    const acceptBtn = document.getElementById('accept-invite-btn');
+    const declineBtn = document.getElementById('decline-invite-btn');
+
+    if (window.currentGameId) {
+        console.log("Invite received, but user is already in a game.");
+        return;
+    }
+
+    inviteTitle.textContent = i18next.t('invite_title');
+    inviteText.innerHTML = i18next.t('invite_text', { username: fromUser.username });
+    acceptBtn.textContent = i18next.t('invite_accept_btn');
+    declineBtn.textContent = i18next.t('invite_decline_btn');
+    inviteToast.style.display = 'flex';
+
+    const handleAccept = () => {
+        const playerNameValue = playerNameInput.value;
+        if (!playerNameValue) {
+            alert(i18next.t('error_enter_name'));
+            return;
+        }
+
+        socket.emit('joinGame', { gameId, playerName: playerNameValue });
+
+        inviteToast.style.display = 'none';
+
+        welcomeScreen.style.display = 'none';
+        gameScreen.style.display = 'none';
+        winnerScreen.style.display = 'none';
+        lobbyScreen.style.display = 'block';
+
+        cleanup();
+    };
+
+    const handleDecline = () => {
+        inviteToast.style.display = 'none';
+        cleanup();
+    };
+
+    const cleanup = () => {
+        acceptBtn.removeEventListener('click', handleAccept);
+        declineBtn.removeEventListener('click', handleDecline);
+    };
+
+    acceptBtn.addEventListener('click', handleAccept, { once: true });
+    declineBtn.addEventListener('click', handleDecline, { once: true });
 });
 
 function playSound(soundFile) { try { new Audio(`/sounds/${soundFile}`).play(); } catch (e) { } }

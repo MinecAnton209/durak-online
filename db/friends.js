@@ -1,15 +1,13 @@
-﻿const db = require('./index'); // Наш універсальний DB-адаптер
+﻿const db = require('./index');
 
 const getSortedUserIds = (userId1, userId2) => {
     return [userId1, userId2].sort((a, b) => a - b);
 };
 
-// Використовуємо db.run для вставки, яка не обов'язково повертає дані (особливо в SQLite)
 async function sendFriendRequest(fromUserId, toUserId) {
     return new Promise((resolve, reject) => {
         const [user1_id, user2_id] = getSortedUserIds(fromUserId, toUserId);
 
-        // Для Postgres ми могли б використовувати RETURNING, але для універсальності зробимо простіше.
         const query = `
             INSERT INTO friends (user1_id, user2_id, action_user_id, status)
             VALUES (?, ?, ?, 'pending');
@@ -17,19 +15,15 @@ async function sendFriendRequest(fromUserId, toUserId) {
 
         db.run(query, [user1_id, user2_id, fromUserId], function(err) {
             if (err) return reject(err);
-            // this.lastID може бути корисним для SQLite
             resolve({ success: true, id: this.lastID });
         });
     });
 }
 
-// Використовуємо db.run для оновлення
 async function updateFriendshipStatus(user1Id, user2Id, newStatus, actionUserId) {
     return new Promise((resolve, reject) => {
         const [user1_id, user2_id] = getSortedUserIds(user1Id, user2Id);
 
-        // В SQLite NOW() не працює в UPDATE, тому краще передавати дату з JS або використовувати тригер
-        // Але ми вже маємо тригери, тому це має бути ОК.
         const query = `
             UPDATE friends
             SET status = ?, action_user_id = ?, updated_at = CURRENT_TIMESTAMP
@@ -43,7 +37,6 @@ async function updateFriendshipStatus(user1Id, user2Id, newStatus, actionUserId)
     });
 }
 
-// Використовуємо db.run для видалення
 async function removeFriendship(user1Id, user2Id) {
     return new Promise((resolve, reject) => {
         const [user1_id, user2_id] = getSortedUserIds(user1Id, user2Id);
@@ -60,7 +53,6 @@ async function removeFriendship(user1Id, user2Id) {
     });
 }
 
-// Використовуємо db.all для отримання масиву даних
 async function getFriendships(userId) {
     return new Promise((resolve, reject) => {
         const query = `
@@ -107,12 +99,8 @@ async function getFriendships(userId) {
     });
 }
 
-// Використовуємо db.all для пошуку
 async function findUsersByNickname(searchTerm, currentUserId) {
     return new Promise((resolve, reject) => {
-        // Для SQLite використовуємо `LIKE` і `LOWER()`, для Postgres - `ILIKE`.
-        // Наш адаптер `postgres.js` не змінює `?`, тому ми напишемо універсальний запит.
-        // Для цього треба додати `LOWER` і в Postgres
         const query = `
             SELECT u.id, u.username AS nickname, u.rating
             FROM users u

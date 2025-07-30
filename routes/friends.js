@@ -15,6 +15,15 @@ router.get('/', async (req, res, next) => {
     try {
         const userId = req.session.user.id;
         const friendships = await friendsDB.getFriendships(userId);
+
+        const onlineUsers = req.app.get('onlineUsers');
+
+        if (friendships.accepted) {
+            friendships.accepted.forEach(friend => {
+                friend.isOnline = onlineUsers.has(friend.id);
+            });
+        }
+
         res.json(friendships);
     } catch (error) {
         console.error("Error getting friendships:", error);
@@ -48,7 +57,9 @@ router.post('/request', async (req, res, next) => {
         await friendsDB.sendFriendRequest(fromUserId, toUserId);
 
         const io = req.app.get('socketio');
-        const userSocketId = findSocketIdByUserId(io, toUserId);
+        const onlineUsers = req.app.get('onlineUsers');
+        const userSocketId = onlineUsers.get(toUserId);
+
         if (userSocketId) {
             io.to(userSocketId).emit('newFriendRequest', {
                 from: {
@@ -60,7 +71,7 @@ router.post('/request', async (req, res, next) => {
 
         res.status(201).json({ success: true, i18nKey: 'friends_request_sent' });
     } catch (error) {
-        if (error.code === '23505') {
+        if (error.code === '23505' || (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE'))) {
             return res.status(409).json({ i18nKey: 'error_friend_request_already_exists' });
         }
         console.error("Error sending friend request:", error);
@@ -76,7 +87,9 @@ router.post('/accept', async (req, res, next) => {
         await friendsDB.updateFriendshipStatus(fromUserId, toUserId, 'accepted', toUserId);
 
         const io = req.app.get('socketio');
-        const userSocketId = findSocketIdByUserId(io, fromUserId);
+        const onlineUsers = req.app.get('onlineUsers');
+        const userSocketId = onlineUsers.get(fromUserId);
+
         if (userSocketId) {
             io.to(userSocketId).emit('friendRequestAccepted', {
                 by: {
@@ -101,7 +114,9 @@ router.delete('/remove', async (req, res, next) => {
         await friendsDB.removeFriendship(currentUserId, otherUserId);
 
         const io = req.app.get('socketio');
-        const userSocketId = findSocketIdByUserId(io, otherUserId);
+        const onlineUsers = req.app.get('onlineUsers');
+        const userSocketId = onlineUsers.get(otherUserId);
+
         if (userSocketId) {
             io.to(userSocketId).emit('friendshipRemoved', {
                 by: {
@@ -116,14 +131,5 @@ router.delete('/remove', async (req, res, next) => {
         next(error);
     }
 });
-
-function findSocketIdByUserId(io, userId) {
-    for (const [socketId, socket] of io.sockets.sockets) {
-        if (socket.request.session && socket.request.session.user && socket.request.session.user.id === userId) {
-            return socketId;
-        }
-    }
-    return null;
-}
 
 module.exports = router;

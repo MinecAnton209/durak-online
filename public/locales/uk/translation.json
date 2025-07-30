@@ -152,6 +152,13 @@
   "friends_confirm_remove": "Ви впевнені, що хочете видалити {{nickname}} зі списку друзів?",
   "friends_confirm_reject": "Ви впевнені, що хочете відхилити запит на дружбу від {{nickname}}?",
   "rating_label": "Рейтинг",
+  "friends_invite_tooltip": "Запросити в гру",
+  "friends_invite_not_in_lobby_error": "Ви повинні бути в ігровій кімнаті (лобі), щоб запрошувати друзів!",
+  "friends_invite_sent": "Запрошення надіслано гравцю {{nickname}}.",
+  "invite_title": "Запрошення в гру",
+  "invite_text": "Гравець <strong>{{username}}</strong> запрошує вас приєднатися!",
+  "invite_accept_btn": "Прийняти",
+  "invite_decline_btn": "Відхилити",
 
   "ach_first_game_name": "Новачок",
   "ach_first_game_desc": "Зіграти свою першу гру до кінця.",
