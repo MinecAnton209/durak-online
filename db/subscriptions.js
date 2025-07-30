@@ -30,7 +30,13 @@ async function findSubscriptionByUserId(userId) {
         const query = `SELECT subscription_data FROM push_subscriptions WHERE user_id = ?;`;
         db.get(query, [userId], (err, row) => {
             if (err) return reject(err);
-            resolve(row ? JSON.parse(row.subscription_data) : null);
+            if (!row) return resolve(null);
+
+            const data = typeof row.subscription_data === 'string' 
+                ? JSON.parse(row.subscription_data) 
+                : row.subscription_data;
+            
+            resolve(data);
         });
     });
 }
