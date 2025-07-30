@@ -131,6 +131,36 @@ const db = new sqlite3.Database(dbPath, (err) => {
             else console.log('Таблиця "admin_audit_log" в SQLite готова.');
         });
     });
+    db.run(`
+    CREATE TRIGGER IF NOT EXISTS trigger_friends_updated_at_sqlite
+    AFTER UPDATE ON friends
+    FOR EACH ROW
+    BEGIN
+        UPDATE friends SET updated_at = datetime('now') WHERE id = OLD.id;
+    END;
+`, (err) => {
+        if (err) console.error('Помилка створення тригеру для "friends" в SQLite:', err.message);
+    });
+    db.run(`
+    CREATE TABLE IF NOT EXISTS friends (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user1_id INTEGER NOT NULL,
+        user2_id INTEGER NOT NULL,
+        action_user_id INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'blocked')),
+        created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+        updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+
+        FOREIGN KEY (user1_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (user2_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (action_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        
+        UNIQUE (user1_id, user2_id)
+    );
+`, (err) => {
+        if (err) console.error('Помилка створення таблиці "friends" в SQLite:', err.message);
+        else console.log('Таблиця "friends" в SQLite готова.');
+    });
 });
 
 module.exports = db;

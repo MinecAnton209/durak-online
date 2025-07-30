@@ -218,6 +218,32 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 .guest-actions { text-align: center; margin: 1rem 0; }
 .maintenance-banner { position: fixed; top: 0; left: 0; width: 100%; background-color: #ff9800; color: black; text-align: center; padding: 0.75rem; z-index: 9999; font-weight: 500; box-shadow: 0 4px 8px rgba(0,0,0,0.3); animation: slide-down 0.5s ease-out; }
 #maintenance-banner-countdown { margin-left: 1rem; font-weight: 700; }
+.notification-badge { background-color: var(--error-color); color: white; border-radius: 50%; padding: 0.1em 0.4em; font-size: 0.8rem; font-weight: 700; margin-left: 0.5rem; vertical-align: super; line-height: 1; min-width: 1.5em; text-align: center; display: inline-block; }
+#friends-modal .tab-content { display: none; }
+#friends-modal .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+.user-list { list-style: none; padding: 0; margin: 1rem 0 0 0; max-height: 45vh; overflow-y: auto; background-color: rgba(0,0,0,0.2); border-radius: 12px; }
+
+.user-list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--outline-color); transition: background-color 0.2s; }
+.user-list-item:last-child { border-bottom: none; }
+
+.user-list-item:hover { background-color: rgba(255, 255, 255, 0.05); }
+.user-list-item .user-info { display: flex; flex-direction: column; gap: 0.25rem; }
+.user-list-item .user-nickname { font-weight: 500; color: var(--on-surface-color); }
+.user-list-item .user-rating { font-size: 0.85rem; color: var(--on-surface-variant-color); }
+.user-list-item .user-actions { display: flex;gap: 0.75rem; }
+.user-actions .action-btn { background: none; border: none; padding: 0.5rem; cursor: pointer; border-radius: 50%; width: 40px; height: 40px; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s, transform 0.2s; }
+.user-actions .action-btn:hover { background-color: rgba(255, 255, 255, 0.1); transform: scale(1.1); }
+.action-btn.accept-request-btn,
+.action-btn.add-friend-btn { color: var(--primary-color); }
+.action-btn.reject-request-btn,
+.action-btn.remove-friend-btn,
+.action-btn.cancel-request-btn { color: var(--error-color); }
+#add-friend-tab .search-form { display: flex; gap: 1rem; margin-bottom: 1rem; }
+#add-friend-tab #find-friend-input { flex-grow: 1; }
+#add-friend-tab #find-friend-btn { flex-shrink: 0; padding: 1rem 2rem; }
+#search-message, .empty-list-placeholder { text-align: center; color: var(--on-surface-variant-color); padding: 2rem; font-style: italic; }
+.friend-toast { border-color: #2196F3; }
+.friend-toast .text h4 { color: #2196F3; }
 
 @keyframes slide-down {
     from { transform: translateY(-100%); }

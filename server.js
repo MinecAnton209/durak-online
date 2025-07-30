@@ -16,6 +16,7 @@ const authRoutes = require('./routes/auth.js');
 const publicRoutes = require('./routes/public.js');
 const achievementRoutes = require('./routes/achievements.js');
 const adminRoutes = require('./routes/admin.js');
+const friendsRoutes = require('./routes/friends.js');
 const {seedAchievements} = require('./db/seed.js');
 const achievementService = require('./services/achievementService.js');
 const ratingService = require('./services/ratingService.js');
@@ -136,6 +137,7 @@ app.use('/', authRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/achievements', achievementRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/friends', friendsRoutes);
 
 app.use((req, res, next) => {
     if (req.originalUrl.startsWith('/api/')) {

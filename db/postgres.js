@@ -239,6 +239,48 @@ pool.query(`
 `).then(() => console.log('Таблиця "admin_audit_log" в PostgreSQL готова.'))
     .catch(err => console.error('Помилка створення таблиці "admin_audit_log" в PostgreSQL:', err.stack));
 
+pool.query(`
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'friendship_status') THEN
+            CREATE TYPE friendship_status AS ENUM ('pending', 'accepted', 'blocked');
+        END IF;
+    END$$;
+`).then(() => console.log('Перевірено наявність типу "friendship_status".'))
+    .catch(err => console.error('Помилка при перевірці/створенні типу "friendship_status":', err.stack));
+
+pool.query(`
+    CREATE TABLE IF NOT EXISTS friends (
+        id SERIAL PRIMARY KEY,
+        user1_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user2_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        action_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        status friendship_status NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT check_users_not_same CHECK (user1_id <> user2_id),
+        CONSTRAINT unique_friendship UNIQUE (LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id))
+    );
+`).then(() => console.log('Таблиця "friends" в PostgreSQL готова.'))
+    .catch(err => console.error('Помилка створення таблиці "friends" в PostgreSQL:', err.stack));
+
+pool.query(`
+    CREATE OR REPLACE FUNCTION update_updated_at_column()
+    RETURNS TRIGGER AS $$
+    BEGIN
+       NEW.updated_at = NOW(); 
+       RETURN NEW;
+    END;
+    $$ language 'plpgsql';
+
+    DROP TRIGGER IF EXISTS trigger_friends_updated_at ON friends;
+    CREATE TRIGGER trigger_friends_updated_at
+    BEFORE UPDATE ON friends
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`).then(() => console.log('Тригер "trigger_friends_updated_at" для таблиці friends створено/оновлено.'))
+    .catch(err => console.error('Помилка створення тригеру для friends:', err.stack));
+
 function formatSql(sql) {
     let i = 0;
     return sql.replace(/\?/g, () => `$${++i}`);

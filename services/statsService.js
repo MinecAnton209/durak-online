@@ -1,7 +1,7 @@
 ﻿const db = require('../db');
 
 function incrementDailyCounter(counterName) {
-    const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+    const today = new Date().toISOString().slice(0, 10);
 
     const dbClient = process.env.DB_CLIENT || 'sqlite';
     let sql;

@@ -1,12 +1,15 @@
 ﻿const { Glicko2 } = require('glicko2');
 const db = require('../db');
 
+const MIN_RD = 50;
+
 const settings = {
     tau: 0.5,
     rating: 1500,
     rd: 150,
-    vol: 0.06
+    vol: 0.1
 };
+
 const glicko = new Glicko2(settings);
 
 async function updateRatingsAfterGame(game) {
@@ -42,7 +45,11 @@ async function updateRatingsAfterGame(game) {
         allRegisteredPlayers.forEach(p => {
             const dbData = dbPlayersMap.get(p.dbId);
             if (dbData) {
-                const playerObj = glicko.makePlayer(dbData.rating, dbData.rd, dbData.vol);
+                const playerObj = glicko.makePlayer(
+                    dbData.rating,
+                    Math.max(dbData.rd, MIN_RD),
+                    dbData.vol
+                );
                 glickoPlayersMap.set(p.dbId, playerObj);
                 matchesPerPlayer.set(playerObj, []);
             }
