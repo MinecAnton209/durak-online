@@ -251,18 +251,23 @@ pool.query(`
 
 pool.query(`
     CREATE TABLE IF NOT EXISTS friends (
-        id SERIAL PRIMARY KEY,
-        user1_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                                           id SERIAL PRIMARY KEY,
+                                           user1_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         user2_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         action_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         status friendship_status NOT NULL DEFAULT 'pending',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        CONSTRAINT check_users_not_same CHECK (user1_id <> user2_id),
-        CONSTRAINT unique_friendship UNIQUE (LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id))
-    );
-`).then(() => console.log('Таблиця "friends" в PostgreSQL готова.'))
-    .catch(err => console.error('Помилка створення таблиці "friends" в PostgreSQL:', err.stack));
+        CONSTRAINT check_users_not_same CHECK (user1_id <> user2_id)
+        );
+`).then(() => console.log('Таблиця "friends" в PostgreSQL створена (крок 1).'))
+    .catch(err => console.error('Помилка створення таблиці "friends" (крок 1):', err.stack));
+
+pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS friends_unique_user_pair_idx
+    ON friends (LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id));
+`).then(() => console.log('Унікальний індекс для "friends" створено (крок 2).'))
+    .catch(err => console.error('Помилка створення унікального індексу для "friends" (крок 2):', err.stack));
 
 pool.query(`
     CREATE OR REPLACE FUNCTION update_updated_at_column()
