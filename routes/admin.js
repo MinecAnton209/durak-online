@@ -3,6 +3,17 @@ const router = express.Router();
 const db = require('../db');
 const { ensureAdmin } = require('../middlewares/authMiddleware');
 const { logAdminAction } = require('../services/auditLogService');
+const notificationService = require('../services/notificationService.js');
+
+const isAdmin = (req, res, next) => {
+    if (req.session?.user?.is_admin) {
+        return next();
+    }
+    res.status(403).json({ message: 'Forbidden: Admin access required.' });
+};
+
+router.use(isAdmin);
+
 
 router.get('/users', ensureAdmin, (req, res) => {
     const sql = `SELECT id, username, wins, losses, streak_count, last_played_date, is_verified, is_admin, is_banned, ban_reason, is_muted, rating, rd, vol FROM users ORDER BY id ASC`;
@@ -285,5 +296,30 @@ router.post('/maintenance/disable', ensureAdmin, (req, res) => {
     console.log("Режим технічних робіт вимкнено.");
     res.json({ status: 'disabled', message: 'Режим технічних робіт вимкнено.' });
 });
+
+router.post('/users/:id/send-push', async (req, res) => {
+    const targetUserId = parseInt(req.params.id, 10);
+    const { title, body, url } = req.body;
+
+    if (!title || !body) {
+        return res.status(400).json({ message: 'Title and body are required.' });
+    }
+
+    const payload = {
+        title: title,
+        body: body,
+        url: url || '/'
+    };
+
+    const success = await notificationService.sendNotification(targetUserId, payload);
+
+    if (success) {
+        logAdminAction(req.session.user.id, req.session.user.username, 'SEND_TEST_PUSH', targetUserId, null, `Title: ${title}`);
+        res.status(200).json({ message: 'Push notification sent successfully.' });
+    } else {
+        res.status(404).json({ message: 'Subscription not found or failed to send.' });
+    }
+});
+
 
 module.exports = router;

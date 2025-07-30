@@ -161,6 +161,18 @@ const db = new sqlite3.Database(dbPath, (err) => {
         if (err) console.error('Помилка створення таблиці "friends" в SQLite:', err.message);
         else console.log('Таблиця "friends" в SQLite готова.');
     });
+    db.run(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL UNIQUE,
+        subscription_data TEXT NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+`, (err) => {
+        if (err) console.error('Помилка створення таблиці "push_subscriptions" в SQLite:', err.message);
+        else console.log('Таблиця "push_subscriptions" в SQLite готова.');
+    });
 });
 
 module.exports = db;

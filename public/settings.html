@@ -10,29 +10,37 @@
     <script src="https://unpkg.com/i18next-browser-languagedetector/i18nextBrowserLanguageDetector.js"></script>
 </head>
 <body>
-    <div class="lang-switcher">
-        <button class="lang-btn" data-lang="uk">🇺🇦</button>
-        <button class="lang-btn" data-lang="en">🇬🇧</button>
-    </div>
+<div class="lang-switcher">
+    <button class="lang-btn" data-lang="uk">🇺🇦</button>
+    <button class="lang-btn" data-lang="en">🇬🇧</button>
+</div>
 
-    <div id="settings-page-container">
-        <h1 data-i18n="profile_settings_title">Налаштування профілю</h1>
-        
-        <div class="setting-section">
-            <h3 data-i18n="card_back_selection_title">Оберіть сорочку для карт</h3>
-            <div id="card-back-selector" class="card-back-selector">
-                <div class="card-back-option" data-style="default">
-                    <div class="card card-back"></div>
-                    <span data-i18n="style_default">Стандартна</span>
-                </div>
-            </div>
+<div id="settings-page-container">
+    <h1 data-i18n="profile_settings_title">Налаштування профілю</h1>
+
+    <div class="setting-section">
+        <h3 data-i18n="card_back_selection_title">Оберіть сорочку для карт</h3>
+        <div id="card-back-selector" class="card-back-selector">
         </div>
-        
-        <a href="/"><button class="secondary-btn" data-i18n="return_to_main_button">Повернутися на головну</button></a>
-        <p id="save-status"></p>
     </div>
 
-    <script src="/js/i18n.js"></script>
-    <script src="/js/settings.js"></script>
+    <div class="setting-section">
+        <h3 data-i18n="settings_notifications_title">Сповіщення</h3>
+        <div class="setting-item">
+            <p data-i18n="settings_notifications_description">Отримуйте сповіщення про запрошення в гру, навіть коли сайт не відкритий.</p>
+            <button id="toggle-push-btn" class="secondary-btn" disabled>
+                <span data-i18n="loading_please_wait">Завантаження...</span>
+            </button>
+            <p id="push-status" class="info-text"></p>
+        </div>
+    </div>
+
+    <a href="/"><button class="secondary-btn" data-i18n="return_to_main_button">Повернутися на головну</button></a>
+    <p id="save-status"></p>
+</div>
+
+<script src="/js/i18n.js"></script>
+<script src="/js/settings.js"></script>
+<script src="/js/notifications.js"></script>
 </body>
 </html>

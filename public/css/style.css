@@ -255,6 +255,10 @@ button.secondary-btn { background-color: var(--surface-color); color: var(--on-s
 .invite-actions {display: flex;justify-content: center;gap: 1rem; }
 .invite-actions button.primary { background-color: var(--primary-color); color: var(--on-primary-color); }
 .invite-actions button.secondary { background-color: transparent; border: 1px solid var(--outline-color); color: var(--on-surface-variant-color); }
+.setting-item { background-color: rgba(0,0,0,0.1); padding: 1rem; border-radius: 12px; border: 1px solid var(--outline-color); }
+.setting-item p { margin: 0 0 1rem 0; color: var(--on-surface-variant-color); }
+.setting-item button { width: 100%; }
+.info-text { font-size: 0.9rem; color: var(--on-surface-variant-color); margin-top: 1rem; text-align: center; min-height: 1.1rem; }
 
 @keyframes pulse-green {  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 191, 165, 0.7); }  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(0, 191, 165, 0); }  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 191, 165, 0); }  }
 

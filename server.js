@@ -17,10 +17,24 @@ const publicRoutes = require('./routes/public.js');
 const achievementRoutes = require('./routes/achievements.js');
 const adminRoutes = require('./routes/admin.js');
 const friendsRoutes = require('./routes/friends.js');
+const notificationsRoutes = require('./routes/notifications.js');
 const {seedAchievements} = require('./db/seed.js');
 const achievementService = require('./services/achievementService.js');
 const ratingService = require('./services/ratingService.js');
 const statsService = require('./services/statsService.js');
+const notificationService = require('./services/notificationService.js');
+const webpush = require('web-push');
+
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    webpush.setVapidDetails(
+        process.env.VAPID_SUBJECT,
+        process.env.VAPID_PUBLIC_KEY,
+        process.env.VAPID_PRIVATE_KEY
+    );
+    console.log("Web Push (VAPID) ініціалізовано.");
+} else {
+    console.warn("VAPID ключі не знайдено в .env файлі. Push-сповіщення не працюватимуть.");
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -141,13 +155,15 @@ app.use('/api/public', publicRoutes);
 app.use('/api/achievements', achievementRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/friends', friendsRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
-app.use((req, res, next) => {
-    if (req.originalUrl.startsWith('/api/')) {
-        return res.status(404).json({ error: 'Not Found' });
+app.get('/settings', (req, res) => {
+    if (!req.session.user) {
+        return res.redirect('/');
     }
-    res.status(404).sendFile(path.join(__dirname, 'public', 'error.html'));
+    res.sendFile(path.join(__dirname, 'public', 'settings.html'));
 });
+
 
 app.use((err, req, res, next) => {
     console.error("Critical server error:");
@@ -160,12 +176,11 @@ app.use((err, req, res, next) => {
     res.status(500).sendFile(path.join(__dirname, 'public', 'error.html'));
 });
 
-
-app.get('/settings', (req, res) => {
-    if (!req.session.user) {
-        return res.redirect('/');
+app.use((req, res, next) => {
+    if (req.originalUrl.startsWith('/api/')) {
+        return res.status(404).json({ error: 'Not Found' });
     }
-    res.sendFile(path.join(__dirname, 'public', 'settings.html'));
+    res.status(404).sendFile(path.join(__dirname, 'public', 'error.html'));
 });
 
 io.use((socket, next) => {
@@ -973,15 +988,23 @@ io.on('connection', (socket) => {
         if(createGameBtn) createGameBtn.disabled = false;
         if(joinGameBtn) joinGameBtn.disabled = false;
     });
-    socket.on('friend:invite', ({ toUserId, gameId }) => {
+    socket.on('friend:invite', async ({ toUserId, gameId }) => {
         const sessionUser = socket.request.session?.user;
-        if (!sessionUser || !sessionUser.id || !toUserId || !gameId) {
-            console.warn('[Invites] Invalid invite request received.');
+        if (!sessionUser || !sessionUser.id) {
+            console.warn(`[Invites] Invite attempt from unauthenticated user. Socket: ${socket.id}`);
+            return;
+        }
+        if (!toUserId || !gameId) {
+            console.warn(`[Invites] Invalid invite from ${sessionUser.username}. Missing toUserId or gameId. Data:`, { toUserId, gameId });
             return;
         }
 
         const game = games[gameId];
-        if (!game) return;
+        if (!game) {
+            console.warn(`[Invites] Invite sent to a non-existent game: ${gameId}.`);
+            socket.emit('systemMessage', { i18nKey: 'error_invite_game_not_found', type: 'error' });
+            return;
+        }
 
         const targetUserId = parseInt(toUserId, 10);
         const friendSocketId = onlineUsers.get(targetUserId);
@@ -1000,6 +1023,17 @@ io.on('connection', (socket) => {
             }
         } else {
             console.warn(`[Invites] Could not find online user with ID: ${targetUserId}`);
+        }
+        try {
+            const payload = {
+                title: i18next.t('push_invite_title', { ns: 'translation' }),
+                body: i18next.t('push_invite_body', { username: sessionUser.username, ns: 'translation' }),
+                url: `/?gameId=${gameId}`
+            };
+
+            await notificationService.sendNotification(targetUserId, payload);
+        } catch (error) {
+            console.error(`[Invites] Failed to send push notification for user ${targetUserId}:`, error);
         }
     });
 });

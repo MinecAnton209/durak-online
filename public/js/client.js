@@ -403,7 +403,19 @@ window.addEventListener('DOMContentLoaded', () => {
     toggleChatBtn.addEventListener('click', () => { gameLogContainer.classList.toggle('collapsed'); localStorage.setItem('chatCollapsed', gameLogContainer.classList.contains('collapsed')); });
     if (localStorage.getItem('chatCollapsed') === 'true') { gameLogContainer.classList.add('collapsed'); }
 
-    leaveGameBtn.addEventListener('click', () => { if (window.confirm(i18next.t('confirm_leave_general'))) { if (lastGameState && !lastGameState.winner && !amISpectator) { if (window.confirm(i18next.t('confirm_leave_game_loss'))) { window.location.reload(); } } else { window.location.reload(); } } });
+    leaveGameBtn.addEventListener('click', () => {
+        if (window.confirm(i18next.t('confirm_leave_general'))) {
+            if (lastGameState && !lastGameState.winner && !amISpectator) {
+                if (window.confirm(i18next.t('confirm_leave_game_loss'))) {
+                    window.currentGameId = null;
+                    window.location.reload();
+                }
+            } else {
+                window.currentGameId = null;
+                window.location.reload();
+            }
+        }
+    });
 
     achievementsBtn.addEventListener('click', showAchievements);
     closeAchievementsModalBtn.addEventListener('click', () => achievementsModal.style.display = 'none');
@@ -528,7 +540,27 @@ socket.on('gameCreated', (data) => { gameId = data.gameId; window.currentGameId 
 socket.on('joinSuccess', (data) => { gameId = data.gameId; window.currentGameId = data.gameId; amISpectator = false; playerId = data.playerId; gameId = data.gameId; welcomeScreen.style.display = 'none'; lobbyScreen.style.display = 'block'; lobbyGameId.innerText = gameId; const link = `${window.location.origin}?gameId=${gameId}`; lobbyInviteLink.value = link; inviteLink.value = link; socket.emit('getLobbyState', { gameId }); });
 socket.on('playerJoined', () => { if (gameId) socket.emit('getLobbyState', { gameId }); });
 socket.on('lobbyStateUpdate', ({ players, maxPlayers, hostId }) => { playerList.innerHTML = ''; let hostName = ''; players.forEach(player => { const li = document.createElement('li'); let playerLabelHTML = player.name; if (player.isVerified) { playerLabelHTML += VERIFIED_BADGE_SVG; } if (player.streak > 0) { playerLabelHTML += ` <span class="streak-fire">🔥${player.streak}</span>`; } if (player.id === hostId) { playerLabelHTML += ` <span data-i18n="host_badge">👑 (Хост)</span>`; hostName = player.name; } li.innerHTML = playerLabelHTML; playerList.appendChild(li); }); if (playerId === hostId) { hostControls.style.display = 'block'; if (players.length >= 2) { startGameBtn.disabled = false; startGameBtn.innerHTML = i18next.t('start_game_button_count', { count: players.length }); } else { startGameBtn.disabled = true; startGameBtn.innerHTML = i18next.t('start_game_button_waiting'); } } else { hostControls.style.display = 'none'; lobbyStatus.innerHTML = i18next.t('lobby_waiting_for_host', { host: hostName || 'хост', count: players.length, max: maxPlayers }); } });
-socket.on('error', (message) => { errorMessage.style.display = 'block'; let errorText = ''; if (typeof message === 'string') { errorText = message; } else if (message.i18nKey) { errorText = i18next.t(message.i18nKey, message.options || { text: message.text }); } else { errorText = message.text || i18next.t('error_unknown'); } errorMessage.innerText = errorText; welcomeScreen.classList.add('shake'); setTimeout(() => welcomeScreen.classList.remove('shake'), 500); });
+socket.on('error', (message) => {
+    if (message.i18nKey === 'error_host_left_lobby') {
+        window.currentGameId = null;
+        alert(i18next.t(message.i18nKey));
+        window.location.href = '/';
+        return;
+    }
+
+    errorMessage.style.display = 'block';
+    let errorText = '';
+    if (typeof message === 'string') {
+        errorText = message;
+    } else if (message.i18nKey) {
+        errorText = i18next.t(message.i18nKey, message.options || { text: message.text });
+    } else {
+        errorText = message.text || i18next.t('error_unknown');
+    }
+    errorMessage.innerText = errorText;
+    welcomeScreen.classList.add('shake');
+    setTimeout(() => welcomeScreen.classList.remove('shake'), 500);
+});
 socket.on('invalidMove', ({ reason }) => { errorToast.innerText = i18next.t(reason); errorToast.classList.add('visible'); const flyingCard = document.querySelector('.card.animate-play'); if (flyingCard) { flyingCard.classList.remove('animate-play'); flyingCard.classList.add('shake-card'); setTimeout(() => flyingCard.classList.remove('shake-card'), 400); } setTimeout(() => errorToast.classList.remove('visible'), 3000); });
 socket.on('rematchUpdate', ({ votes, total }) => { rematchStatus.innerHTML = i18next.t('rematch_status', { votes, total }); });
 socket.on('newLogEntry', (logEntry) => { const li = document.createElement('li'); let message; if (logEntry.i18nKey) { message = i18next.t(logEntry.i18nKey, logEntry.options); } else { message = logEntry.message; } if (message && message.includes('<span class="message-author">')) { li.classList.add('chat-message'); } li.innerHTML = `<span class="log-time">[${logEntry.timestamp}]</span> ${message || ''}`; gameLogList.prepend(li); });
@@ -826,7 +858,7 @@ function createCardDiv(card) {
 }
 function handleCardClick(card, cardDiv) { playSound('play.mp3'); cardDiv.classList.add('animate-play'); setTimeout(() => socket.emit('makeMove', { gameId, card }), 50); }
 function displayWinner(winnerData) {
-    gameScreen.style.display = 'none'; winnerScreen.style.display = 'block'; amISpectator = false;
+    gameScreen.style.display = 'none'; winnerScreen.style.display = 'block'; amISpectator = false; window.currentGameId = null;
     let message = ''; let showRematchButton = true;
     if (winnerData.reason) { if (typeof winnerData.reason === 'object' && winnerData.reason.i18nKey) { message = i18next.t(winnerData.reason.i18nKey, winnerData.reason.options); } else { message = winnerData.reason; } showRematchButton = false; }
     else {

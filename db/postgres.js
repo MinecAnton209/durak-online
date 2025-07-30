@@ -285,6 +285,15 @@ pool.query(`
     EXECUTE FUNCTION update_updated_at_column();
 `).then(() => console.log('Тригер "trigger_friends_updated_at" для таблиці friends створено/оновлено.'))
     .catch(err => console.error('Помилка створення тригеру для friends:', err.stack));
+pool.query(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        subscription_data JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+`).then(() => console.log('Таблиця "push_subscriptions" в PostgreSQL готова.'))
+    .catch(err => console.error('Помилка створення таблиці "push_subscriptions" в PostgreSQL:', err.stack));
 
 function formatSql(sql) {
     let i = 0;
