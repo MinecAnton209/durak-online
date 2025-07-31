@@ -17,7 +17,8 @@ async function checkAndAwardDailyBonus(userId, io, userSocketId) {
             return;
         }
 
-        const newBalance = (user.coins || 0) + DAILY_BONUS_AMOUNT;
+        const currentBalance = parseInt(user.coins || 0, 10);
+        const newBalance = currentBalance + DAILY_BONUS_AMOUNT;
         await dbRun('UPDATE users SET coins = ?, last_daily_bonus_claim = ? WHERE id = ?', [newBalance, today, userId]);
 
         console.log(`[Economy] Daily bonus awarded to user ${userId}. New balance: ${newBalance}`);
