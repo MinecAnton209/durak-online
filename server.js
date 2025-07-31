@@ -48,6 +48,19 @@ app.set('onlineUsers', onlineUsers);
 
 let games = {};
 
+let rouletteState = {
+    phase: 'waiting',
+    timer: 0,
+    history: [],
+    winningNumber: null,
+    bets: {}
+};
+const BETTING_TIME = 20;
+const RESULTS_TIME = 10;
+const ROULETTE_INTERVAL = (BETTING_TIME + RESULTS_TIME) * 1000;
+const ROULETTE_RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+
+
 let isMaintenanceScheduled = false;
 
 let maintenanceMode = {
@@ -168,6 +181,12 @@ app.get('/settings', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'settings.html'));
 });
 
+app.get('/roulette', (req, res) => {
+    if (!req.session.user) {
+        return res.redirect('/');
+    }
+    res.sendFile(path.join(__dirname, 'public', 'roulette.html'));
+});
 
 app.use((err, req, res, next) => {
     console.error("Critical server error:");
@@ -606,6 +625,104 @@ function broadcastGameState(gameId) {
     });
 }
 
+function rouletteTick() {
+    if (rouletteState.phase === 'spinning') {
+        rouletteState.phase = 'results';
+        rouletteState.timer = RESULTS_TIME;
+
+        const winningNumber = rouletteState.winningNumber;
+        console.log(`[Roulette] Winning number is ${winningNumber}`);
+
+        const payoutPromises = [];
+
+        for (const userId in rouletteState.bets) {
+            const userBets = rouletteState.bets[userId];
+            let totalPayout = 0;
+
+            userBets.forEach(bet => {
+                if (checkWin(winningNumber, bet)) {
+                    let payout = 0;
+                    if (bet.type === 'number') {
+                        payout = bet.amount * 36;
+                    } else {
+                        payout = bet.amount * 2;
+                    }
+                    totalPayout += payout;
+                }
+            });
+
+            if (totalPayout > 0) {
+                console.log(`[Roulette] User ${userId} won ${totalPayout} coins.`);
+                const userIdNum = parseInt(userId, 10);
+
+                const promise = dbRun('UPDATE users SET coins = coins + ? WHERE id = ?', [totalPayout, userIdNum])
+                    .then(() => {
+                        const userSocketId = onlineUsers.get(userIdNum);
+                        if (userSocketId) {
+                            return dbGet('SELECT coins FROM users WHERE id = ?', [userIdNum]).then(user => {
+                                if(user) {
+                                    io.to(userSocketId).emit('updateBalance', { coins: user.coins });
+                                    io.to(userSocketId).emit('roulette:win', { amount: totalPayout });
+
+                                    const userSocket = io.sockets.sockets.get(userSocketId);
+                                    if (userSocket?.request?.session?.user) {
+                                        userSocket.request.session.user.coins = user.coins;
+                                        userSocket.request.session.save();
+                                    }
+                                }
+                            });
+                        }
+                    });
+                payoutPromises.push(promise);
+            }
+        }
+
+        Promise.all(payoutPromises)
+            .then(() => console.log('[Roulette] All payouts processed.'))
+            .catch(err => console.error('[Roulette] Error processing payouts:', err));
+
+        io.emit('roulette:updateState', rouletteState);
+        return;
+    }
+
+    rouletteState.phase = 'betting';
+    rouletteState.timer = BETTING_TIME;
+    rouletteState.winningNumber = null;
+    rouletteState.bets = {};
+    console.log('[Roulette] New round started. Accepting bets.');
+    io.emit('roulette:updateState', rouletteState);
+
+    setTimeout(() => {
+        rouletteState.phase = 'spinning';
+        rouletteState.winningNumber = crypto.randomInt(0, 37);
+
+        rouletteState.history.unshift(rouletteState.winningNumber);
+        if (rouletteState.history.length > 15) rouletteState.history.pop();
+
+        io.emit('roulette:updateState', rouletteState);
+    }, BETTING_TIME * 1000);
+}
+
+function checkWin(winningNumber, bet) {
+    const wn = parseInt(winningNumber, 10);
+    const betValue = bet.value;
+
+    switch (bet.type) {
+        case 'number':
+            return wn === parseInt(betValue, 10);
+        case 'color':
+            if (betValue === 'red') return ROULETTE_RED_NUMBERS.includes(wn);
+            if (betValue === 'black') return wn !== 0 && !ROULETTE_RED_NUMBERS.includes(wn);
+            return false;
+        case 'even-odd':
+            if (wn === 0) return false;
+            if (betValue === 'even') return wn % 2 === 0;
+            if (betValue === 'odd') return wn % 2 !== 0;
+            return false;
+        default:
+            return false;
+    }
+}
 io.on('connection', (socket) => {
     const session = socket.request.session;
     const sessionUser = session?.user;
@@ -1128,7 +1245,70 @@ io.on('connection', (socket) => {
             console.error(`[Invites] Failed to send push notification for user ${targetUserId}:`, error);
         }
     });
+    socket.on('roulette:getState', () => {
+        socket.emit('roulette:updateState', rouletteState);
+        if (socket.request.session.user) {
+            db.get('SELECT coins FROM users WHERE id = ?', [socket.request.session.user.id], (err, user) => {
+                if (user) socket.emit('updateBalance', { coins: user.coins });
+            });
+        }
+    });
+
+    socket.on('roulette:placeBet', async (bet) => {
+        const sessionUser = socket.request.session?.user;
+
+        if (!sessionUser) return;
+        if (rouletteState.phase !== 'betting') {
+            return socket.emit('roulette:betError', { messageKey: 'roulette_error_bets_closed' });
+        }
+        if (!bet || !bet.type || !bet.value || !bet.amount || parseInt(bet.amount, 10) <= 0) {
+            return socket.emit('roulette:betError', { messageKey: 'roulette_error_invalid_bet' });
+        }
+
+        const amount = parseInt(bet.amount, 10);
+        const userId = sessionUser.id;
+
+        try {
+            const dbUser = await dbGet('SELECT coins FROM users WHERE id = ?', [userId]);
+            if (!dbUser || dbUser.coins < amount) {
+                return socket.emit('roulette:betError', { messageKey: 'error_not_enough_coins' });
+            }
+
+            await dbRun('UPDATE users SET coins = coins - ? WHERE id = ?', [amount, userId]);
+
+            socket.request.session.user.coins -= amount;
+            socket.request.session.save();
+
+            if (!rouletteState.bets[userId]) {
+                rouletteState.bets[userId] = [];
+            }
+            rouletteState.bets[userId].push({
+                type: bet.type,
+                value: bet.value,
+                amount: amount
+            });
+
+            console.log(`[Roulette] User ${userId} placed a bet: ${bet.type} on ${bet.value} for ${amount} coins.`);
+
+            socket.emit('updateBalance', { coins: socket.request.session.user.coins });
+            socket.emit('roulette:betAccepted', bet);
+
+        } catch (error) {
+            console.error(`[Roulette] Bet error for user ${userId}:`, error);
+            socket.emit('roulette:betError', { messageKey: 'error_database' });
+        }
+    });
 });
+
+rouletteTick();
+setInterval(rouletteTick, ROULETTE_INTERVAL);
+
+setInterval(() => {
+    if (rouletteState.timer > 0) {
+        rouletteState.timer--;
+        io.emit('roulette:timer', { timer: rouletteState.timer, phase: rouletteState.phase });
+    }
+}, 1000);
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Сервер запущено на порті ${PORT}`);

@@ -1,0 +1,87 @@
+﻿<!DOCTYPE html>
+<html lang="uk" data-i18n-lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="roulette_page_title">Рулетка - Дурень Онлайн</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/roulette.css">
+</head>
+<body>
+<div class="lang-switcher">
+    <button class="lang-btn" data-lang="uk">🇺🇦</button>
+    <button class="lang-btn" data-lang="en">🇬🇧</button>
+</div>
+
+<div class="roulette-container">
+    <div class="roulette-header">
+        <h1 data-i18n="roulette_title">Рулетка</h1>
+        <div class="user-balance">
+            <span data-i18n="profile_coins">💰 Монет:</span>
+            <b id="user-coins-display">...</b>
+        </div>
+        <a href="/" class="return-link" data-i18n="return_to_main_button">Повернутися на головну</a>
+    </div>
+
+    <div class="roulette-status-bar">
+        <div class="roulette-timer">
+            <span id="timer-label" data-i18n="roulette_timer_betting">Прийом ставок:</span>
+            <span id="timer-value">--</span>
+        </div>
+        <div class="roulette-history">
+            <span data-i18n="roulette_history_label">Останні числа:</span>
+            <div id="history-list"></div>
+        </div>
+    </div>
+
+    <div class="roulette-wheel-area">
+        <div class="winning-number-display">
+            <h2 id="winning-number" class="placeholder">?</h2>
+        </div>
+    </div>
+
+    <div id="betting-table" class="betting-table">
+        <div class="betting-controls">
+            <div class="bet-input-group">
+                <label for="bet-amount-input" data-i18n="bet_amount_label">Сума ставки:</label>
+                <input type="number" id="bet-amount-input" value="10" min="10" step="10">
+                <div class="quick-bet-buttons">
+                    <button data-amount="10">+10</button>
+                    <button data-amount="50">+50</button>
+                    <button data-amount="100">+100</button>
+                    <button data-amount="max" data-i18n="bet_max_button">MAX</button>
+                </div>
+            </div>
+            <p class="bet-info" id="bet-info-text" data-i18n="roulette_info_place_bet">Оберіть, на що поставити</p>
+        </div>
+
+        <div class="betting-options-grid">
+            <div class="number-grid-container">
+                <div class="zero-cell bet-option-num" data-bet-type="number" data-bet-value="0">0</div>
+                <div class="number-grid">
+                    <!-- Числа від 1 до 36 будуть згенеровані тут через JS -->
+                </div>
+            </div>
+            <div class="side-bets-container">
+                <button class="bet-option color-red" data-bet-type="color" data-bet-value="red" data-i18n="bet_option_red">Червоне</button>
+                <button class="bet-option color-black" data-bet-type="color" data-bet-value="black" data-i18n="bet_option_black">Чорне</button>
+                <button class="bet-option even-odd" data-bet-type="even-odd" data-bet-value="even" data-i18n="bet_option_even">Парне</button>
+                <button class="bet-option even-odd" data-bet-type="even-odd" data-bet-value="odd" data-i18n="bet_option_odd">Непарне</button>
+            </div>
+        </div>
+
+        <div id="my-bets" class="my-bets-container">
+            <h3 data-i18n="my_bets_title">Ваші ставки в цьому раунді:</h3>
+            <ul id="my-bets-list"></ul>
+        </div>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://unpkg.com/i18next/i18next.js"></script>
+<script src="https://unpkg.com/i18next-browser-languagedetector/i18nextBrowserLanguageDetector.js"></script>
+<script src="/js/i18n.js"></script>
+<script src="/js/roulette.js"></script>
+</body>
+</html>
