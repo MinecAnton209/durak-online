@@ -38,12 +38,21 @@ router.post('/login', (req, res) => {
             const isMatch = await bcrypt.compare(password, user.password);
             if (isMatch) {
                 if (user.is_banned) {
-                    return res.status(403).json({
-                        i18nKey: 'error_account_banned_with_reason',
-                        options: { reason: user.ban_reason || i18next.t('ban_reason_not_specified', { ns: 'translation'}) }
-                    });
+                    return res.status(403).json({ i18nKey: 'error_account_banned_with_reason', options: { reason: user.ban_reason || 'Не вказано' } });
                 }
-                req.session.user = { id: user.id, username: user.username, wins: user.wins, losses: user.losses, streak: user.streak_count, is_admin: user.is_admin, is_banned: user.is_banned, ban_reason: user.ban_reason, is_muted: user.is_muted, rating: user.rating };
+                req.session.user = {
+                    id: user.id,
+                    username: user.username,
+                    wins: user.wins,
+                    losses: user.losses,
+                    streak: user.streak_count,
+                    coins: user.coins,
+                    is_admin: user.is_admin,
+                    is_banned: user.is_banned,
+                    ban_reason: user.ban_reason,
+                    is_muted: user.is_muted,
+                    rating: user.rating
+                };
                 res.status(200).json({ message: 'Вхід успішний!', user: req.session.user });
             } else {
                 res.status(401).json({ message: 'Неправильне ім\'я або пароль.' });
@@ -86,7 +95,8 @@ router.get('/check-session', (req, res) => {
                 username: user.username,
                 wins: user.wins,
                 losses: user.losses,
-                streak: user.currentStreak,
+                streak: currentStreak,
+                coins: user.coins,
                 card_back_style: user.card_back_style,
                 isVerified: user.is_verified,
                 is_admin: user.is_admin,

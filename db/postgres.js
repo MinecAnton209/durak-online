@@ -285,6 +285,22 @@ pool.query(`
     EXECUTE FUNCTION update_updated_at_column();
 `).then(() => console.log('Тригер "trigger_friends_updated_at" для таблиці friends створено/оновлено.'))
     .catch(err => console.error('Помилка створення тригеру для friends:', err.stack));
+
+pool.query(`
+    DO $$
+    BEGIN
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='coins')
+        THEN
+            ALTER TABLE "users" ADD COLUMN coins BIGINT DEFAULT 1000 NOT NULL;
+        END IF;
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='last_daily_bonus_claim')
+        THEN
+            ALTER TABLE "users" ADD COLUMN last_daily_bonus_claim DATE;
+        END IF;
+    END;
+    $$;
+`).then(() => console.log('Перевірено наявність колонок coins та last_daily_bonus_claim в PostgreSQL.'))
+    .catch(err => console.error('Помилка при перевірці/додаванні колонок coins/last_daily_bonus_claim:', err.stack));
 pool.query(`
     CREATE TABLE IF NOT EXISTS push_subscriptions (
         id SERIAL PRIMARY KEY,

@@ -240,6 +240,7 @@ function showUserProfile(user) {
     profileUsername.innerHTML = profileNameHTML;
     profileWins.innerText = user.wins;
     profileLosses.innerText = user.losses;
+    document.getElementById('profile-coins').innerText = user.coins || 0;
     playerNameInput.value = user.username;
     playerNameInput.disabled = true;
 }
@@ -254,6 +255,26 @@ window.addEventListener('DOMContentLoaded', () => {
     const togglePlaybackBtn = document.getElementById('toggle-playback-btn');
     const volumeSlider = document.getElementById('volume-slider');
     const hostMusicControls = document.getElementById('host-music-controls');
+    const betToggle = document.getElementById('betToggle');
+    const betAmountGroup = document.getElementById('bet-amount-group');
+
+    if (betToggle && betAmountGroup) {
+        betToggle.addEventListener('change', () => {
+            if (betToggle.checked) {
+                betAmountGroup.style.display = 'flex';
+                betAmountGroup.style.maxHeight = betAmountGroup.scrollHeight + "px";
+                betAmountGroup.style.opacity = '1';
+            } else {
+                betAmountGroup.style.maxHeight = '0';
+                betAmountGroup.style.opacity = '0';
+                setTimeout(() => {
+                    if (!betToggle.checked) {
+                        betAmountGroup.style.display = 'none';
+                    }
+                }, 400);
+            }
+        });
+    }
 
     if (musicPanelToggleBtn) {
         musicPanelToggleBtn.addEventListener('click', () => {
@@ -385,7 +406,52 @@ window.addEventListener('DOMContentLoaded', () => {
             showGuestLogin();
             socket.emit('user:ready');
         });
-    createGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = i18next.t('error_enter_name'); return; } const settings = { playerName: playerNameValue, deckSize: parseInt(document.getElementById('deckSize').value, 10), maxPlayers: parseInt(document.getElementById('maxPlayers').value, 10), customId: document.getElementById('customGameId').value.trim().toUpperCase() }; socket.emit('createGame', settings); });
+    createGameBtn.addEventListener('click', () => {
+        const playerNameValue = playerNameInput.value;
+        if (!playerNameValue) {
+            errorMessage.innerText = i18next.t('error_enter_name');
+            return;
+        }
+
+        const betToggle = document.getElementById('betToggle');
+        const betAmountInput = document.getElementById('betAmount');
+
+        const isBettingGame = betToggle.checked;
+        const betAmount = isBettingGame ? parseInt(betAmountSelect.value, 10) : 0;
+
+        if (isBettingGame) {
+            if (isNaN(betAmount) || betAmount < 10) {
+                errorMessage.innerText = i18next.t('error_invalid_bet_amount', { min: 10 });
+                return;
+            }
+            const profileCoinsElement = document.getElementById('profile-coins');
+            if (profileCoinsElement) {
+                const currentCoins = parseInt(profileCoinsElement.innerText, 10);
+                if (currentCoins < betAmount) {
+                    errorMessage.innerText = i18next.t('error_not_enough_coins');
+                    welcomeScreen.classList.add('shake');
+                    setTimeout(() => welcomeScreen.classList.remove('shake'), 500);
+                    return;
+                }
+            } else {
+                errorMessage.innerText = i18next.t('error_guests_cannot_bet');
+                welcomeScreen.classList.add('shake');
+                setTimeout(() => welcomeScreen.classList.remove('shake'), 500);
+                return;
+            }
+        }
+
+        const settings = {
+            playerName: playerNameValue,
+            deckSize: parseInt(document.getElementById('deckSize').value, 10),
+            maxPlayers: parseInt(document.getElementById('maxPlayers').value, 10),
+            customId: document.getElementById('customGameId').value.trim().toUpperCase(),
+            betAmount: betAmount
+        };
+
+        errorMessage.innerText = '';
+        socket.emit('createGame', settings);
+    });
     joinGameBtn.addEventListener('click', () => { const playerNameValue = playerNameInput.value; if (!playerNameValue) { errorMessage.innerText = i18next.t('error_enter_name'); return; } socket.emit('joinGame', { gameId, playerName: playerNameValue }); });
     rematchBtn.addEventListener('click', () => { socket.emit('requestRematch', { gameId }); rematchBtn.disabled = true; rematchBtn.innerHTML = i18next.t('rematch_waiting_button'); });
     startGameBtn.addEventListener('click', () => { socket.emit('forceStartGame', { gameId }); });
@@ -689,6 +755,14 @@ socket.on('friend:receiveInvite', ({ fromUser, gameId }) => {
     declineBtn.addEventListener('click', handleDecline, { once: true });
 });
 
+socket.on('dailyBonusAwarded', ({ amount, newBalance }) => {
+    const profileCoins = document.getElementById('profile-coins');
+    if (profileCoins) {
+        profileCoins.innerText = newBalance;
+    }
+    showToast(`${i18next.t('toast_daily_bonus', { amount: amount })}`, 'info');
+});
+
 function playSound(soundFile) { try { new Audio(`/sounds/${soundFile}`).play(); } catch (e) { } }
 function animateTrumpReveal(trumpCard) { if (!trumpCard) return; centerAnimationContainer.innerHTML = `<div class="flipper"><div class="front card card-back"></div><div class="back">${createCardDiv(trumpCard).outerHTML}</div></div>`; const flipper = centerAnimationContainer.querySelector('.flipper'); setTimeout(() => flipper.classList.add('flipped'), 100); setTimeout(() => { flipper.style.transition = 'opacity 0.5s, transform 0.5s'; flipper.style.opacity = '0'; flipper.style.transform = 'scale(0.8)'; setTimeout(() => centerAnimationContainer.innerHTML = '', 500); }, 1500); }
 function animateCardDraw(targetPlayerId, count) { const deckArea = document.getElementById('deck-area'); const targetHand = (targetPlayerId === playerId) ? document.getElementById('player-cards') : document.querySelector(`.opponent[data-player-id="${targetPlayerId}"] .card-hand`); if (!deckArea || !targetHand) return; const deckRect = deckArea.getBoundingClientRect(); const handRect = targetHand.getBoundingClientRect(); for (let i = 0; i < count; i++) { const delay = i * 100; const dummyCard = document.createElement('div'); dummyCard.className = 'card card-back animated-card'; document.body.appendChild(dummyCard); dummyCard.style.transform = `translate(${deckRect.left}px, ${deckRect.top}px)`; setTimeout(() => { const targetX = handRect.left + (handRect.width / 2) - 45; const targetY = handRect.top + (handRect.height / 2) - 63; dummyCard.style.transform = `translate(${targetX}px, ${targetY}px) rotate(${Math.random() * 10 - 5}deg)`; setTimeout(() => dummyCard.remove(), 500); }, delay); } }
@@ -912,6 +986,42 @@ async function showAchievements() {
         console.error("Помилка завантаження ачівок:", error);
         achievementsList.innerHTML = i18next.t('error_loading_achievements');
     }
+}
+function showToast(message, type = 'info') {
+    const container = document.getElementById('achievement-toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'achievement-toast';
+
+    if (type === 'achievement') {
+        toast.classList.add('achievement-toast');
+    } else if (type === 'friend') {
+        toast.classList.add('friend-toast');
+    } else if (type === 'error') {
+        toast.style.borderColor = 'var(--error-color)';
+    } else {
+        toast.style.borderColor = 'var(--primary-color)';
+    }
+
+    let iconHtml = '';
+    if (type === 'achievement') {
+    } else if (type === 'friend' || type === 'info') {
+        iconHtml = '<div class="icon">✨</div>';
+    }
+
+    toast.innerHTML = `
+        ${iconHtml}
+        <div class="text">
+            <p>${message}</p>
+        </div>
+    `;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.remove();
+    }, 5000);
 }
 
 const SUITS = ['♦', '♥', '♠', '♣'];

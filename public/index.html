@@ -27,6 +27,7 @@
             <p><span data-i18n="profile_greeting">Ви увійшли як</span> <strong id="profile-username"></strong></p>
             <div class="stats">
                 <span><span data-i18n="profile_wins">🏆 Перемог:</span> <b id="profile-wins">0</b></span>
+                <span><span data-i18n="profile_coins">💰 Монет:</span> <b id="profile-coins">0</b></span>
                 <span><span data-i18n="profile_losses">💔 Поразок:</span> <b id="profile-losses">0</b></span>
             </div>
             <div class="profile-actions">
@@ -75,6 +76,18 @@
                         <option value="3" data-i18n="players_3">3 гравці</option>
                         <option value="4" data-i18n="players_4">4 гравці</option>
                     </select></div>
+                <div class="form-group bet-toggle-group">
+                    <label for="betToggle" data-i18n="bet_toggle_label">Гра на ставки</label>
+                    <label class="switch">
+                        <input type="checkbox" id="betToggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+
+                <div class="form-group" id="bet-amount-group" style="display: none;">
+                    <label for="betAmount" data-i18n="bet_amount_label">Розмір ставки (монет):</label>
+                    <input type="number" id="betAmount" value="10" min="10" max="10000" step="5" placeholder="10">
+                </div>
                 <div class="form-group"><label for="customGameId" data-i18n="custom_link_label">Своє посилання
                         (необов'язково):</label><input type="text" id="customGameId" placeholder="MY-COOL-GAME"></div>
                 <button id="createGameBtn" data-i18n="create_game_button">Створити гру</button>

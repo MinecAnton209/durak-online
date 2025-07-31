@@ -23,6 +23,7 @@ const achievementService = require('./services/achievementService.js');
 const ratingService = require('./services/ratingService.js');
 const statsService = require('./services/statsService.js');
 const notificationService = require('./services/notificationService.js');
+const economyService = require('./services/economyService.js');
 const webpush = require('web-push');
 const util = require('util');
 const dbRun = util.promisify(db.run.bind(db));
@@ -546,8 +547,9 @@ io.on('connection', (socket) => {
     const sessionUser = session?.user;
     if (sessionUser && sessionUser.id) {
         onlineUsers.set(parseInt(sessionUser.id, 10), socket.id);
+        const userId = parseInt(sessionUser.id, 10);
+        economyService.checkAndAwardDailyBonus(userId, io, socket.id);
         console.log(`[Online Status] User connected: ${sessionUser.username} (ID: ${sessionUser.id}). Total online: ${onlineUsers.size}`);
-
         db.get('SELECT is_banned, ban_reason FROM users WHERE id = ?', [sessionUser.id], (err, dbUser) => {
             if (err) {
                 socket.disconnect(true);
@@ -567,9 +569,18 @@ io.on('connection', (socket) => {
     }
     socket.on('createGame', (settings) => {
         const maintenanceMode = app.get('maintenanceMode');
+        const betAmount = settings.betAmount || 0;
 
         if (maintenanceMode.startTime && Date.now() < maintenanceMode.startTime) {
             return socket.emit('error', { i18nKey: 'error_maintenance_scheduled' });
+        }
+        if (betAmount > 0) {
+            if (!sessionUser) {
+                return socket.emit('error', { i18nKey: 'error_guests_cannot_bet' });
+            }
+            if (sessionUser.coins < betAmount) {
+                return socket.emit('error', { i18nKey: 'error_not_enough_coins_host' });
+            }
         }
         const {playerName} = settings;
         let gameId = (settings.customId || Math.random().toString(36).substr(2, 6)).toUpperCase();
@@ -609,7 +620,7 @@ io.on('connection', (socket) => {
         addPlayerToGame(socket, games[gameId], playerName);
         socket.emit('gameCreated', {gameId, playerId: socket.id});
     });
-    socket.on('joinGame', ({gameId, playerName}) => {
+    socket.on('joinGame', async ({gameId, playerName}) => {
         const maintenanceMode = app.get('maintenanceMode');
         if (maintenanceMode.startTime && Date.now() < maintenanceMode.startTime) {
             return socket.emit('error', { i18nKey: 'error_maintenance_scheduled' });
@@ -617,9 +628,49 @@ io.on('connection', (socket) => {
         if (!gameId) {
             return socket.emit('error', {i18nKey: 'error_no_game_id'});
         }
+
         const upperCaseGameId = gameId.toUpperCase();
         const game = games[upperCaseGameId];
-        if (game && game.playerOrder.length < game.settings.maxPlayers) {
+
+        if (!game) {
+            return socket.emit('error', {i18nKey: 'error_room_full_or_not_exist'});
+        }
+
+        const sessionUser = socket.request.session?.user;
+
+        if (sessionUser) {
+            const isAlreadyInGame = Object.values(game.players).some(
+                player => player.dbId === sessionUser.id
+            );
+            if (isAlreadyInGame) {
+                return socket.emit('error', { i18nKey: 'error_already_in_game' });
+            }
+        }
+
+        const betAmount = game.settings.betAmount || 0;
+
+        if (betAmount > 0) {
+            if (!sessionUser) {
+                return socket.emit('error', { i18nKey: 'error_guests_cannot_bet' });
+            }
+
+            try {
+                const dbUser = await dbGet('SELECT coins FROM users WHERE id = ?', [sessionUser.id]);
+                if (!dbUser) {
+                    return socket.emit('error', { i18nKey: 'error_database' });
+                }
+                if (dbUser.coins < betAmount) {
+                    return socket.emit('error', { i18nKey: 'error_not_enough_coins_join' });
+                }
+                socket.request.session.user.coins = dbUser.coins;
+                socket.request.session.save();
+            } catch (error) {
+                console.error("DB error on checking balance:", error);
+                return socket.emit('error', { i18nKey: 'error_database' });
+            }
+        }
+
+        if (game.playerOrder.length < game.settings.maxPlayers) {
             socket.join(upperCaseGameId);
             addPlayerToGame(socket, game, playerName);
             socket.emit('joinSuccess', {playerId: socket.id, gameId: upperCaseGameId});
