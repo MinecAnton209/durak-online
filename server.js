@@ -306,9 +306,36 @@ function logEvent(game, message, options = {}) {
     io.to(game.id).emit('newLogEntry', logEntry);
 }
 
-function startGame(gameId) {
+async function startGame(gameId) {
     const game = games[gameId];
     if (!game) return;
+    const betAmount = game.settings.betAmount || 0;
+    if (betAmount > 0) {
+        game.bank = 0;
+        const playerDbIds = [];
+
+        game.playerOrder.forEach(socketId => {
+            const player = game.players[socketId];
+            if (player && !player.isGuest) {
+                playerDbIds.push(player.dbId);
+                game.bank += betAmount;
+            }
+        });
+
+        if (playerDbIds.length > 0) {
+            try {
+                const placeholders = playerDbIds.map(() => '?').join(',');
+                const sql = `UPDATE users SET coins = coins - ? WHERE id IN (${placeholders})`;
+                await dbRun(sql, [betAmount, ...playerDbIds]);
+                console.log(`[Economy] Bets deducted for game ${gameId}. Bank is ${game.bank}`);
+            } catch (error) {
+                console.error(`[Economy] CRITICAL: Failed to deduct bets for game ${gameId}. Cancelling game.`, error.message);
+                io.to(gameId).emit('error', { i18nKey: 'error_bet_deduction_failed' });
+                delete games[gameId];
+                return;
+            }
+        }
+    }
     game.startTime = new Date();
     game.deck = createDeck(game.settings.deckSize);
     game.trumpCard = game.deck.length > 0 ? game.deck[game.deck.length - 1] : {suit: '♠', rank: ''};
@@ -390,7 +417,7 @@ function checkGameOver(game) {
 }
 
 async function updateStatsAfterGame(game) {
-    console.log(`[GAME END ${game.id}] 1. Starting stats update.`);
+    console.log(`[GAME END ${game.id}] Starting stats update.`);
     if (!game.winner || !game.startTime || !game.winner.winners || !game.winner.hasOwnProperty('loser')) {
         const endTime = new Date();
         const durationSeconds = Math.round((endTime - game.startTime) / 1000);
@@ -445,6 +472,43 @@ async function updateStatsAfterGame(game) {
                     : `UPDATE users SET losses = losses + 1, streak_count = ?, last_played_date = ?, win_streak = 0 WHERE id = ?`;
                 const params = isWinner ? [newStreak, today, newWinStreak, player.dbId] : [newStreak, today, player.dbId];
                 await dbRun(query, params);
+            }
+        }
+
+        const betAmount = game.settings.betAmount || 0;
+        if (betAmount > 0 && game.bank > 0) {
+            const winners = game.winner.winners.filter(p => p && !p.isGuest);
+
+            if (winners.length > 0) {
+                const prizePerWinner = Math.floor(game.bank / winners.length);
+                console.log(`[Economy] Awarding ${prizePerWinner} coins to ${winners.length} winner(s) for game ${game.id}.`);
+                for (const winner of winners) {
+                    await dbRun(`UPDATE users SET coins = coins + ? WHERE id = ?`, [prizePerWinner, winner.dbId]);
+                }
+            } else {
+                console.log(`[Economy] No registered winners in game ${game.id}. Refunding bets.`);
+
+                const allRegisteredPlayers = Object.values(game.players).filter(p => p && !p.isGuest);
+
+                if (allRegisteredPlayers.length > 0) {
+                    const playerDbIds = allRegisteredPlayers.map(p => p.dbId);
+                    const placeholders = playerDbIds.map(() => '?').join(',');
+                    const sql = `UPDATE users SET coins = coins + ? WHERE id IN (${placeholders})`;
+
+                    await dbRun(sql, [betAmount, ...playerDbIds]);
+                    console.log(`[Economy] Refunded ${betAmount} coins to ${playerDbIds.length} players.`);
+
+                    allRegisteredPlayers.forEach(player => {
+                        const playerSocket = io.sockets.sockets.get(player.id);
+                        if (playerSocket) {
+                            playerSocket.emit('systemMessage', { i18nKey: 'info_bet_refunded' });
+                            if (playerSocket.request.session.user) {
+                                playerSocket.request.session.user.coins += betAmount;
+                                playerSocket.request.session.save();
+                            }
+                        }
+                    });
+                }
             }
         }
 

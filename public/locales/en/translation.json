@@ -180,6 +180,8 @@
   "error_guests_cannot_bet": "Guests cannot bet. Please log in or register.",
   "error_already_in_game": "You are already in this game.",
   "error_invalid_bet_amount": "Неприпустима сума ставки. Мінімальна ставка: {{min}} монет.",
+  "error_bet_deduction_failed": "Error! Failed to deduct bets. The game has been cancelled.",
+  "info_bet_refunded": "ℹ️ Your bet has been refunded as the game ended without a winner.",
 
   "ach_first_game_name": "Rookie",
   "ach_first_game_desc": "Complete your first game.",

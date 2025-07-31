@@ -180,6 +180,8 @@
   "error_guests_cannot_bet": "Гості не можуть грати на ставки. Будь ласка, увійдіть або зареєструйтеся.",
   "error_already_in_game": "Ви вже перебуваєте в цій грі.",
   "error_invalid_bet_amount": "Invalid bet amount. Minimum bet is {{min}} coins.",
+  "error_bet_deduction_failed": "Помилка! Не вдалося списати ставки. Гру скасовано.",
+  "info_bet_refunded": "ℹ️ Вашу ставку було повернуто, оскільки гра завершилася без переможця.",
 
   "ach_first_game_name": "Новачок",
   "ach_first_game_desc": "Зіграти свою першу гру до кінця.",

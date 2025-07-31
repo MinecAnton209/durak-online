@@ -763,6 +763,13 @@ socket.on('dailyBonusAwarded', ({ amount, newBalance }) => {
     showToast(`${i18next.t('toast_daily_bonus', { amount: amount })}`, 'info');
 });
 
+socket.on('systemMessage', ({ i18nKey, type = 'info' }) => {
+    if (i18nKey) {
+        const message = i18next.t(i18nKey);
+        showToast(message, type);
+    }
+});
+
 function playSound(soundFile) { try { new Audio(`/sounds/${soundFile}`).play(); } catch (e) { } }
 function animateTrumpReveal(trumpCard) { if (!trumpCard) return; centerAnimationContainer.innerHTML = `<div class="flipper"><div class="front card card-back"></div><div class="back">${createCardDiv(trumpCard).outerHTML}</div></div>`; const flipper = centerAnimationContainer.querySelector('.flipper'); setTimeout(() => flipper.classList.add('flipped'), 100); setTimeout(() => { flipper.style.transition = 'opacity 0.5s, transform 0.5s'; flipper.style.opacity = '0'; flipper.style.transform = 'scale(0.8)'; setTimeout(() => centerAnimationContainer.innerHTML = '', 500); }, 1500); }
 function animateCardDraw(targetPlayerId, count) { const deckArea = document.getElementById('deck-area'); const targetHand = (targetPlayerId === playerId) ? document.getElementById('player-cards') : document.querySelector(`.opponent[data-player-id="${targetPlayerId}"] .card-hand`); if (!deckArea || !targetHand) return; const deckRect = deckArea.getBoundingClientRect(); const handRect = targetHand.getBoundingClientRect(); for (let i = 0; i < count; i++) { const delay = i * 100; const dummyCard = document.createElement('div'); dummyCard.className = 'card card-back animated-card'; document.body.appendChild(dummyCard); dummyCard.style.transform = `translate(${deckRect.left}px, ${deckRect.top}px)`; setTimeout(() => { const targetX = handRect.left + (handRect.width / 2) - 45; const targetY = handRect.top + (handRect.height / 2) - 63; dummyCard.style.transform = `translate(${targetX}px, ${targetY}px) rotate(${Math.random() * 10 - 5}deg)`; setTimeout(() => dummyCard.remove(), 500); }, delay); } }
