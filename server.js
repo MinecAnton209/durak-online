@@ -69,7 +69,9 @@ i18next
     });
 
 // Seeding and Services Initialization
-setTimeout(seedAchievements, 1000);
+if (process.env.NODE_ENV !== 'test') {
+    setTimeout(seedAchievements, 1000);
+}
 achievementService.init(io);
 
 // Session Middleware
@@ -190,9 +192,16 @@ app.use((req, res, next) => {
 });
 
 // Start Server and Services
-const onlineUsers = app.get('onlineUsers');
-startRoulette(io, onlineUsers);
+if (process.env.NODE_ENV !== 'test') {
+    const onlineUsers = app.get('onlineUsers');
+    startRoulette(io, onlineUsers);
+}
 
-server.listen(config.port, '0.0.0.0', () => {
-    console.log(`Server is running on port ${config.port}`);
-});
+
+if (require.main === module) {
+    server.listen(config.port, '0.0.0.0', () => {
+        console.log(`Server is running on port ${config.port}`);
+    });
+}
+
+module.exports = { app, server };
