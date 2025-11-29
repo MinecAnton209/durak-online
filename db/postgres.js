@@ -30,6 +30,7 @@ pool.query(`
         rd DOUBLE PRECISION DEFAULT 350.0,
         vol DOUBLE PRECISION DEFAULT 0.06,
         last_game_timestamp TIMESTAMPTZ,
+        telegram_id text UNIQUE,
         created_at TIMESTAMPTZ DEFAULT NOW()
         );
 `).then(() => console.log('Таблиця "users" в PostgreSQL готова до роботи з повною структурою.'))
@@ -311,6 +312,18 @@ pool.query(`
 `).then(() => console.log('Таблиця "push_subscriptions" в PostgreSQL готова.'))
     .catch(err => console.error('Помилка створення таблиці "push_subscriptions" в PostgreSQL:', err.stack));
 
+pool.query(`
+    DO $$
+    BEGIN
+        IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='telegram_id')
+        THEN
+            ALTER TABLE "users" ADD COLUMN telegram_id text UNIQUE;
+        END IF;
+    END;
+    $$;
+`).then(() => console.log('Перевірено наявність колонки telegram_id.'))
+    .catch(err => console.error('Помилка при перевірці/додаванні колонки telegram_id:', err));
+
 function formatSql(sql) {
     let i = 0;
     return sql.replace(/\?/g, () => `$${++i}`);
@@ -318,16 +331,40 @@ function formatSql(sql) {
 
 module.exports = {
     run: (sql, params, callback) => {
-        const formattedParams = params.map(p => (typeof p === 'object' && p !== null) ? JSON.stringify(p) : p);
-        pool.query(formatSql(sql), formattedParams, (err, res) => callback(err));
+        if (typeof params === 'function') {
+            callback = params;
+            params = [];
+        }
+        const safeParams = Array.isArray(params) ? params : [];
+
+        const formattedParams = safeParams.map(p => (typeof p === 'object' && p !== null) ? JSON.stringify(p) : p);
+        pool.query(formatSql(sql), formattedParams, (err, res) => {
+            if (callback) callback(err);
+        });
     },
     get: (sql, params, callback) => {
-        const formattedParams = params.map(p => (typeof p === 'object' && p !== null) ? JSON.stringify(p) : p);
-        pool.query(formatSql(sql), formattedParams, (err, res) => callback(err, res ? res.rows[0] : null));
+        if (typeof params === 'function') {
+            callback = params;
+            params = [];
+        }
+        const safeParams = Array.isArray(params) ? params : [];
+
+        const formattedParams = safeParams.map(p => (typeof p === 'object' && p !== null) ? JSON.stringify(p) : p);
+        pool.query(formatSql(sql), formattedParams, (err, res) => {
+            if (callback) callback(err, res ? res.rows[0] : null);
+        });
     },
     all: (sql, params, callback) => {
-        const formattedParams = params.map(p => (typeof p === 'object' && p !== null) ? JSON.stringify(p) : p);
-        pool.query(formatSql(sql), formattedParams, (err, res) => callback(err, res ? res.rows : []));
+        if (typeof params === 'function') {
+            callback = params;
+            params = [];
+        }
+        const safeParams = Array.isArray(params) ? params : [];
+
+        const formattedParams = safeParams.map(p => (typeof p === 'object' && p !== null) ? JSON.stringify(p) : p);
+        pool.query(formatSql(sql), formattedParams, (err, res) => {
+            if (callback) callback(err, res ? res.rows : []);
+        });
     },
     pool: pool
 };
