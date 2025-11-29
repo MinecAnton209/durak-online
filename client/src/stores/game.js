@@ -1,0 +1,270 @@
+import { defineStore } from 'pinia';
+import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
+import { useSocketStore } from './socket';
+import { useToastStore } from './toast';
+
+export const useGameStore = defineStore('game', () => {
+  const socketStore = useSocketStore();
+  const router = useRouter();
+  const toast = useToastStore();
+
+  const gameId = ref(null);
+  const playerId = ref(null);
+  const hostId = ref(null);
+  const players = ref([]);
+
+  const gameStatus = ref('lobby');
+  const isDealing = ref(false);
+
+  const tableCards = ref([]);
+  const myCards = ref([]);
+  const trumpCard = ref(null);
+  const deckCount = ref(0);
+
+  const winner = ref(null);
+  const winnerData = ref(null);
+  const rematchStatus = ref(null);
+
+  const isMyTurn = ref(false);
+  const canTake = ref(false);
+  const canPass = ref(false);
+
+  const chatLog = ref([]);
+  const unreadMessages = ref(0);
+  const musicState = ref({
+    currentTrackId: null,
+    isPlaying: false,
+    trackTitle: 'Тиша...',
+    suggester: null,
+    seekTimestamp: 0,
+    stateChangeTimestamp: 0
+  });
+
+  const isHost = computed(() => {
+    return hostId.value && playerId.value && hostId.value === playerId.value;
+  });
+
+  const myPlayer = computed(() => players.value.find(p => p.id === playerId.value));
+
+  const isAttacker = computed(() => myPlayer.value?.isAttacker || false);
+  const isDefender = computed(() => myPlayer.value?.isDefender || false);
+
+  const attackerId = computed(() => players.value.find(p => p.isAttacker)?.id);
+  const defenderId = computed(() => players.value.find(p => p.isDefender)?.id);
+
+  const turnPlayerId = computed(() => {
+    if (tableCards.value.length % 2 === 0) return attackerId.value;
+    return defenderId.value;
+  });
+
+  const RANK_VALUES = { '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+  function getRankValue(rank) { return RANK_VALUES[rank] || 0; }
+
+  function canPlayCard(card) {
+    if (isDealing.value) return false;
+    if (!isMyTurn.value) return false;
+
+    if (isAttacker.value) {
+      if (tableCards.value.length === 0) return true;
+      const ranksOnTable = tableCards.value.map(c => c.rank);
+      return ranksOnTable.includes(card.rank);
+    }
+
+    if (isDefender.value) {
+      const attackCard = tableCards.value[tableCards.value.length - 1];
+      if (!attackCard) return false;
+
+      if (card.suit === attackCard.suit) {
+        return getRankValue(card.rank) > getRankValue(attackCard.rank);
+      }
+      if (trumpCard.value && card.suit === trumpCard.value.suit && attackCard.suit !== trumpCard.value.suit) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function initListeners() {
+    const socket = socketStore.socket;
+    if (!socket) return;
+
+    socket.off('gameCreated'); socket.off('joinSuccess'); socket.off('lobbyStateUpdate');
+    socket.off('playerJoined'); socket.off('playerLeft'); socket.off('gameStateUpdate');
+    socket.off('invalidMove'); socket.off('musicStateUpdate'); socket.off('newLogEntry');
+    socket.off('rematchUpdate');
+
+    socket.on('gameCreated', (data) => {
+      resetState();
+      gameId.value = data.gameId;
+      playerId.value = data.playerId;
+      hostId.value = data.playerId;
+      gameStatus.value = 'lobby';
+      router.push(`/game/${data.gameId}`);
+      socketStore.emit('getLobbyState', { gameId: data.gameId });
+    });
+
+    socket.on('joinSuccess', (data) => {
+      resetState();
+      gameId.value = data.gameId;
+      playerId.value = data.playerId;
+      gameStatus.value = 'lobby';
+      router.push(`/game/${data.gameId}`);
+      socketStore.emit('getLobbyState', { gameId: data.gameId });
+    });
+
+    socket.on('lobbyStateUpdate', (data) => {
+      players.value = data.players || [];
+      if (data.hostId) {
+        hostId.value = data.hostId;
+      }
+    });
+
+    socket.on('playerJoined', () => { if (gameId.value) socketStore.emit('getLobbyState', { gameId: gameId.value }); });
+    socket.on('playerLeft', () => { if (gameId.value) socketStore.emit('getLobbyState', { gameId: gameId.value }); });
+
+    socket.on('gameStateUpdate', (state) => {
+      console.log('⚡ Game State:', state);
+
+      if (!state.winner) {
+        winnerData.value = null;
+        winner.value = null;
+        rematchStatus.value = null;
+      }
+
+      if (gameStatus.value === 'lobby' && !state.winner && state.trumpCard) {
+        isDealing.value = true;
+      }
+
+      gameStatus.value = state.winner ? 'finished' : 'playing';
+
+      tableCards.value = state.table || [];
+      trumpCard.value = state.trumpCard;
+      deckCount.value = state.deckCardCount;
+      players.value = state.players;
+
+      if (state.hostId) {
+        hostId.value = state.hostId;
+      }
+
+      isMyTurn.value = state.isYourTurn;
+      canTake.value = state.canTake;
+      canPass.value = state.canPass;
+
+      const currentSocketId = socketStore.socket?.id;
+      const myId = playerId.value || currentSocketId;
+      if (!playerId.value && currentSocketId) playerId.value = currentSocketId;
+
+      const me = state.players.find(p => p.id === myId);
+      if (me) myCards.value = me.cards || [];
+      else if (state.isSpectator) myCards.value = [];
+
+      if (state.winner) {
+        winner.value = state.winner;
+        winnerData.value = state.winner;
+        isDealing.value = false;
+
+        const amIWinner = state.winner.winners && state.winner.winners.some(w => w.id === myId);
+        const amILoser = state.winner.loser && state.winner.loser.id === myId;
+
+        if (amIWinner) try { new Audio('/sounds/win.mp3').play().catch(() => { }); } catch (e) { }
+        else if (amILoser) try { new Audio('/sounds/lose.mp3').play().catch(() => { }); } catch (e) { }
+      }
+
+      if (state.musicState) {
+        musicState.value = state.musicState;
+      }
+    });
+
+    socket.on('musicStateUpdate', (state) => musicState.value = state);
+
+    socket.on('newLogEntry', (entry) => {
+      chatLog.value.push(entry);
+      unreadMessages.value++;
+      if (chatLog.value.length > 50) chatLog.value.shift();
+    });
+
+    socket.on('invalidMove', ({ reason }) => toast.addToast('⚠️ ' + reason, 'warning'));
+    socket.on('rematchUpdate', (data) => rematchStatus.value = data);
+  }
+
+  function resetState() {
+    gameStatus.value = 'lobby';
+    tableCards.value = [];
+    myCards.value = [];
+    winnerData.value = null;
+    rematchStatus.value = null;
+    isMyTurn.value = false;
+    hostId.value = null;
+  }
+
+  function stopDealingAnimation() { isDealing.value = false; }
+
+  function createGame(settings) { socketStore.emit('createGame', settings); }
+  function joinGame(id, name) { socketStore.emit('joinGame', { gameId: id, playerName: name }); }
+  function makeMove(card) {
+    socketStore.emit('makeMove', { gameId: gameId.value, card });
+    try { new Audio('/sounds/play.mp3').play().catch(() => { }); } catch (e) { }
+  }
+  function takeCards() {
+    socketStore.emit('takeCards', { gameId: gameId.value });
+    try { new Audio('/sounds/take.mp3').play().catch(() => { }); } catch (e) { }
+  }
+  function passTurn() {
+    socketStore.emit('passTurn', { gameId: gameId.value });
+    try { new Audio('/sounds/play.mp3').play().catch(() => { }); } catch (e) { }
+  }
+
+  function requestRematch() {
+    if (!gameId.value) return;
+    socketStore.emit('requestRematch', { gameId: gameId.value });
+  }
+
+  function leaveGame() {
+    gameId.value = null;
+    playerId.value = null;
+    hostId.value = null;
+    resetState();
+    router.push('/');
+  }
+
+  function sendMessage(text) { if (text.trim()) socketStore.emit('sendMessage', { gameId: gameId.value, message: text }); }
+  function markChatRead() { unreadMessages.value = 0; }
+
+  function changeTrack(url) {
+    const id = getYouTubeID(url);
+    if (!id) return toast.addToast("Невірне посилання!", 'error');
+    const title = prompt("Назва треку:", "Музика");
+    if (!title) return;
+    socketStore.emit('hostChangeTrack', { gameId: gameId.value, trackId: id, trackTitle: title });
+  }
+
+  function suggestTrack(url) {
+    const id = getYouTubeID(url);
+    if (!id) return toast.addToast("Невірне посилання!", 'error');
+    const title = prompt("Назва треку:", "Пропозиція");
+    if (title) {
+      socketStore.emit('suggestTrack', { gameId: gameId.value, trackId: id, trackTitle: title });
+      toast.addToast("Надіслано хосту!", 'success');
+    }
+  }
+
+  function getYouTubeID(url) {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  }
+
+  return {
+    gameId, playerId, players, hostId,
+    isHost,
+    gameStatus, tableCards, myCards, trumpCard, deckCount,
+    turnPlayerId, attackerId, defenderId,
+    isMyTurn, isAttacker, isDefender,
+    canTake, canPass, isDealing, winnerData, rematchStatus,
+    chatLog, unreadMessages, musicState,
+    initListeners, createGame, joinGame, makeMove, takeCards, passTurn,
+    canPlayCard, stopDealingAnimation, leaveGame, requestRematch,
+    sendMessage, markChatRead, changeTrack, suggestTrack
+  };
+});

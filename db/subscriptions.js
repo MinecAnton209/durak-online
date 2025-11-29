@@ -8,13 +8,15 @@ async function saveSubscription(userId, subscriptionData) {
             ON CONFLICT(user_id) DO UPDATE SET
                 subscription_data = excluded.subscription_data;
         `;
-        db.run(query, [userId, subscriptionData], (err) => {
+
+        const dataString = JSON.stringify(subscriptionData);
+
+        db.run(query, [userId, dataString], (err) => {
             if (err) return reject(err);
             resolve();
         });
     });
 }
-
 async function deleteSubscription(userId) {
     return new Promise((resolve, reject) => {
         const query = `DELETE FROM push_subscriptions WHERE user_id = ?;`;
@@ -32,11 +34,15 @@ async function findSubscriptionByUserId(userId) {
             if (err) return reject(err);
             if (!row) return resolve(null);
 
-            const data = typeof row.subscription_data === 'string' 
-                ? JSON.parse(row.subscription_data) 
-                : row.subscription_data;
-            
-            resolve(data);
+            try {
+                const data = typeof row.subscription_data === 'string'
+                    ? JSON.parse(row.subscription_data)
+                    : row.subscription_data;
+                resolve(data);
+            } catch (parseError) {
+                console.error(`Error parsing subscription for user ${userId}:`, parseError);
+                resolve(null);
+            }
         });
     });
 }

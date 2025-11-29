@@ -18,7 +18,7 @@ const achievementRoutes = require('./routes/achievements.js');
 const adminRoutes = require('./routes/admin.js');
 const friendsRoutes = require('./routes/friends.js');
 const notificationsRoutes = require('./routes/notifications.js');
-const {seedAchievements} = require('./db/seed.js');
+const { seedAchievements } = require('./db/seed.js');
 const achievementService = require('./services/achievementService.js');
 const ratingService = require('./services/ratingService.js');
 const statsService = require('./services/statsService.js');
@@ -42,7 +42,7 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {cors: {origin: "*"}});
+const io = socketIo(server, { cors: { origin: "*" } });
 const onlineUsers = new Map();
 app.set('onlineUsers', onlineUsers);
 
@@ -60,7 +60,6 @@ const RESULTS_TIME = 10;
 const ROULETTE_INTERVAL = (BETTING_TIME + RESULTS_TIME) * 1000;
 const ROULETTE_RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
 
-
 let isMaintenanceScheduled = false;
 
 let maintenanceMode = {
@@ -70,6 +69,8 @@ let maintenanceMode = {
     startTime: null,
     warningMessage: ""
 };
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.set('maintenanceMode', maintenanceMode);
 
 app.set('socketio', io);
@@ -97,8 +98,8 @@ achievementService.init(io);
 
 const sessionMiddleware = session({
     store: (process.env.DB_CLIENT === 'postgres' && process.env.DATABASE_URL) ?
-        new (require('connect-pg-simple')(session))({pool: db.pool, tableName: 'user_sessions'}) :
-        new (require('connect-sqlite3')(session))({db: 'database.sqlite', dir: './data'}),
+        new (require('connect-pg-simple')(session))({ pool: db.pool, tableName: 'user_sessions' }) :
+        new (require('connect-sqlite3')(session))({ db: 'database.sqlite', dir: './data' }),
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
@@ -174,36 +175,11 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/friends', friendsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 
-app.get('/settings', (req, res) => {
-    if (!req.session.user) {
-        return res.redirect('/');
-    }
-    res.sendFile(path.join(__dirname, 'public', 'settings.html'));
-});
-
-app.get('/roulette', (req, res) => {
-    if (!req.session.user) {
-        return res.redirect('/');
-    }
-    res.sendFile(path.join(__dirname, 'public', 'roulette.html'));
-});
-
-app.use((err, req, res, next) => {
-    console.error("Critical server error:");
-    console.error(err.stack);
-
-    if (req.originalUrl.startsWith('/api/')) {
-        return res.status(500).json({ error: 'Internal Server Error' });
-    }
-
-    res.status(500).sendFile(path.join(__dirname, 'public', 'error.html'));
-});
-
-app.use((req, res, next) => {
-    if (req.originalUrl.startsWith('/api/')) {
+app.get(/.*/, (req, res) => {
+    if (req.originalUrl.startsWith('/api')) {
         return res.status(404).json({ error: 'Not Found' });
     }
-    res.status(404).sendFile(path.join(__dirname, 'public', 'error.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 io.use((socket, next) => {
@@ -244,7 +220,7 @@ function createDeck(deckSize = 36) {
     const deck = [];
     for (const suit of SUITS) {
         for (const rank of ranks) {
-            deck.push({suit, rank});
+            deck.push({ suit, rank });
         }
     }
     for (let i = deck.length - 1; i > 0; i--) {
@@ -308,15 +284,15 @@ function addPlayerToGame(socket, game, playerName) {
         isVerified: sessionUser ? sessionUser.isVerified : false,
         is_muted: sessionUser ? sessionUser.is_muted : false,
         cards: [],
-        gameStats: {cardsTaken: 0, successfulDefenses: 0, cardsBeatenInDefense: 0}
+        gameStats: { cardsTaken: 0, successfulDefenses: 0, cardsBeatenInDefense: 0 }
     };
     game.playerOrder.push(socket.id);
 }
 
 function logEvent(game, message, options = {}) {
     if (!game.log) game.log = [];
-    const timestamp = new Date().toLocaleTimeString('uk-UA', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
-    const logEntry = {timestamp, ...options};
+    const timestamp = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const logEntry = { timestamp, ...options };
     if (typeof message === 'string' && !options.i18nKey) {
         logEntry.message = message;
     }
@@ -357,7 +333,7 @@ async function startGame(gameId) {
     }
     game.startTime = new Date();
     game.deck = createDeck(game.settings.deckSize);
-    game.trumpCard = game.deck.length > 0 ? game.deck[game.deck.length - 1] : {suit: '♠', rank: ''};
+    game.trumpCard = game.deck.length > 0 ? game.deck[game.deck.length - 1] : { suit: '♠', rank: '' };
     game.trumpSuit = game.trumpCard.suit;
     let firstAttackerIndex = 0;
     let minTrumpRank = Infinity;
@@ -396,7 +372,7 @@ async function startGame(gameId) {
     });
     logEvent(game, null, {
         i18nKey: 'log_game_start',
-        options: {trump: game.trumpSuit, player: game.players[game.playerOrder[firstAttackerIndex]].name}
+        options: { trump: game.trumpSuit, player: game.players[game.playerOrder[firstAttackerIndex]].name }
     });
     updateTurn(game, firstAttackerIndex);
     broadcastGameState(gameId);
@@ -415,7 +391,7 @@ function refillHands(game) {
                 player.cards.push(...drawnCards);
                 logEvent(game, null, {
                     i18nKey: 'log_draw_cards',
-                    options: {name: player.name, count: drawnCards.length}
+                    options: { name: player.name, count: drawnCards.length }
                 });
             }
         }
@@ -428,7 +404,7 @@ function checkGameOver(game) {
         if (playersWithCards.length <= 1) {
             const loser = playersWithCards.length === 1 ? playersWithCards[0] : null;
             const winners = game.playerOrder.map(id => game.players[id]).filter(p => p && p.cards.length === 0);
-            game.winner = {winners, loser};
+            game.winner = { winners, loser };
             return true;
         }
     }
@@ -568,7 +544,7 @@ function broadcastGameState(gameId) {
                         isVerified: p.isVerified,
                         streak: p.streak || 0,
                         cardBackStyle: p.cardBackStyle || 'default',
-                        cards: p.id === playerId ? p.cards : p.cards.map(() => ({hidden: true})),
+                        cards: p.id === playerId ? p.cards : p.cards.map(() => ({ hidden: true })),
                         isAttacker: p.id === game.attackerId,
                         isDefender: p.id === game.defenderId,
                     };
@@ -631,7 +607,6 @@ function rouletteTick() {
         rouletteState.timer = RESULTS_TIME;
 
         const winningNumber = rouletteState.winningNumber;
-        console.log(`[Roulette] Winning number is ${winningNumber}`);
 
         const payoutPromises = [];
 
@@ -660,7 +635,7 @@ function rouletteTick() {
                         const userSocketId = onlineUsers.get(userIdNum);
                         if (userSocketId) {
                             return dbGet('SELECT coins FROM users WHERE id = ?', [userIdNum]).then(user => {
-                                if(user) {
+                                if (user) {
                                     io.to(userSocketId).emit('updateBalance', { coins: user.coins });
                                     io.to(userSocketId).emit('roulette:win', { amount: totalPayout });
 
@@ -678,7 +653,6 @@ function rouletteTick() {
         }
 
         Promise.all(payoutPromises)
-            .then(() => console.log('[Roulette] All payouts processed.'))
             .catch(err => console.error('[Roulette] Error processing payouts:', err));
 
         io.emit('roulette:updateState', rouletteState);
@@ -740,7 +714,7 @@ io.on('connection', (socket) => {
                 const reasonText = dbUser.ban_reason || i18next.t('ban_reason_not_specified');
                 socket.emit('forceDisconnect', {
                     i18nKey: 'error_account_banned_with_reason',
-                    options: {reason: reasonText}
+                    options: { reason: reasonText }
                 });
                 socket.disconnect(true);
             }
@@ -763,10 +737,10 @@ io.on('connection', (socket) => {
                 return socket.emit('error', { i18nKey: 'error_not_enough_coins_host' });
             }
         }
-        const {playerName} = settings;
+        const { playerName } = settings;
         let gameId = (settings.customId || Math.random().toString(36).substr(2, 6)).toUpperCase();
         if (games[gameId]) {
-            return socket.emit('error', {i18nKey: 'error_game_exists', text: `Гра з ID "${gameId}" вже існує.`});
+            return socket.emit('error', { i18nKey: 'error_game_exists', text: `Гра з ID "${gameId}" вже існує.` });
         }
         socket.join(gameId);
         games[gameId] = {
@@ -799,22 +773,22 @@ io.on('connection', (socket) => {
             }
         };
         addPlayerToGame(socket, games[gameId], playerName);
-        socket.emit('gameCreated', {gameId, playerId: socket.id});
+        socket.emit('gameCreated', { gameId, playerId: socket.id });
     });
-    socket.on('joinGame', async ({gameId, playerName}) => {
+    socket.on('joinGame', async ({ gameId, playerName }) => {
         const maintenanceMode = app.get('maintenanceMode');
         if (maintenanceMode.startTime && Date.now() < maintenanceMode.startTime) {
             return socket.emit('error', { i18nKey: 'error_maintenance_scheduled' });
         }
         if (!gameId) {
-            return socket.emit('error', {i18nKey: 'error_no_game_id'});
+            return socket.emit('error', { i18nKey: 'error_no_game_id' });
         }
 
         const upperCaseGameId = gameId.toUpperCase();
         const game = games[upperCaseGameId];
 
         if (!game) {
-            return socket.emit('error', {i18nKey: 'error_room_full_or_not_exist'});
+            return socket.emit('error', { i18nKey: 'error_room_full_or_not_exist' });
         }
 
         const sessionUser = socket.request.session?.user;
@@ -854,16 +828,16 @@ io.on('connection', (socket) => {
         if (game.playerOrder.length < game.settings.maxPlayers) {
             socket.join(upperCaseGameId);
             addPlayerToGame(socket, game, playerName);
-            socket.emit('joinSuccess', {playerId: socket.id, gameId: upperCaseGameId});
+            socket.emit('joinSuccess', { playerId: socket.id, gameId: upperCaseGameId });
             io.to(upperCaseGameId).emit('playerJoined');
             if (game.musicState.currentTrackId) {
                 socket.emit('musicStateUpdate', game.musicState);
             }
         } else {
-            socket.emit('error', {i18nKey: 'error_room_full_or_not_exist'});
+            socket.emit('error', { i18nKey: 'error_room_full_or_not_exist' });
         }
     });
-    socket.on('getLobbyState', ({gameId}) => {
+    socket.on('getLobbyState', ({ gameId }) => {
         const game = games[gameId];
         if (game) {
             const playersForLobby = Object.values(game.players).map(p => ({
@@ -880,7 +854,7 @@ io.on('connection', (socket) => {
             });
         }
     });
-    socket.on('forceStartGame', ({gameId}) => {
+    socket.on('forceStartGame', ({ gameId }) => {
         const game = games[gameId];
         if (!game || game.hostId !== socket.id) return;
         if (game.playerOrder.length >= 2) {
@@ -888,12 +862,12 @@ io.on('connection', (socket) => {
             startGame(gameId);
         }
     });
-    socket.on('sendMessage', ({gameId, message}) => {
+    socket.on('sendMessage', ({ gameId, message }) => {
         const game = games[gameId];
         const player = game ? game.players[socket.id] : null;
         if (!game || !player || !message) return;
         if (player.is_muted) {
-            return socket.emit('systemMessage', {i18nKey: 'error_chat_muted', type: 'error'});
+            return socket.emit('systemMessage', { i18nKey: 'error_chat_muted', type: 'error' });
         }
         const trimmedMessage = message.trim();
         if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) {
@@ -906,7 +880,7 @@ io.on('connection', (socket) => {
             logEvent(game, chatMessage);
         }
     });
-    socket.on('makeMove', ({gameId, card}) => {
+    socket.on('makeMove', ({ gameId, card }) => {
         const game = games[gameId];
         if (!game || !game.players[socket.id] || game.winner) return;
         game.lastAction = 'move';
@@ -914,39 +888,39 @@ io.on('connection', (socket) => {
         const isDefender = socket.id === game.defenderId;
         const canToss = !isDefender && game.table.length > 0 && game.table.length % 2 === 0;
         if (game.turn !== socket.id && !canToss) {
-            return socket.emit('invalidMove', {reason: "error_invalid_move_turn"});
+            return socket.emit('invalidMove', { reason: "error_invalid_move_turn" });
         }
         if (!player.cards.some(c => c.rank === card.rank && c.suit === card.suit)) {
-            return socket.emit('invalidMove', {reason: "error_invalid_move_no_card"});
+            return socket.emit('invalidMove', { reason: "error_invalid_move_no_card" });
         }
         if (isDefender) {
             if (!canBeat(game.table[game.table.length - 1], card, game.trumpSuit)) {
-                return socket.emit('invalidMove', {reason: "error_invalid_move_cannot_beat"});
+                return socket.emit('invalidMove', { reason: "error_invalid_move_cannot_beat" });
             }
             logEvent(game, null, {
                 i18nKey: 'log_defend',
-                options: {name: player.name, rank: card.rank, suit: card.suit}
+                options: { name: player.name, rank: card.rank, suit: card.suit }
             });
             game.turn = game.attackerId;
         } else {
             const isAttacking = game.attackerId === socket.id;
             const logKey = isAttacking ? 'log_attack' : 'log_toss';
             if (game.table.length > 0 && !game.table.some(c => c.rank === card.rank)) {
-                return socket.emit('invalidMove', {reason: "error_invalid_move_wrong_rank"});
+                return socket.emit('invalidMove', { reason: "error_invalid_move_wrong_rank" });
             }
             const defender = game.players[game.defenderId];
             if (!defender) return;
             if ((game.table.length / 2) >= defender.cards.length) {
-                return socket.emit('invalidMove', {reason: "error_invalid_move_toss_limit"});
+                return socket.emit('invalidMove', { reason: "error_invalid_move_toss_limit" });
             }
-            logEvent(game, null, {i18nKey: logKey, options: {name: player.name, rank: card.rank, suit: card.suit}});
+            logEvent(game, null, { i18nKey: logKey, options: { name: player.name, rank: card.rank, suit: card.suit } });
             game.turn = game.defenderId;
         }
         player.cards = player.cards.filter(c => !(c.rank === card.rank && c.suit === card.suit));
         game.table.push(card);
         broadcastGameState(gameId);
     });
-    socket.on('passTurn', ({gameId}) => {
+    socket.on('passTurn', ({ gameId }) => {
         const game = games[gameId];
         if (!game || game.attackerId !== socket.id || game.table.length === 0 || game.table.length % 2 !== 0 || game.winner) return;
         game.lastAction = 'pass';
@@ -957,7 +931,7 @@ io.on('connection', (socket) => {
             defenderStats.successfulDefenses += 1;
             defenderStats.cardsBeatenInDefense += game.table.length / 2;
             achievementService.checkInGameAchievements(game, defenderIdBeforeRefill, 'passTurn');
-            logEvent(game, null, {i18nKey: 'log_pass', options: {name: defender.name}});
+            logEvent(game, null, { i18nKey: 'log_pass', options: { name: defender.name } });
         }
         game.discardPile.push(...game.table);
         game.table = [];
@@ -971,7 +945,7 @@ io.on('connection', (socket) => {
         updateTurn(game, defenderIndex);
         broadcastGameState(gameId);
     });
-    socket.on('takeCards', ({gameId}) => {
+    socket.on('takeCards', ({ gameId }) => {
         const game = games[gameId];
         if (!game || game.defenderId !== socket.id || game.table.length === 0 || game.winner) return;
         game.lastAction = 'take';
@@ -986,7 +960,7 @@ io.on('connection', (socket) => {
                     if (err) console.error(`Помилка оновлення cards_taken_total для гри ${gameId}:`, err.message);
                 });
             }
-            logEvent(game, null, {i18nKey: 'log_take', options: {name: defender.name}});
+            logEvent(game, null, { i18nKey: 'log_take', options: { name: defender.name } });
             defender.cards.push(...game.table);
         }
         game.table = [];
@@ -1000,12 +974,12 @@ io.on('connection', (socket) => {
         updateTurn(game, nextPlayerIndex);
         broadcastGameState(gameId);
     });
-    socket.on('requestRematch', ({gameId}) => {
+    socket.on('requestRematch', ({ gameId }) => {
         const game = games[gameId];
         if (!game || !game.players[socket.id]) return;
         game.rematchVotes.add(socket.id);
         const remainingPlayers = game.playerOrder.filter(id => game.players[id]);
-        io.to(gameId).emit('rematchUpdate', {votes: game.rematchVotes.size, total: remainingPlayers.length});
+        io.to(gameId).emit('rematchUpdate', { votes: game.rematchVotes.size, total: remainingPlayers.length });
         if (game.rematchVotes.size === remainingPlayers.length && remainingPlayers.length >= 2) {
             game.table = [];
             game.discardPile = [];
@@ -1032,6 +1006,7 @@ io.on('connection', (socket) => {
         } else {
             console.log(`Клієнт відключився: ${socket.id} (гість)`);
         }
+
         for (const gameId in games) {
             const game = games[gameId];
             const spectatorIndex = game.spectators.indexOf(socket.id);
@@ -1039,6 +1014,7 @@ io.on('connection', (socket) => {
                 game.spectators.splice(spectatorIndex, 1);
                 console.log(`Спостерігач (socket ID: ${socket.id}) покинув гру ${gameId}`);
             }
+
             if (game.players[socket.id]) {
                 const disconnectedPlayer = game.players[socket.id];
                 disconnectedUsername = disconnectedPlayer.name;
@@ -1046,20 +1022,28 @@ io.on('connection', (socket) => {
                 delete game.players[socket.id];
                 game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
                 game.rematchVotes.delete(socket.id);
+
                 if (!game.trumpSuit) {
                     if (game.hostId === socket.id) {
-                        io.to(gameId).emit('error', {i18nKey: 'error_host_left_lobby'});
-                        delete games[gameId];
-                        console.log(`Хост вийшов з лобі ${gameId}. Гру видалено.`);
+                        if (game.playerOrder.length > 0) {
+                            game.hostId = game.playerOrder[0];
+                            console.log(`Хост вийшов. Новий хост: ${game.players[game.hostId].name}`);
+                            io.to(gameId).emit('playerJoined');
+                        } else {
+                            io.to(gameId).emit('error', { i18nKey: 'error_host_left_lobby' });
+                            delete games[gameId];
+                            console.log(`Хост вийшов з лобі ${gameId}. Гру видалено.`);
+                        }
                     } else {
                         io.to(gameId).emit('playerJoined');
                     }
-                } else if (!game.winner) {
+                }
+                else if (!game.winner) {
                     if (game.playerOrder.length < 2) {
                         game.winner = {
                             reason: {
                                 i18nKey: 'game_over_player_left',
-                                options: {player: disconnectedPlayer.name}
+                                options: { player: disconnectedPlayer.name }
                             }
                         };
                         updateStatsAfterGame(game);
@@ -1067,8 +1051,9 @@ io.on('connection', (socket) => {
                     } else {
                         logEvent(game, null, {
                             i18nKey: 'log_player_left_continue',
-                            options: {name: disconnectedPlayer.name}
+                            options: { name: disconnectedPlayer.name }
                         });
+
                         if (game.turn === socket.id) {
                             const attackerIndex = game.playerOrder.indexOf(game.attackerId);
                             if (socket.id === game.attackerId || attackerIndex === -1) {
@@ -1080,7 +1065,8 @@ io.on('connection', (socket) => {
                         }
                         broadcastGameState(gameId);
                     }
-                } else {
+                }
+                else {
                     const remainingPlayers = game.playerOrder.filter(id => game.players[id]);
                     if (remainingPlayers.length > 0) {
                         io.to(gameId).emit('rematchUpdate', {
@@ -1089,7 +1075,8 @@ io.on('connection', (socket) => {
                         });
                     }
                 }
-                if (Object.keys(game.players).length === 0) {
+
+                if (game && games[gameId] && Object.keys(game.players).length === 0) {
                     console.log(`Гра ${gameId} порожня, видаляємо.`);
                     delete games[gameId];
                 }
@@ -1097,17 +1084,17 @@ io.on('connection', (socket) => {
             }
         }
     });
-    socket.on('adminSpectateGame', ({gameId}) => {
+    socket.on('adminSpectateGame', ({ gameId }) => {
         const sessionUser = socket.request.session.user;
         if (!sessionUser || !sessionUser.is_admin) {
-            return socket.emit('error', {i18nKey: 'error_forbidden_admin_only'});
+            return socket.emit('error', { i18nKey: 'error_forbidden_admin_only' });
         }
         const game = games[gameId];
         if (!game) {
-            return socket.emit('error', {i18nKey: 'error_game_not_found', text: gameId});
+            return socket.emit('error', { i18nKey: 'error_game_not_found', text: gameId });
         }
         if (game.players[socket.id]) {
-            return socket.emit('error', {i18nKey: 'error_already_in_game_as_player'});
+            return socket.emit('error', { i18nKey: 'error_already_in_game_as_player' });
         }
         if (game.spectators.includes(socket.id)) {
             broadcastGameState(gameId);
@@ -1116,11 +1103,11 @@ io.on('connection', (socket) => {
         game.spectators.push(socket.id);
         socket.join(gameId);
         console.log(`Адмін ${sessionUser.username} почав спостерігати за грою ${gameId}`);
-        logEvent(game, null, {i18nKey: 'log_admin_spectating', options: {adminName: sessionUser.username}});
+        logEvent(game, null, { i18nKey: 'log_admin_spectating', options: { adminName: sessionUser.username } });
         broadcastGameState(gameId);
-        socket.emit('spectateSuccess', {gameId});
+        socket.emit('spectateSuccess', { gameId });
     });
-    socket.on('hostChangeTrack', ({gameId, trackId, trackTitle}) => {
+    socket.on('hostChangeTrack', ({ gameId, trackId, trackTitle }) => {
         const game = games[gameId];
         if (!game || socket.id !== game.hostId) return;
         console.log(`[Music] Хост гри ${gameId} змінив трек на: ${trackTitle} (ID: ${trackId})`);
@@ -1132,7 +1119,7 @@ io.on('connection', (socket) => {
         game.musicState.suggester = game.players[socket.id]?.name;
         io.to(gameId).emit('musicStateUpdate', game.musicState);
     });
-    socket.on('hostTogglePlayback', ({gameId, isPlaying, currentTime}) => {
+    socket.on('hostTogglePlayback', ({ gameId, isPlaying, currentTime }) => {
         const game = games[gameId];
         if (!game || socket.id !== game.hostId) return;
         console.log(`[Music] Хост гри ${gameId} змінив стан відтворення на: ${isPlaying}`);
@@ -1141,14 +1128,14 @@ io.on('connection', (socket) => {
         game.musicState.seekTimestamp = currentTime || 0;
         io.to(gameId).emit('musicStateUpdate', game.musicState);
     });
-    socket.on('suggestTrack', ({gameId, trackId, trackTitle}) => {
+    socket.on('suggestTrack', ({ gameId, trackId, trackTitle }) => {
         const game = games[gameId];
         const suggester = game ? game.players[socket.id] : null;
         if (!game || !game.hostId || !suggester) return;
         if (socket.id === game.hostId) return;
         const hostSocket = io.sockets.sockets.get(game.hostId);
         if (hostSocket) {
-            hostSocket.emit('trackSuggested', {trackId, trackTitle, suggesterName: suggester.name});
+            hostSocket.emit('trackSuggested', { trackId, trackTitle, suggesterName: suggester.name });
         }
     });
     let maintenanceCountdownInterval = null;
@@ -1183,8 +1170,8 @@ io.on('connection', (socket) => {
         maintenanceCountdownInterval = setInterval(updateCountdown, 1000);
         updateCountdown();
 
-        if(createGameBtn) createGameBtn.disabled = true;
-        if(joinGameBtn) joinGameBtn.disabled = true;
+        if (createGameBtn) createGameBtn.disabled = true;
+        if (joinGameBtn) joinGameBtn.disabled = true;
     });
 
     socket.on('maintenanceCancelled', () => {
@@ -1194,8 +1181,8 @@ io.on('connection', (socket) => {
         if (maintenanceBanner) maintenanceBanner.style.display = 'none';
         if (maintenanceCountdownInterval) clearInterval(maintenanceCountdownInterval);
 
-        if(createGameBtn) createGameBtn.disabled = false;
-        if(joinGameBtn) joinGameBtn.disabled = false;
+        if (createGameBtn) createGameBtn.disabled = false;
+        if (joinGameBtn) joinGameBtn.disabled = false;
     });
     socket.on('friend:invite', async ({ toUserId, gameId }) => {
         const sessionUser = socket.request.session?.user;
@@ -1237,7 +1224,7 @@ io.on('connection', (socket) => {
             const payload = {
                 title: i18next.t('push_invite_title', { ns: 'translation' }),
                 body: i18next.t('push_invite_body', { username: sessionUser.username, ns: 'translation' }),
-                url: `/?gameId=${gameId}`
+                url: `/game/${gameId}`
             };
 
             await notificationService.sendNotification(targetUserId, payload);
