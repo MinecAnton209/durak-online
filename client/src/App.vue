@@ -8,7 +8,9 @@ import ToastContainer from '@/components/ui/ToastContainer.vue';
 import { useNotificationStore } from '@/stores/notifications';
 import GameInviteModal from '@/components/game/GameInviteModal.vue';
 import { useFriendsStore } from '@/stores/friends';
+import { useTelegramStore } from '@/stores/telegram';
 
+const tgStore = useTelegramStore();
 const authStore = useAuthStore();
 const socketStore = useSocketStore();
 const gameStore = useGameStore();
@@ -16,6 +18,8 @@ const notifStore = useNotificationStore();
 const friendsStore = useFriendsStore();
 
 onMounted(() => {
+  tgStore.init();
+
   authStore.checkSession();
 
   socketStore.connect();
