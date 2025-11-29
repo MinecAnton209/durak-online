@@ -663,7 +663,6 @@ function rouletteTick() {
     rouletteState.timer = BETTING_TIME;
     rouletteState.winningNumber = null;
     rouletteState.bets = {};
-    console.log('[Roulette] New round started. Accepting bets.');
     io.emit('roulette:updateState', rouletteState);
 
     setTimeout(() => {
