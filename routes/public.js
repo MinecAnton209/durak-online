@@ -21,7 +21,7 @@ router.get('/leaderboard', (req, res) => {
     const sql = `
         SELECT id, username, rating, wins, win_streak, is_verified
         FROM users
-        WHERE (is_banned = 0 OR is_banned = FALSE)
+        WHERE is_banned = FALSE
         ORDER BY ${orderByColumn} DESC
             LIMIT ?
     `;

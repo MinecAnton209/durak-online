@@ -65,7 +65,7 @@ async function getFriendships(userId) {
             FROM friends f
                      JOIN users u ON u.id = (CASE WHEN f.user1_id = ? THEN f.user2_id ELSE f.user1_id END)
             WHERE (f.user1_id = ? OR f.user2_id = ?)
-              AND (u.is_banned = 0 OR u.is_banned = FALSE);
+              AND u.is_banned = FALSE;
         `;
 
         db.all(query, [userId, userId, userId, userId], (err, rows) => {
@@ -103,7 +103,7 @@ async function findUsersByNickname(searchTerm, currentUserId) {
                 LOWER(u.username) LIKE LOWER(?)
               AND u.id != ?
                 AND f.id IS NULL
-                AND (u.is_banned = 0 OR u.is_banned = FALSE)
+                AND u.is_banned = FALSE
             LIMIT 10;
         `;
 
