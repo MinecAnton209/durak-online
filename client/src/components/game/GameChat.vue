@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, nextTick, onUpdated } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import { useGameStore } from '@/stores/game';
 import { useI18n } from 'vue-i18n';
 

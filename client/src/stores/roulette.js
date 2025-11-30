@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { useSocketStore } from './socket';
 import { useAuthStore } from './auth';
 import { useToastStore } from './toast';
+import i18n from '@/i18n';
 
 export const useRouletteStore = defineStore('roulette', () => {
   const socketStore = useSocketStore();
@@ -54,8 +55,8 @@ export const useRouletteStore = defineStore('roulette', () => {
     });
 
     socket.on('roulette:win', ({ amount }) => {
-      toast.addToast(`🎉 Ви виграли ${amount} монет!`, 'success', 5000);
-      try { new Audio('/sounds/win.mp3').play().catch(() => { }); } catch (e) { }
+      toast.addToast(i18n.global.t('roulette_win_coins', { amount }), 'success', 5000);
+      new Audio('/sounds/win.mp3').play().catch(() => null);
     });
 
     socket.on('updateBalance', ({ coins }) => {
@@ -66,25 +67,20 @@ export const useRouletteStore = defineStore('roulette', () => {
 
     socket.on('roulette:betAccepted', (bet) => {
       myBets.value.push(bet);
-      try { new Audio('/sounds/chip.mp3').play().catch(() => { }); } catch (e) { }
+      new Audio('/sounds/chip.mp3').play().catch(() => null);
     });
 
     socket.on('roulette:betError', ({ messageKey }) => {
-      const map = {
-        'error_not_enough_coins': 'Недостатньо монет!',
-        'roulette_error_bets_closed': 'Ставки закриті!',
-        'roulette_error_invalid_bet': 'Невірна ставка'
-      };
-      toast.addToast(map[messageKey] || messageKey, 'error');
+      toast.addToast(i18n.global.t(messageKey), 'error');
     });
   }
 
   function placeBet(type, value, amount) {
     if (phase.value !== 'betting') {
-      return toast.addToast('Ставки більше не приймаються', 'warning');
+      return toast.addToast(i18n.global.t('roulette_bets_closed'), 'warning');
     }
     if (authStore.user.coins < amount) {
-      return toast.addToast('Недостатньо монет', 'error');
+      return toast.addToast(i18n.global.t('error_not_enough_coins'), 'error');
     }
 
     socketStore.emit('roulette:placeBet', { type, value, amount });

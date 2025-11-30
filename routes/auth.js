@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const db = require('../db');
 const router = express.Router();
+const { signToken, setAuthCookie, clearAuthCookie } = require('../middlewares/jwtAuth');
 const saltRounds = 10;
 const statsService = require('../services/statsService');
 
@@ -40,7 +41,7 @@ router.post('/login', (req, res) => {
                 if (user.is_banned) {
                     return res.status(403).json({ i18nKey: 'error_account_banned_with_reason', options: { reason: user.ban_reason || 'Не вказано' } });
                 }
-                req.session.user = {
+                const payload = {
                     id: user.id,
                     username: user.username,
                     wins: user.wins,
@@ -51,9 +52,14 @@ router.post('/login', (req, res) => {
                     is_banned: user.is_banned,
                     ban_reason: user.ban_reason,
                     is_muted: user.is_muted,
-                    rating: user.rating
-                };
-                res.status(200).json({ message: 'Вхід успішний!', user: req.session.user });
+                    rating: user.rating,
+                    card_back_style: user.card_back_style,
+                    isVerified: user.is_verified,
+                }
+                const token = signToken(payload)
+                setAuthCookie(res, token)
+                req.session = { user: payload, save() {}, destroy() {} }
+                res.status(200).json({ message: 'Вхід успішний!', user: payload, token });
             } else {
                 res.status(401).json({ message: 'Неправильне ім\'я або пароль.' });
             }
@@ -65,9 +71,10 @@ router.post('/login', (req, res) => {
 });
 
 router.get('/check-session', (req, res) => {
-    if (req.session && req.session.user) {
+    const currentUser = req.session?.user || null;
+    if (currentUser && currentUser.id) {
         const sql = `SELECT * FROM users WHERE id = ?`;
-        db.get(sql, [req.session.user.id], (err, user) => {
+        db.get(sql, [currentUser.id], (err, user) => {
             if (err || !user) { return res.status(200).json({ isLoggedIn: false }); }
 
             const today = new Date();
@@ -90,7 +97,7 @@ router.get('/check-session', (req, res) => {
                 }
             }
 
-            req.session.user = {
+            const sessionUser = {
                 id: user.id,
                 username: user.username,
                 wins: user.wins,
@@ -105,8 +112,8 @@ router.get('/check-session', (req, res) => {
                 is_muted: user.is_muted,
                 rating: user.rating
             };
-            req.session.save();
-            res.status(200).json({ isLoggedIn: true, user: req.session.user });
+            req.session = { user: sessionUser, save() {}, destroy() {} };
+            res.status(200).json({ isLoggedIn: true, user: sessionUser });
         });
     } else {
         res.status(200).json({ isLoggedIn: false });
@@ -114,24 +121,23 @@ router.get('/check-session', (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
-    req.session.destroy(err => {
-        if (err) { return res.status(500).json({ message: 'Не вдалося вийти' }); }
-        res.clearCookie('connect.sid');
-        res.status(200).json({ message: 'Ви успішно вийшли' });
-    });
+    clearAuthCookie(res);
+    res.status(200).json({ message: 'Ви успішно вийшли' });
 });
 
 router.post('/update-settings', (req, res) => {
-    if (!req.session.user) { return res.status(401).json({ message: 'Не авторизовано' }); }
+    const currentUser = req.session?.user;
+    if (!currentUser) { return res.status(401).json({ message: 'Не авторизовано' }); }
     const { card_back_style } = req.body;
-    const userId = req.session.user.id;
+    const userId = currentUser.id;
     const allowedStyles = ['default', 'red', 'blue', 'green', 'purple', 'gold'];
     if (!allowedStyles.includes(card_back_style)) { return res.status(400).json({ message: 'Неприпустимий стиль' }); }
     const sql = `UPDATE users SET card_back_style = ? WHERE id = ?`;
     db.run(sql, [card_back_style, userId], (err) => {
         if (err) { console.error(err.message); return res.status(500).json({ message: 'Помилка оновлення налаштувань' }); }
-        req.session.user.card_back_style = card_back_style;
-        req.session.save();
+        if (req.session && req.session.user) {
+            req.session.user.card_back_style = card_back_style;
+        }
         res.status(200).json({ message: 'Налаштування збережено!' });
     });
 });

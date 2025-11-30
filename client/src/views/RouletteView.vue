@@ -78,7 +78,7 @@ const getCellClass = (num) => {
       class="w-full max-w-4xl flex justify-between items-center mb-4 md:mb-6 sticky top-0 bg-[#0f2a1d]/90 backdrop-blur-sm z-20 py-2">
       <button @click="router.push('/')"
               class="text-white/70 hover:text-white flex items-center gap-2 font-bold transition-colors text-sm md:text-base">
-        ⬅ <span class="hidden md:inline">На головну</span>
+        ⬅ <span class="hidden md:inline">{{ $t('go_home') }}</span>
       </button>
       <div
         class="bg-black/40 px-4 py-1.5 md:px-6 md:py-2 rounded-full border border-yellow-500/30 flex items-center gap-2 shadow-lg">
@@ -96,15 +96,15 @@ const getCellClass = (num) => {
           class="order-2 md:order-1 bg-surface/50 backdrop-blur-md rounded-2xl p-4 border border-white/5 flex flex-row md:flex-col justify-between md:justify-center items-center">
           <h3
             class="text-on-surface-variant text-xs md:text-sm uppercase tracking-widest font-bold mb-0 md:mb-2">
-            Статус</h3>
+            {{ $t('status_label') }}</h3>
           <div class="flex items-center gap-4 md:block md:text-center">
             <div class="text-xl md:text-3xl font-bold" :class="{
                             'text-green-400': store.phase === 'betting',
                             'text-yellow-400': store.phase === 'spinning',
                             'text-primary': store.phase === 'results'
                         }">
-              {{ store.phase === 'betting' ? 'СТАВКИ' : (store.phase === 'spinning' ? 'КРУТИМО' :
-              'РЕЗУЛЬТАТ') }}
+              {{ store.phase === 'betting' ? $t('roulette_phase_betting') : (store.phase === 'spinning' ? $t('roulette_phase_spinning') :
+              $t('roulette_phase_results')) }}
             </div>
             <div class="text-4xl md:text-6xl font-mono md:mt-2 text-white tabular-nums">{{ store.timer }}
             </div>
@@ -132,7 +132,7 @@ const getCellClass = (num) => {
           class="order-3 bg-surface/50 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/5 overflow-hidden">
           <h3
             class="text-on-surface-variant text-xs md:text-sm uppercase tracking-widest font-bold mb-2 md:mb-3">
-            Останні</h3>
+            {{ $t('roulette_recent_label') }}</h3>
           <div
             class="flex md:flex-wrap gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0 scrollbar-hide">
             <div v-for="(num, idx) in store.history" :key="idx"
@@ -198,7 +198,7 @@ const getCellClass = (num) => {
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4 pb-4">
           <button @click="makeBet('even-odd', 'even')"
                   class="py-3 md:py-4 rounded-lg border-b-4 text-white font-bold active:border-b-0 active:translate-y-1 transition-all relative bg-blue-900 border-blue-700 text-sm md:text-base">
-            PAR (Парне)
+            {{ $t('bet_even') }}
             <div v-if="getBetTotal('even') > 0"
                  class="absolute -top-2 -right-2 bg-yellow-500 text-black w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shadow-md border border-yellow-300 z-10">
               {{ getBetTotal('even') }}</div>
@@ -206,7 +206,7 @@ const getCellClass = (num) => {
 
           <button @click="makeBet('even-odd', 'odd')"
                   class="py-3 md:py-4 rounded-lg border-b-4 text-white font-bold active:border-b-0 active:translate-y-1 transition-all relative bg-blue-900 border-blue-700 text-sm md:text-base">
-            IMP (Непарне)
+            {{ $t('bet_odd') }}
             <div v-if="getBetTotal('odd') > 0"
                  class="absolute -top-2 -right-2 bg-yellow-500 text-black w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shadow-md border border-yellow-300 z-10">
               {{ getBetTotal('odd') }}</div>
@@ -214,7 +214,7 @@ const getCellClass = (num) => {
 
           <button @click="makeBet('color', 'red')"
                   class="py-3 md:py-4 rounded-lg border-b-4 text-white font-bold active:border-b-0 active:translate-y-1 transition-all relative bg-red-800 border-red-600 text-sm md:text-base">
-            RED (Червоне)
+            {{ $t('bet_red') }}
             <div v-if="getBetTotal('red') > 0"
                  class="absolute -top-2 -right-2 bg-yellow-500 text-black w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shadow-md border border-yellow-300 z-10">
               {{ getBetTotal('red') }}</div>
@@ -222,7 +222,7 @@ const getCellClass = (num) => {
 
           <button @click="makeBet('color', 'black')"
                   class="py-3 md:py-4 rounded-lg border-b-4 text-white font-bold active:border-b-0 active:translate-y-1 transition-all relative bg-gray-900 border-gray-600 text-sm md:text-base">
-            BLACK (Чорне)
+            {{ $t('bet_black') }}
             <div v-if="getBetTotal('black') > 0"
                  class="absolute -top-2 -right-2 bg-yellow-500 text-black w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shadow-md border border-yellow-300 z-10">
               {{ getBetTotal('black') }}</div>

@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useSocketStore } from './socket';
 import { useToastStore } from './toast';
+import i18n from '@/i18n';
 
 export const useGameStore = defineStore('game', () => {
   const socketStore = useSocketStore();
@@ -35,7 +36,7 @@ export const useGameStore = defineStore('game', () => {
   const musicState = ref({
     currentTrackId: null,
     isPlaying: false,
-    trackTitle: 'Тиша...',
+    trackTitle: i18n.global.t('default_music_title'),
     suggester: null,
     seekTimestamp: 0,
     stateChangeTimestamp: 0
@@ -167,8 +168,8 @@ export const useGameStore = defineStore('game', () => {
         const amIWinner = state.winner.winners && state.winner.winners.some(w => w.id === myId);
         const amILoser = state.winner.loser && state.winner.loser.id === myId;
 
-        if (amIWinner) try { new Audio('/sounds/win.mp3').play().catch(() => { }); } catch (e) { }
-        else if (amILoser) try { new Audio('/sounds/lose.mp3').play().catch(() => { }); } catch (e) { }
+        if (amIWinner) new Audio('/sounds/win.mp3').play().catch(() => null);
+        else if (amILoser) new Audio('/sounds/lose.mp3').play().catch(() => null);
       }
 
       if (state.musicState) {
@@ -204,15 +205,15 @@ export const useGameStore = defineStore('game', () => {
   function joinGame(id, name) { socketStore.emit('joinGame', { gameId: id, playerName: name }); }
   function makeMove(card) {
     socketStore.emit('makeMove', { gameId: gameId.value, card });
-    try { new Audio('/sounds/play.mp3').play().catch(() => { }); } catch (e) { }
+    new Audio('/sounds/play.mp3').play().catch(() => null);
   }
   function takeCards() {
     socketStore.emit('takeCards', { gameId: gameId.value });
-    try { new Audio('/sounds/take.mp3').play().catch(() => { }); } catch (e) { }
+    new Audio('/sounds/take.mp3').play().catch(() => null);
   }
   function passTurn() {
     socketStore.emit('passTurn', { gameId: gameId.value });
-    try { new Audio('/sounds/play.mp3').play().catch(() => { }); } catch (e) { }
+    new Audio('/sounds/play.mp3').play().catch(() => null);
   }
 
   function requestRematch() {
@@ -233,19 +234,19 @@ export const useGameStore = defineStore('game', () => {
 
   function changeTrack(url) {
     const id = getYouTubeID(url);
-    if (!id) return toast.addToast("Невірне посилання!", 'error');
-    const title = prompt("Назва треку:", "Музика");
+    if (!id) return toast.addToast(i18n.global.t('game_invalid_link'), 'error');
+    const title = prompt(i18n.global.t('prompt_track_title'), i18n.global.t('default_music_title'));
     if (!title) return;
     socketStore.emit('hostChangeTrack', { gameId: gameId.value, trackId: id, trackTitle: title });
   }
 
   function suggestTrack(url) {
     const id = getYouTubeID(url);
-    if (!id) return toast.addToast("Невірне посилання!", 'error');
-    const title = prompt("Назва треку:", "Пропозиція");
+    if (!id) return toast.addToast(i18n.global.t('game_invalid_link'), 'error');
+    const title = prompt(i18n.global.t('prompt_track_title'), i18n.global.t('default_offer_title'));
     if (title) {
       socketStore.emit('suggestTrack', { gameId: gameId.value, trackId: id, trackTitle: title });
-      toast.addToast("Надіслано хосту!", 'success');
+      toast.addToast(i18n.global.t('sent_to_host'), 'success');
     }
   }
 

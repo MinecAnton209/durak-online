@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameStore } from '@/stores/game';
 
 const gameStore = useGameStore();
@@ -7,6 +8,7 @@ const voted = ref(false);
 
 const winnerData = computed(() => gameStore.winnerData);
 const rematchInfo = computed(() => gameStore.rematchStatus);
+const { t } = useI18n();
 
 const isWin = computed(() => {
   if (!winnerData.value) return false;
@@ -22,15 +24,15 @@ const isLose = computed(() => {
 });
 
 const title = computed(() => {
-  if (isWin.value) return '🎉 ПЕРЕМОГА! 🎉';
-  if (isLose.value) return '😢 ДУРЕНЬ! 😢';
-  return '🤝 НІЧИЯ! 🤝';
+  if (isWin.value) return t('win_title');
+  if (isLose.value) return t('lose_title');
+  return t('draw_title');
 });
 
 const message = computed(() => {
-  if (isLose.value) return 'Пощастить наступного разу!';
-  if (isWin.value) return 'Чудова гра!';
-  return 'Перемогла дружба.';
+  if (isLose.value) return t('lose_subtitle');
+  if (isWin.value) return t('win_subtitle');
+  return t('draw_subtitle');
 });
 
 const handleExit = () => {
@@ -63,19 +65,19 @@ const handleRematch = () => {
         <p class="text-on-surface-variant mb-6">{{ message }}</p>
 
         <div v-if="rematchInfo" class="mb-4 bg-white/10 rounded-lg p-2 text-sm text-white animate-pulse">
-          Реванш: {{ rematchInfo.votes }} / {{ rematchInfo.total }}
+          {{ $t('rematch_label') }} {{ rematchInfo.votes }} / {{ rematchInfo.total }}
         </div>
 
         <div class="flex flex-col gap-3">
           <button @click="handleRematch" :disabled="voted"
                   class="w-full font-bold py-3 rounded-xl transition-all shadow-lg text-on-primary"
                   :class="voted ? 'bg-gray-500 cursor-not-allowed' : 'bg-primary hover:bg-[#00A891] active:scale-95'">
-            {{ voted ? 'Очікуємо інших...' : '🔄 Реванш' }}
+            {{ voted ? $t('waiting_for_others') : '🔄 ' + $t('rematch_button') }}
           </button>
 
           <button @click="handleExit"
                   class="w-full bg-transparent border border-white/20 text-white hover:bg-white/10 font-bold py-3 rounded-xl transition-all">
-            Вийти в меню
+            {{ $t('exit_to_menu') }}
           </button>
         </div>
 

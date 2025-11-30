@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { useToastStore } from './toast';
+import i18n from '@/i18n';
 
 export const useNotificationStore = defineStore('notifications', () => {
   const toast = useToastStore();
@@ -38,7 +39,7 @@ export const useNotificationStore = defineStore('notifications', () => {
 
     try {
       const response = await fetch('/api/notifications/vapid-public-key');
-      if (!response.ok) throw new Error('Не вдалося отримати VAPID ключ');
+      if (!response.ok) throw new Error(i18n.global.t('notifications_vapid_error'));
       const vapidPublicKey = await response.text();
 
       const convertedKey = urlBase64ToUint8Array(vapidPublicKey);
@@ -53,19 +54,19 @@ export const useNotificationStore = defineStore('notifications', () => {
         body: JSON.stringify(subscription)
       });
 
-      if (!saveRes.ok) throw new Error('Помилка збереження підписки');
+      if (!saveRes.ok) throw new Error(i18n.global.t('notifications_save_error'));
 
       isSubscribed.value = true;
       permission.value = 'granted';
-      toast.addToast('Сповіщення увімкнено!', 'success');
+      toast.addToast(i18n.global.t('notifications_enabled'), 'success');
 
     } catch (error) {
       console.error(error);
       if (Notification.permission === 'denied') {
         permission.value = 'denied';
-        toast.addToast('Ви заблокували сповіщення в браузері.', 'error');
+        toast.addToast(i18n.global.t('notifications_blocked'), 'error');
       } else {
-        toast.addToast('Не вдалося підписатися.', 'error');
+        toast.addToast(i18n.global.t('notifications_subscribe_failed'), 'error');
       }
     } finally {
       isLoading.value = false;
@@ -83,11 +84,11 @@ export const useNotificationStore = defineStore('notifications', () => {
         await fetch('/api/notifications/unsubscribe', { method: 'POST' });
 
         isSubscribed.value = false;
-        toast.addToast('Сповіщення вимкнено.', 'info');
+        toast.addToast(i18n.global.t('notifications_disabled'), 'info');
       }
     } catch (error) {
       console.error(error);
-      toast.addToast('Помилка відписки.', 'error');
+      toast.addToast(i18n.global.t('notifications_unsubscribe_error'), 'error');
     } finally {
       isLoading.value = false;
     }

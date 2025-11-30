@@ -1,9 +1,11 @@
-﻿<script setup>
+<script setup>
 import { onMounted, onUnmounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 
 const route = useRoute();
-const message = route.query.msg || "Ми оновлюємо сервери, щоб гра стала ще кращою! Будь ласка, зайдіть трохи пізніше.";
+const { t } = useI18n();
+const message = route.query.msg || t('maintenance_default_message');
 const etaTimestamp = parseInt(route.query.eta || 0);
 
 const countdown = ref('--:--:--');
@@ -15,7 +17,7 @@ const updateTimer = () => {
   const timeLeft = etaTimestamp - now;
 
   if (timeLeft <= 0) {
-    countdown.value = "Скоро завершимо!";
+    countdown.value = t('maintenance_complete_soon');
     if (interval) clearInterval(interval);
     return;
   }
@@ -49,14 +51,14 @@ onUnmounted(() => {
         <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] text-[60px] leading-none animate-spin-reverse opacity-80">🔧</div>
       </div>
 
-      <h1 class="text-3xl md:text-4xl font-bold mb-4 text-white">Ведуться технічні роботи</h1>
+      <h1 class="text-3xl md:text-4xl font-bold mb-4 text-white">{{ $t('maintenance_title') }}</h1>
 
       <p class="text-lg text-on-surface-variant mb-8 leading-relaxed">
         {{ message }}
       </p>
 
       <div v-if="etaTimestamp" class="inline-block bg-black/30 px-6 py-3 rounded-xl border border-white/5 font-mono text-xl font-bold text-primary">
-        Орієнтовно: <span class="text-white">{{ countdown }}</span>
+        {{ $t('maintenance_eta_label') }} <span class="text-white">{{ countdown }}</span>
       </div>
 
     </div>

@@ -19,10 +19,11 @@ router.get('/leaderboard', (req, res) => {
     const safeLimit = Math.min(Math.max(1, parseInt(limit, 10)), 100);
 
     const sql = `
-        SELECT id, username, rating, wins, win_streak, is_verified 
-        FROM users 
-        ORDER BY ${orderByColumn} DESC 
-        LIMIT ?
+        SELECT id, username, rating, wins, win_streak, is_verified
+        FROM users
+        WHERE (is_banned = 0 OR is_banned = FALSE)
+        ORDER BY ${orderByColumn} DESC
+            LIMIT ?
     `;
 
     db.all(sql, [safeLimit], (err, rows) => {

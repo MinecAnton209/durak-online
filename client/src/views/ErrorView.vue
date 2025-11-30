@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { useRoute } from 'vue-router';
 
 const route = useRoute();
@@ -54,7 +54,7 @@ const desc = route.query.desc || 'Здається, ви заблукали. К�
       <p class="text-on-surface-variant mb-8 max-w-md mx-auto">{{ desc }}</p>
 
       <router-link to="/" class="inline-block bg-primary hover:bg-[#00A891] text-on-primary font-bold text-lg py-3 px-8 rounded-xl shadow-lg transition-transform active:scale-95">
-        Повернутися на головну
+        {{ $t('go_home') }}
       </router-link>
     </div>
 

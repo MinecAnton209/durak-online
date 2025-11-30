@@ -32,6 +32,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
                                                  rd REAL DEFAULT 350.0,
                                                  vol REAL DEFAULT 0.06,
                                                  last_game_timestamp TEXT,
+                                                 telegram_id TEXT UNIQUE,
                                                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `, (err) => {
@@ -171,7 +172,8 @@ const db = new sqlite3.Database(dbPath, (err) => {
 function runUsersMigrations() {
     const migrations = [
         { column: 'coins', type: 'INTEGER', options: 'DEFAULT 1000 NOT NULL' },
-        { column: 'last_daily_bonus_claim', type: 'DATE', options: '' }
+        { column: 'last_daily_bonus_claim', type: 'DATE', options: '' },
+        { column: 'telegram_id', type: 'TEXT', options: '' }
     ];
     db.all(`PRAGMA table_info(users);`, [], (err, columns) => {
         if (err) {
@@ -186,6 +188,16 @@ function runUsersMigrations() {
                         console.error(`Помилка додавання колонки '${migration.column}':`, alterErr.message);
                     } else {
                         console.log(`Колонка '${migration.column}' успішно додана в таблицю users.`);
+
+                        if (migration.column === 'telegram_id') {
+                            db.run(
+                                'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_telegram_id ON users (telegram_id) WHERE telegram_id IS NOT NULL;',
+                                (indexErr) => {
+                                    if(indexErr) console.error("Помилка створення UNIQUE індексу для telegram_id:", indexErr.message);
+                                    else console.log("UNIQUE індекс для telegram_id створено.");
+                                }
+                            );
+                        }
                     }
                 });
             }

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { useSocketStore } from './socket';
 import { useToastStore } from './toast';
+import i18n from '@/i18n';
 import { useRouter } from 'vue-router';
 
 export const useFriendsStore = defineStore('friends', () => {
@@ -59,16 +60,16 @@ export const useFriendsStore = defineStore('friends', () => {
       });
 
       if (res.ok) {
-        toast.addToast('Запит надіслано!', 'success');
+        toast.addToast(i18n.global.t('friends_request_sent'), 'success');
         fetchFriends();
         searchResults.value = searchResults.value.filter(u => u.id !== userId);
       } else {
         const err = await res.json();
-        toast.addToast(err.message || 'Помилка', 'error');
+        toast.addToast(err.message || i18n.global.t('error_generic'), 'error');
       }
     } catch (e) {
       console.error(e);
-      toast.addToast('Помилка з\'єднання', 'error');
+      toast.addToast(i18n.global.t('connection_error'), 'error');
     }
   }
 
@@ -81,7 +82,7 @@ export const useFriendsStore = defineStore('friends', () => {
       });
 
       if (res.ok) {
-        toast.addToast('Заявку прийнято!', 'success');
+        toast.addToast(i18n.global.t('friends_request_accepted'), 'success');
         fetchFriends();
       }
     } catch (e) { console.error(e); }
@@ -96,7 +97,7 @@ export const useFriendsStore = defineStore('friends', () => {
       });
 
       if (res.ok) {
-        toast.addToast('Видалено.', 'info');
+        toast.addToast(i18n.global.t('friends_deleted'), 'info');
         fetchFriends();
       }
     } catch (e) { console.error(e); }
@@ -105,7 +106,7 @@ export const useFriendsStore = defineStore('friends', () => {
   function inviteToGame(userId, gameId) {
     if (!socketStore.socket) return;
     socketStore.emit('friend:invite', { toUserId: userId, gameId });
-    toast.addToast('Запрошення надіслано!', 'success');
+    toast.addToast(i18n.global.t('friends_invite_sent'), 'success');
   }
 
   function initListeners() {
@@ -118,7 +119,7 @@ export const useFriendsStore = defineStore('friends', () => {
       console.log('Invite received:', data);
       currentInvite.value = data;
 
-      try { new Audio('/sounds/notification.mp3').play().catch(() => { }); } catch (e) { }
+      new Audio('/sounds/notification.mp3').play().catch(() => null);
     });
   }
 

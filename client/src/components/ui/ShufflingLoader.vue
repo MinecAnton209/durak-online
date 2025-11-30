@@ -5,7 +5,7 @@
       <div class="absolute w-full h-full rounded-lg border border-black/20 bg-gradient-to-br from-primary to-[#008f7a] shadow-md custom-card-bg card-2"></div>
       <div class="absolute w-full h-full rounded-lg border border-black/20 bg-gradient-to-br from-primary to-[#008f7a] shadow-md custom-card-bg card-3"></div>
     </div>
-    <p class="text-primary font-bold animate-pulse tracking-widest text-sm">ТАСУЄМО...</p>
+    <p class="text-primary font-bold animate-pulse tracking-widest text-sm">{{ $t('shuffling_label') }}</p>
   </div>
 </template>
 

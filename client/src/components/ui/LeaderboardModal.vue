@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 const props = defineProps({
   isOpen: Boolean
@@ -10,11 +11,12 @@ const emit = defineEmits(['close']);
 const activeTab = ref('rating');
 const leaders = ref([]);
 const isLoading = ref(false);
+const { t } = useI18n();
 
 const tabs = [
-  { id: 'rating', label: 'Рейтинг' },
-  { id: 'wins', label: 'Перемоги' },
-  { id: 'win_streak', label: 'Серія' }
+  { id: 'rating', label: t('leaderboard_rating') },
+  { id: 'wins', label: t('leaderboard_wins') },
+  { id: 'win_streak', label: t('leaderboard_win_streak') }
 ];
 
 const fetchLeaders = async () => {
@@ -44,7 +46,7 @@ watch([() => props.isOpen, activeTab], ([isOpen]) => {
       <div class="relative w-full max-w-lg bg-surface rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-scale-in">
 
         <div class="p-6 pb-2 border-b border-white/5 flex justify-between items-center">
-          <h2 class="text-2xl font-bold text-white">🏆 Лідерборди</h2>
+          <h2 class="text-2xl font-bold text-white">{{ $t('leaderboard_title') }}</h2>
           <button @click="emit('close')" class="text-on-surface-variant hover:text-white">✕</button>
         </div>
 
@@ -69,8 +71,8 @@ watch([() => props.isOpen, activeTab], ([isOpen]) => {
             <thead>
             <tr class="text-on-surface-variant text-xs uppercase border-b border-white/10">
               <th class="p-2 w-10">#</th>
-              <th class="p-2">Гравець</th>
-              <th class="p-2 text-right">Значення</th>
+              <th class="p-2">{{ $t('leaderboard_col_player') }}</th>
+              <th class="p-2 text-right">{{ $t('leaderboard_col_value') }}</th>
             </tr>
             </thead>
             <tbody class="text-sm">
@@ -83,7 +85,7 @@ watch([() => props.isOpen, activeTab], ([isOpen]) => {
               </td>
               <td class="p-3 text-white font-medium flex items-center gap-2">
                 {{ player.username }}
-                <span v-if="player.is_verified" class="text-blue-400" title="Verified">✓</span>
+                <span v-if="player.is_verified" class="text-blue-400" :title="$t('verified_label')">✓</span>
               </td>
               <td class="p-3 text-right font-mono text-on-surface">
                 {{ activeTab === 'rating' ? Math.round(player.rating) : (activeTab === 'wins' ? player.wins : player.win_streak) }}
@@ -93,7 +95,7 @@ watch([() => props.isOpen, activeTab], ([isOpen]) => {
           </table>
 
           <div v-if="!isLoading && leaders.length === 0" class="text-center text-on-surface-variant py-10">
-            Список порожній...
+            {{ $t('leaderboard_empty') }}
           </div>
         </div>
 

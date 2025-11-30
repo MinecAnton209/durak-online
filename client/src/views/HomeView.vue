@@ -14,7 +14,7 @@ const route = useRoute();
 const authStore = useAuthStore();
 const gameStore = useGameStore();
 
-const playerName = ref('Гравець ' + Math.floor(Math.random() * 1000));
+const playerName = ref(t('default_guest_name') + ' ' + Math.floor(Math.random() * 1000));
 const deckSize = ref("36");
 const playersCount = ref("2");
 const isBetting = ref(false);
@@ -26,7 +26,6 @@ const isLeaderboardOpen = ref(false);
 
 onMounted(() => {
   if (route.query.gameId) {
-    console.log('Перенаправлення на гру:', route.query.gameId);
     router.push(`/game/${route.query.gameId}`);
   }
 });
@@ -60,7 +59,7 @@ const handleAuthSubmit = async ({ mode, username, password, onComplete }) => {
 const handleLogout = async () => {
   if (confirm(t('confirm_logout'))) {
     await authStore.logout();
-    playerName.value = 'Гравець ' + Math.floor(Math.random() * 1000);
+    playerName.value = t('default_guest_name') + ' ' + Math.floor(Math.random() * 1000);
   }
 };
 
@@ -104,6 +103,11 @@ const createGame = () => {
               class="text-2xl hover:scale-110 transition-transform cursor-pointer grayscale-[0.5] hover:grayscale-0"
               :class="{ 'grayscale-0 scale-110 drop-shadow-lg': locale === 'en' }" :title="$t('lang_en')">
         🇬🇧
+      </button>
+      <button @click="setLang('ru')"
+              class="text-2xl hover:scale-110 transition-transform cursor-pointer grayscale-[0.5] hover:grayscale-0"
+              :class="{ 'grayscale-0 scale-110 drop-shadow-lg': locale === 'ru' }" :title="$t('lang_ru')">
+        🇷🇺
       </button>
     </div>
 

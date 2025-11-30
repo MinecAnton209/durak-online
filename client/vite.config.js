@@ -23,6 +23,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    allowedHosts: ['durak.minecanton209.pp.ua'],
     proxy: {
       '/socket.io': {
         target: 'http://localhost:3000',

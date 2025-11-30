@@ -1,8 +1,12 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useTelegramStore } from '@/stores/telegram';
+
+import WebApp from '@twa-dev/sdk';
 
 const { t } = useI18n();
+const tgStore = useTelegramStore();
 
 const props = defineProps({
   isOpen: Boolean,
@@ -19,6 +23,25 @@ const error = ref('');
 const title = computed(() => props.mode === 'login' ? t('login_modal_title') : t('register_modal_title'));
 const buttonText = computed(() => props.mode === 'login' ? t('login_submit') : t('register_submit'));
 
+watch(() => props.isOpen, (isOpen) => {
+  if (isOpen && !tgStore.isTelegram) {
+    setTimeout(() => {
+      const container = document.getElementById('telegram-login-container');
+      if (container) {
+        const script = document.createElement('script');
+        script.async = true;
+        script.src = 'https://telegram.org/js/telegram-widget.js?22';
+        script.setAttribute('data-telegram-login', 'durakthebot');
+        script.setAttribute('data-size', 'large');
+        script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+        script.setAttribute('data-request-access', 'write');
+        container.innerHTML = '';
+        container.appendChild(script);
+      }
+    }, 100);
+  }
+});
+
 const handleSubmit = async () => {
   if (!username.value || !password.value) {
     error.value = t('error_fill_fields');
@@ -32,11 +55,11 @@ const handleSubmit = async () => {
     mode: props.mode,
     username: username.value,
     password: password.value,
+    initData: tgStore.isTelegram ? WebApp.initData : null,
     onComplete: (err) => {
       isLoading.value = false;
-      if (err) {
-        error.value = err;
-      } else {
+      if (err) error.value = err;
+      else {
         username.value = '';
         password.value = '';
       }
@@ -110,12 +133,21 @@ const handleClose = () => {
             class="mt-2 w-full bg-primary text-on-primary font-bold text-lg py-3 rounded-xl hover:bg-[#00A891] hover:shadow-lg hover:shadow-primary/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
           >
             <span v-if="!isLoading">{{ buttonText }}</span>
-
             <svg v-else class="animate-spin h-6 w-6 text-on-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
             </svg>
           </button>
+
+          <div v-if="!tgStore.isTelegram">
+            <div class="relative flex py-1 items-center">
+              <div class="flex-grow border-t border-white/10"></div>
+              <span class="flex-shrink mx-4 text-xs text-white/50">{{ $t('or_separator') }}</span>
+              <div class="flex-grow border-t border-white/10"></div>
+            </div>
+            <div id="telegram-login-container" class="flex justify-center mt-4"></div>
+          </div>
+
         </form>
 
       </div>
@@ -128,18 +160,15 @@ const handleClose = () => {
 .fade-leave-active {
   transition: opacity 0.3s ease;
 }
-
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
 }
-
 .animate-scale-in {
   animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.9) translateY(10px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  to { transform: scale(1) translateY(0); }
 }
 </style>

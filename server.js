@@ -6,13 +6,13 @@ const socketIo = require('socket.io');
 const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
-const session = require('express-session');
 const cors = require('cors');
 const i18next = require('i18next');
 const Backend = require('i18next-fs-backend');
 
 const db = require('./db');
 const authRoutes = require('./routes/auth.js');
+const telegramRoutes = require('./routes/telegram.js');
 const publicRoutes = require('./routes/public.js');
 const achievementRoutes = require('./routes/achievements.js');
 const adminRoutes = require('./routes/admin.js');
@@ -28,6 +28,12 @@ const webpush = require('web-push');
 const util = require('util');
 const dbRun = util.promisify(db.run.bind(db));
 const dbGet = util.promisify(db.get.bind(db));
+const cookieParser = require('cookie-parser');
+const { attachUserFromToken, socketAttachUser } = require('./middlewares/jwtAuth')
+const allowedOrigins = [
+    'http://localhost:5173',
+    'https://durak.minecanton209.pp.ua'
+];
 
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
     webpush.setVapidDetails(
@@ -42,7 +48,15 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, { cors: { origin: "*" } });
+const io = socketIo(server, {
+    cors: {
+        origin: allowedOrigins,
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    transports: ['websocket', 'polling'],
+    allowEIO3: true
+});
 const onlineUsers = new Map();
 app.set('onlineUsers', onlineUsers);
 
@@ -69,7 +83,6 @@ let maintenanceMode = {
     startTime: null,
     warningMessage: ""
 };
-app.use(express.static(path.join(__dirname, 'public')));
 
 app.set('maintenanceMode', maintenanceMode);
 
@@ -96,28 +109,6 @@ const PORT = process.env.PORT || 3000;
 setTimeout(seedAchievements, 1000);
 achievementService.init(io);
 
-const sessionMiddleware = session({
-    store: (process.env.DB_CLIENT === 'postgres' && process.env.DATABASE_URL) ?
-        new (require('connect-pg-simple')(session))({ pool: db.pool, tableName: 'user_sessions' }) :
-        new (require('connect-sqlite3')(session))({ db: 'database.sqlite', dir: './data' }),
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        maxAge: 1000 * 60 * 60 * 24 * 7,
-        secure: process.env.NODE_ENV === 'production',
-        httpOnly: true,
-        sameSite: 'lax',
-        domain: process.env.NODE_ENV === 'production' ? process.env.COOKIE_DOMAIN : undefined
-    }
-});
-
-if (process.env.DB_CLIENT === 'postgres' && process.env.DATABASE_URL) {
-    console.log("Сесії будуть зберігатися в PostgreSQL.");
-} else {
-    console.log("Сесії будуть зберігатися в SQLite.");
-}
-
 app.set('trust proxy', 1);
 
 app.use((req, res, next) => {
@@ -125,7 +116,7 @@ app.use((req, res, next) => {
 
     if (maintenanceMode.enabled) {
         if (req.originalUrl.startsWith('/api/admin') ||
-            req.session?.user?.is_admin ||
+            req.user?.is_admin ||
             req.originalUrl.startsWith('/maintenance') ||
             req.originalUrl.startsWith('/css') ||
             req.originalUrl.startsWith('/js') ||
@@ -150,11 +141,21 @@ app.use((req, res, next) => {
     next();
 });
 
+app.use(cookieParser());
+
 app.use(cors({
-    origin: process.env.ADMIN_CORS_ORIGIN || 'http://localhost:5173',
+    origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
     credentials: true
 }));
-app.use(express.json());
+
 app.get('/maintenance', (req, res) => {
     const maintenanceMode = req.app.get('maintenanceMode');
 
@@ -164,16 +165,21 @@ app.get('/maintenance', (req, res) => {
 
     res.sendFile(path.join(__dirname, 'public', 'maintenance-page.html'));
 });
-app.use(sessionMiddleware);
+app.use(express.json());
 
-app.use(express.static('public'));
+app.use(attachUserFromToken);
 
 app.use('/', authRoutes);
+app.use('/api/telegram', telegramRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/achievements', achievementRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/friends', friendsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.set('dbGet', dbGet);
+app.set('dbRun', dbRun);
+
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get(/.*/, (req, res) => {
     if (req.originalUrl.startsWith('/api')) {
@@ -182,9 +188,15 @@ app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-io.use((socket, next) => {
-    sessionMiddleware(socket.request, {}, next);
-});
+io.use(socketAttachUser);
+
+async function checkBanStatus(userId) {
+    const user = await dbGet('SELECT is_banned, ban_reason FROM users WHERE id = ?', [userId]);
+    if (user && user.is_banned) {
+        return user.ban_reason || 'Account banned';
+    }
+    return null;
+}
 
 const VERIFIED_BADGE_SVG = `<span class="verified-badge" title="Верифікований гравець"><svg viewBox="0 0 20 22" xmlns="http://www.w3.org/2000/svg"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z" fill="#1d9bf0"></path></svg></span>`;
 const RANK_VALUES = {
@@ -721,13 +733,24 @@ io.on('connection', (socket) => {
     } else {
         console.log(`Клієнт підключився: ${socket.id} (гість)`);
     }
-    socket.on('createGame', (settings) => {
+    socket.on('createGame', async (settings) => {
+
         const maintenanceMode = app.get('maintenanceMode');
         const betAmount = settings.betAmount || 0;
 
         if (maintenanceMode.startTime && Date.now() < maintenanceMode.startTime) {
             return socket.emit('error', { i18nKey: 'error_maintenance_scheduled' });
         }
+
+        const sessionUser = socket.request.session?.user;
+
+        if (sessionUser) {
+            const banReason = await checkBanStatus(sessionUser.id);
+            if (banReason) {
+                return socket.emit('forceDisconnect', { i18nKey: 'error_account_banned_with_reason', options: { reason: banReason } });
+            }
+        }
+
         if (betAmount > 0) {
             if (!sessionUser) {
                 return socket.emit('error', { i18nKey: 'error_guests_cannot_bet' });
@@ -783,14 +806,20 @@ io.on('connection', (socket) => {
             return socket.emit('error', { i18nKey: 'error_no_game_id' });
         }
 
+        const sessionUser = socket.request.session?.user;
+        if (sessionUser) {
+            const banReason = await checkBanStatus(sessionUser.id);
+            if (banReason) {
+                return socket.emit('forceDisconnect', { i18nKey: 'error_account_banned_with_reason', options: { reason: banReason } });
+            }
+        }
+
         const upperCaseGameId = gameId.toUpperCase();
         const game = games[upperCaseGameId];
 
         if (!game) {
             return socket.emit('error', { i18nKey: 'error_room_full_or_not_exist' });
         }
-
-        const sessionUser = socket.request.session?.user;
 
         if (sessionUser) {
             const isAlreadyInGame = Object.values(game.players).some(

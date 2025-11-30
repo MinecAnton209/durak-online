@@ -11,17 +11,16 @@ const friendsStore = useFriendsStore();
       <div class="flex items-start gap-4">
         <div class="text-3xl">💌</div>
         <div class="flex-1">
-          <h4 class="text-primary font-bold text-lg mb-1">Запрошення!</h4>
+          <h4 class="text-primary font-bold text-lg mb-1">{{ $t('friends_invitation_title') }}</h4>
           <p class="text-on-surface text-sm mb-4">
-            Гравець <span class="font-bold text-white">{{ friendsStore.currentInvite.fromUser.username
-            }}</span> кличе вас у гру.
+            {{ $t('friends_invitation_text', { username: friendsStore.currentInvite.fromUser.username }) }}
           </p>
 
           <div class="flex gap-2">
             <button @click="friendsStore.acceptInvite"
-                    class="flex-1 bg-primary text-on-primary py-2 rounded-lg text-sm font-bold hover:brightness-110 transition-all">Прийняти</button>
+                    class="flex-1 bg-primary text-on-primary py-2 rounded-lg text-sm font-bold hover:brightness-110 transition-all">{{ $t('friends_accept') }}</button>
             <button @click="friendsStore.declineInvite"
-                    class="flex-1 bg-white/10 text-white py-2 rounded-lg text-sm hover:bg-white/20 transition-all">Відхилити</button>
+                    class="flex-1 bg-white/10 text-white py-2 rounded-lg text-sm hover:bg-white/20 transition-all">{{ $t('friends_decline') }}</button>
           </div>
         </div>
       </div>

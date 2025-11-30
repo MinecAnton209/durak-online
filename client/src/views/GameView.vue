@@ -111,14 +111,14 @@ const handleSocketError = (err) => {
   } else if (err.text) {
     msg = err.text;
   } else {
-    msg = 'Невідома помилка';
+    msg = t('error_unknown');
   }
 
   if (msg.toLowerCase().includes('not found') || err.i18nKey === 'error_game_not_found') {
-    errorMessage.value = t('error_game_not_found') || 'Кімнату не знайдено 😞';
+    errorMessage.value = t('error_game_not_found');
   }
   else if (msg.toLowerCase().includes('full') || err.i18nKey === 'error_room_full') {
-    errorMessage.value = t('error_room_full') || 'Кімната переповнена 🚫';
+    errorMessage.value = t('error_room_full');
   }
   else {
     if (!isPlayerInGame.value) toast.addToast(msg, 'error');

@@ -11,9 +11,13 @@ export const useSocketStore = defineStore('socket', {
             if (this.socket) return;
 
             console.log('Connecting to socket...');
+            const tokenMatch = document.cookie.match(/(?:^|; )durak_token=([^;]+)/)
+            const token = tokenMatch ? decodeURIComponent(tokenMatch[1]) : null
             this.socket = io({
                 transports: ['websocket'],
                 autoConnect: true,
+                withCredentials: true,
+                auth: token ? { token } : {},
             });
 
             this.socket.on('connect', () => {
