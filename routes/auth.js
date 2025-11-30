@@ -121,7 +121,7 @@ router.get('/check-session', (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
-    clearAuthCookie(res);
+    clearAuthCookie(req, res);
     res.status(200).json({ message: 'Ви успішно вийшли' });
 });
 
