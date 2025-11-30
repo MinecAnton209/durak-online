@@ -335,6 +335,29 @@ pool.query(`
 `).then(() => console.log('Перевірено наявність колонки telegram_id.'))
     .catch(err => console.error('Помилка при перевірці/додаванні колонки telegram_id:', err));
 
+pool.query(`
+    DO $$
+    BEGIN
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='games' AND column_name='status') THEN
+            ALTER TABLE "games" ADD COLUMN status TEXT DEFAULT 'waiting' NOT NULL;
+        END IF;
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='games' AND column_name='lobby_type') THEN
+            ALTER TABLE "games" ADD COLUMN lobby_type TEXT DEFAULT 'public' NOT NULL;
+        END IF;
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='games' AND column_name='invite_code') THEN
+            ALTER TABLE "games" ADD COLUMN invite_code TEXT UNIQUE;
+        END IF;
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='games' AND column_name='max_players') THEN
+            ALTER TABLE "games" ADD COLUMN max_players INTEGER DEFAULT 2 NOT NULL;
+        END IF;
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='games' AND column_name='game_settings') THEN
+            ALTER TABLE "games" ADD COLUMN game_settings TEXT;
+        END IF;
+    END;
+    $$;
+`).then(() => console.log('Перевірено наявність колонок лоббі в таблиці "games" в PostgreSQL.'))
+    .catch(err => console.error('Помилка при додаванні колонок лоббі в "games" в PostgreSQL:', err.stack));
+
 function formatSql(sql) {
     let i = 0;
     return sql.replace(/\?/g, () => `$${++i}`);

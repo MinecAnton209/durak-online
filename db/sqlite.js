@@ -180,6 +180,26 @@ const db = new sqlite3.Database(dbPath, (err) => {
         `, (err) => {
             if (err) console.error('Помилка створення тригеру для "friends" в SQLite:', err.message);
         });
+        db.run(`
+            CREATE TABLE IF NOT EXISTS games (
+                id TEXT PRIMARY KEY,
+                start_time TEXT NOT NULL,
+                end_time TEXT,
+                duration_seconds INTEGER,
+                game_type TEXT,
+                winner_user_id INTEGER,
+                loser_user_id INTEGER,
+                host_user_id INTEGER,
+                is_bot_game BOOLEAN DEFAULT FALSE
+            )
+        `, (err) => {
+            if (err) {
+                console.error('Помилка створення таблиці "games":', err.message);
+            } else {
+                console.log('Таблиця "games" готова.');
+                runGamesMigrations();
+            }
+        });
     });
 });
 function runUsersMigrations() {
@@ -211,6 +231,36 @@ function runUsersMigrations() {
                                 }
                             );
                         }
+                    }
+                });
+            }
+        });
+    });
+}
+function runGamesMigrations() {
+    const migrations = [
+        { column: 'status', type: 'TEXT', options: "DEFAULT 'waiting' NOT NULL" },
+        { column: 'lobby_type', type: 'TEXT', options: "DEFAULT 'public' NOT NULL" },
+        { column: 'invite_code', type: 'TEXT', options: 'UNIQUE' },
+        { column: 'max_players', type: 'INTEGER', options: 'DEFAULT 2 NOT NULL' },
+        { column: 'game_settings', type: 'TEXT', options: '' },
+    ];
+
+    db.all(`PRAGMA table_info(games);`, [], (err, columns) => {
+        if (err) {
+            return console.error("Не вдалося отримати інформацію про таблицю games:", err.message);
+        }
+
+        const existingColumns = columns.map(c => c.name);
+
+        migrations.forEach(migration => {
+            if (!existingColumns.includes(migration.column)) {
+                const sql = `ALTER TABLE games ADD COLUMN ${migration.column} ${migration.type} ${migration.options};`;
+                db.run(sql, (alterErr) => {
+                    if (alterErr) {
+                        console.error(`Помилка додавання колонки '${migration.column}' в games:`, alterErr.message);
+                    } else {
+                        console.log(`Колонка '${migration.column}' успішно додана в таблицю games.`);
                     }
                 });
             }
