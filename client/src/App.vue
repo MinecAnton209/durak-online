@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import { useGameStore } from '@/stores/game';
+import { useTelegramStore } from '@/stores/telegram';
 import { useI18n } from 'vue-i18n';
 
 import ToastContainer from '@/components/ui/ToastContainer.vue';
@@ -13,6 +14,7 @@ import BanModal from '@/components/ui/BanModal.vue';
 const authStore = useAuthStore();
 const socketStore = useSocketStore();
 const gameStore = useGameStore();
+const telegramStore = useTelegramStore();
 const router = useRouter();
 const { t } = useI18n();
 
@@ -23,6 +25,8 @@ const maintenanceMsg = ref('');
 const maintenanceTime = ref('');
 
 onMounted(async () => {
+  telegramStore.init();
+
   await authStore.checkSession();
   socketStore.connect();
 

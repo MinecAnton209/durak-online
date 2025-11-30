@@ -14,13 +14,15 @@ export const useTelegramStore = defineStore('telegram', () => {
   const themeParams = ref({});
 
   function init() {
-    if (WebApp.platform !== 'unknown') {
+    if (WebApp.initData) {
       isTelegram.value = true;
       user.value = WebApp.initDataUnsafe?.user;
+
       themeParams.value = WebApp.themeParams;
       if (themeParams.value.bg_color) {
         document.documentElement.style.setProperty('--color-background', themeParams.value.bg_color);
       }
+
       tryAutoLogin();
     }
   }
