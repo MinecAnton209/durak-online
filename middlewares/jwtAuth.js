@@ -15,14 +15,21 @@ function getJwtSecret() {
 
 function signToken(payload, options = {}) {
   const secret = getJwtSecret()
-  const defaultOpts = { expiresIn: '7d' }
+    const defaultOpts = {
+        expiresIn: '7d',
+        issuer: 'durak-api',
+        audience: 'durak-client'
+    }
   return jwt.sign(payload, secret, { ...defaultOpts, ...options })
 }
 
 function verifyToken(token) {
   if (!token) return null
   try {
-    return jwt.verify(token, getJwtSecret())
+      return jwt.verify(token, getJwtSecret(), {
+          issuer: 'durak-api',
+          audience: 'durak-client'
+      })
   } catch (_) {
     return null
   }
