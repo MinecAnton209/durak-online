@@ -32,7 +32,9 @@ const cookieParser = require('cookie-parser');
 const { attachUserFromToken, socketAttachUser } = require('./middlewares/jwtAuth')
 const allowedOrigins = [
     'http://localhost:5173',
-    'https://durak.minecanton209.pp.ua'
+    'http://localhost:3000',
+    'https://durak.minecanton209.pp.ua',
+    'https://durak.crushtalm.pp.ua'
 ];
 
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {

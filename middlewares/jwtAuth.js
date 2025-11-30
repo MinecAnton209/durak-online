@@ -1,5 +1,14 @@
 const jwt = require('jsonwebtoken')
 
+function getCookieDomain(hostname) {
+    if (process.env.NODE_ENV !== 'production') return undefined;
+
+    if (hostname.includes('minecanton209.pp.ua')) return '.minecanton209.pp.ua';
+    if (hostname.includes('crushtalm.pp.ua')) return '.crushtalm.pp.ua';
+
+    return undefined;
+}
+
 function getJwtSecret() {
   return process.env.JWT_SECRET || process.env.SESSION_SECRET || 'change-me'
 }
@@ -31,10 +40,8 @@ function parseCookieHeader(cookieHeader) {
   return result
 }
 
-function setAuthCookie(res, token) {
-    const isProd = process.env.NODE_ENV === 'production';
-
-    const domain = isProd ? '.minecanton209.pp.ua' : undefined;
+function setAuthCookie(req, res, token) {
+    const domain = getCookieDomain(req.hostname);
 
     res.cookie('durak_token', token, {
         httpOnly: true,
@@ -45,9 +52,8 @@ function setAuthCookie(res, token) {
         domain: domain,
     });
 }
-function clearAuthCookie(res) {
-    const isProd = process.env.NODE_ENV === 'production';
-    const domain = isProd ? '.minecanton209.pp.ua' : undefined;
+function clearAuthCookie(req, res) {
+    const domain = getCookieDomain(req.hostname);
 
     res.clearCookie('durak_token', {
         httpOnly: true,

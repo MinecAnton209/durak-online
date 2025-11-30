@@ -72,7 +72,7 @@ router.post('/auth', async (req, res) => {
             username: user.username,
             isAdmin: !!user.is_admin
         });
-        setAuthCookie(res, jwtToken);
+        setAuthCookie(req, res, jwtToken);
 
         res.json({ user });
 
@@ -150,7 +150,7 @@ router.post('/unlink', authMiddleware, async (req, res) => {
             console.log(`Deleting account ${user.username} because Telegram unlinked and no password.`);
             await dbRun('DELETE FROM users WHERE id = ?', [user.id]);
 
-            clearAuthCookie(res);
+            clearAuthCookie(req, res);
 
             return res.json({ success: true, deleted: true, message: "Акаунт видалено (немає пароля)" });
         } else {
@@ -214,7 +214,7 @@ router.post('/widget-auth', async (req, res) => {
             id: user.id,
             username: user.username
         });
-        setAuthCookie(res, jwtToken);
+        setAuthCookie(req, res, jwtToken);
 
         res.json({ user });
 

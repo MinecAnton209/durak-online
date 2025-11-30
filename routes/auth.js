@@ -57,7 +57,7 @@ router.post('/login', (req, res) => {
                     isVerified: user.is_verified,
                 }
                 const token = signToken(payload)
-                setAuthCookie(res, token)
+                setAuthCookie(req, res, token)
                 req.session = { user: payload, save() {}, destroy() {} }
                 res.status(200).json({ message: 'Вхід успішний!', user: payload, token });
             } else {
