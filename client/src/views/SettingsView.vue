@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
@@ -24,6 +24,12 @@ const currentStyle = ref(authStore.user?.card_back_style || 'default');
 const isAuthModalOpen = ref(false);
 const isUnlinkConfirmOpen = ref(false);
 
+const currentPassword = ref('');
+const newPassword = ref('');
+const confirmPassword = ref('');
+const isChangingPassword = ref(false);
+const isPasswordModalOpen = ref(false);
+
 watch(() => authStore.user, (newUser) => {
   if (newUser && newUser.card_back_style) {
     currentStyle.value = newUser.card_back_style;
@@ -37,18 +43,11 @@ const saveCardStyle = async (style) => {
 
   currentStyle.value = style;
   try {
-    const res = await fetch('/update-settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ card_back_style: style })
-    });
-    if (res.ok) {
-      if(authStore.user) authStore.user.card_back_style = style;
-      toast.addToast(t('settings_style_saved'), 'success');
-    } else {
-      toast.addToast(t('settings_save_error'), 'error');
-    }
-  } catch { toast.addToast(t('settings_connection_error'), 'error'); }
+    await authStore.updateSettings({ card_back_style: style })
+    toast.addToast(t('settings_style_saved'), 'success');
+  } catch { 
+    toast.addToast(t('settings_connection_error'), 'error'); 
+  }
 };
 
 const toggleNotifications = () => {
@@ -74,10 +73,49 @@ const handleAuthSubmit = async ({ mode, username, password, initData, onComplete
     onComplete(t(e.message));
   }
 };
+
+const submitPasswordChange = async () => {
+  if (!authStore.isAuthenticated) {
+    return toast.addToast(t('settings_login_required'), 'warning');
+  }
+  const np = newPassword.value.trim();
+  const cp = confirmPassword.value.trim();
+  const op = currentPassword.value.trim();
+  if (!op || !np || !cp) {
+    return toast.addToast(t('error_fill_fields'), 'error');
+  }
+  if (np.length < 6) {
+    return toast.addToast(t('password_too_short', { min: 6 }), 'error');
+  }
+  if (np !== cp) {
+    return toast.addToast(t('passwords_mismatch'), 'error');
+  }
+  isChangingPassword.value = true;
+  const ok = await authStore.changePassword({ currentPassword: op, newPassword: np });
+  isChangingPassword.value = false;
+  if (ok) {
+    currentPassword.value = '';
+    newPassword.value = '';
+    confirmPassword.value = '';
+    isPasswordModalOpen.value = false;
+  }
+};
+
+onMounted(() => {
+  if (!authStore.isAuthenticated && !authStore.isAuthChecking) {
+    router.push('/');
+  }
+});
+
+watch(() => authStore.isAuthenticated, (val) => {
+  if (!val && !authStore.isAuthChecking) {
+    router.push('/');
+  }
+});
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col items-center justify-center p-4 bg-background relative overflow-hidden font-sans">
+  <div v-if="authStore.isAuthenticated" class="min-h-screen flex flex-col items-center justify-center p-4 bg-background relative overflow-hidden font-sans">
 
     <div class="w-full max-w-2xl bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 p-6 md:p-8 animate-fade-in my-auto">
       <h1 class="text-3xl font-bold text-white mb-8 text-center">{{ $t('settings_title') }}</h1>
@@ -130,6 +168,18 @@ const handleAuthSubmit = async ({ mode, username, password, initData, onComplete
       </div>
 
       <div class="mb-8 w-full border-t border-white/10 pt-6">
+        <h3 class="text-on-surface-variant mb-4 font-bold uppercase text-xs tracking-wider text-center">{{ $t('password_change_title') }}</h3>
+        <div class="max-w-sm mx-auto text-center">
+          <button
+            @click="isPasswordModalOpen = true"
+            class="w-full py-3 px-6 rounded-xl font-bold transition-all bg-primary text-on-primary shadow-lg hover:shadow-primary/40"
+          >
+            {{ $t('password_change_title') }}
+          </button>
+        </div>
+      </div>
+
+      <div class="mb-8 w-full border-t border-white/10 pt-6">
         <h3 class="text-on-surface-variant mb-4 font-bold uppercase text-xs tracking-wider text-center">{{ $t('notifications_title') }}</h3>
 
         <div v-if="!notifStore.isSupported" class="text-center text-error text-sm bg-error/10 p-2 rounded-lg">
@@ -170,14 +220,43 @@ const handleAuthSubmit = async ({ mode, username, password, initData, onComplete
       @submit="handleAuthSubmit"
     />
 
-    <ConfirmModal
-      :is-open="isUnlinkConfirmOpen"
-      :title="$t('confirm_unlink_title')"
-      :message="$t('confirm_unlink_message')"
-      :confirm-text="$t('confirm_unlink')"
-      @confirm="onConfirmUnlink"
-      @cancel="isUnlinkConfirmOpen = false"
-    />
+  <ConfirmModal
+    :is-open="isUnlinkConfirmOpen"
+    :title="$t('confirm_unlink_title')"
+    :message="$t('confirm_unlink_message')"
+    :confirm-text="$t('confirm_unlink')"
+    @confirm="onConfirmUnlink"
+    @cancel="isUnlinkConfirmOpen = false"
+  />
+
+  <transition name="fade">
+    <div v-if="isPasswordModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div class="w-full max-w-sm bg-surface/95 border border-white/10 rounded-2xl shadow-2xl p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-white text-lg font-bold">{{ $t('password_change_title') }}</h3>
+          <button class="text-on-surface-variant hover:text-white" @click="isPasswordModalOpen = false">✕</button>
+        </div>
+        <div class="flex flex-col gap-3">
+          <input v-model="currentPassword" type="password" :placeholder="$t('current_password_label')" class="w-full py-3 px-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/40 focus:outline-none" />
+          <input v-model="newPassword" type="password" :placeholder="$t('new_password_label')" class="w-full py-3 px-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/40 focus:outline-none" />
+          <input v-model="confirmPassword" type="password" :placeholder="$t('confirm_password_label')" class="w-full py-3 px-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/40 focus:outline-none" />
+          <div class="flex gap-2 mt-2">
+            <button @click="isPasswordModalOpen = false" class="flex-1 py-3 rounded-xl border border-outline/30 text-on-surface hover:bg-white/5 font-bold">{{ $t('go_home') }}</button>
+            <button @click="submitPasswordChange" :disabled="isChangingPassword" class="flex-1 py-3 rounded-xl font-bold bg-primary text-on-primary shadow-lg hover:shadow-primary/40 disabled:opacity-60">
+              <span v-if="isChangingPassword" class="animate-spin">⏳</span>
+              <span v-else>{{ $t('password_change_submit') }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </transition>
+</div>
+<div v-else class="min-h-screen flex items-center justify-center p-4 bg-background">
+    <div class="w-full max-w-md bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 p-6 md:p-8 text-center">
+      <h2 class="text-2xl font-bold text-white mb-2">{{ $t('settings_title') }}</h2>
+      <p class="text-on-surface-variant">{{ $t('settings_login_required') }}</p>
+    </div>
   </div>
 </template>
 

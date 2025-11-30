@@ -313,6 +313,17 @@ pool.query(`
     .catch(err => console.error('Помилка створення таблиці "push_subscriptions" в PostgreSQL:', err.stack));
 
 pool.query(`
+    CREATE TABLE IF NOT EXISTS donations (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        telegram_payment_charge_id TEXT,
+        amount INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+`).then(() => console.log('Таблиця "donations" в PostgreSQL готова.'))
+    .catch(err => console.error('Помилка створення таблиці "donations" в PostgreSQL:', err.stack));
+
+pool.query(`
     DO $$
     BEGIN
         IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='telegram_id')

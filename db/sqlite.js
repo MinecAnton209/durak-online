@@ -158,6 +158,19 @@ const db = new sqlite3.Database(dbPath, (err) => {
             else console.log('Таблиця "push_subscriptions" в SQLite готова.');
         });
         db.run(`
+            CREATE TABLE IF NOT EXISTS donations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                telegram_payment_charge_id TEXT,
+                amount INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+        `, (err) => {
+            if (err) console.error('Помилка створення таблиці "donations" в SQLite:', err.message);
+            else console.log('Таблиця "donations" в SQLite готова.');
+        });
+        db.run(`
             CREATE TRIGGER IF NOT EXISTS trigger_friends_updated_at_sqlite
             AFTER UPDATE ON friends
             FOR EACH ROW

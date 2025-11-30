@@ -82,6 +82,37 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function changePassword({ currentPassword, newPassword }) {
+    try {
+      const token = getTokenFromCookies()
+      const response = await fetch('/change-password', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        toast.addToast(i18n.global.t('password_change_success'), 'success')
+        return true
+      } else {
+        const msgKey = data?.i18nKey
+        const message = msgKey ? i18n.global.t(msgKey, data?.options || {}) : (data?.message || i18n.global.t('error_generic'))
+        toast.addToast(message, 'error')
+        return false
+      }
+    } catch (e) {
+      console.error(e)
+      toast.addToast(i18n.global.t('connection_error'), 'error')
+      return false
+    }
+  }
+
   async function updateSettings(settings) {
     try {
       const token = getTokenFromCookies()
@@ -161,6 +192,7 @@ export const useAuthStore = defineStore('auth', () => {
     checkSession,
     authenticate,
     logout,
+    changePassword,
     updateSettings,
     loginWithTelegramWidget,
     unlinkTelegram,

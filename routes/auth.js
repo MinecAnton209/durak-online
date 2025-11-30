@@ -142,4 +142,49 @@ router.post('/update-settings', (req, res) => {
     });
 });
 
+router.post('/change-password', (req, res) => {
+    const currentUser = req.session?.user;
+    if (!currentUser) {
+        return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: 'All fields are required.' });
+    }
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
+    }
+
+    const userId = currentUser.id;
+    const sqlGet = `SELECT password FROM users WHERE id = ?`;
+    db.get(sqlGet, [userId], async (err, row) => {
+        if (err) {
+            console.error(err.message);
+            return res.status(500).json({ message: 'Database error.' });
+        }
+        if (!row || !row.password) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+        try {
+            const isMatch = await bcrypt.compare(currentPassword, row.password);
+            if (!isMatch) {
+                return res.status(400).json({ message: 'Incorrect current password.' });
+            }
+            const hashed = await bcrypt.hash(newPassword, saltRounds);
+            const sqlUpdate = `UPDATE users SET password = ? WHERE id = ?`;
+            db.run(sqlUpdate, [hashed, userId], (updateErr) => {
+                if (updateErr) {
+                    console.error(updateErr.message);
+                    return res.status(500).json({ message: 'Password update error.' });
+                }
+                return res.status(200).json({ message: 'Password updated.' });
+            });
+        } catch (e) {
+            console.error(e);
+            return res.status(500).json({ message: 'Internal server error.' });
+        }
+    });
+});
+
 module.exports = router;

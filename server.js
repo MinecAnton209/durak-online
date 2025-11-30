@@ -30,6 +30,8 @@ const dbRun = util.promisify(db.run.bind(db));
 const dbGet = util.promisify(db.get.bind(db));
 const cookieParser = require('cookie-parser');
 const { attachUserFromToken, socketAttachUser } = require('./middlewares/jwtAuth')
+const telegramBot = require('./services/telegramBot');
+
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
@@ -189,6 +191,10 @@ app.get(/.*/, (req, res) => {
     }
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+if (process.env.TELEGRAM_BOT_TOKEN) {
+    telegramBot.init(process.env.TELEGRAM_BOT_TOKEN);
+}
 
 io.use(socketAttachUser);
 
