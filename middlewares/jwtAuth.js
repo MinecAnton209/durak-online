@@ -3,6 +3,8 @@ const jwt = require('jsonwebtoken')
 function getCookieDomain(hostname) {
     if (process.env.NODE_ENV !== 'production') return undefined;
 
+    if (!hostname) return undefined;
+
     if (hostname.includes('minecanton209.pp.ua')) return '.minecanton209.pp.ua';
     if (hostname.includes('crushtalm.pp.ua')) return '.crushtalm.pp.ua';
 
