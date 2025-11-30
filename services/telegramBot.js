@@ -192,7 +192,11 @@ function init(token) {
 
             let friendListText = "";
             if (accepted.length > 0) {
-                friendListText = "\n\n" + accepted.slice(0, 10).map((f, i) => `${i + 1}. 👤 **${f.nickname}** (${f.rating}⭐)`).join('\n');
+                friendListText = "\n\n" + accepted.slice(0, 10).map((f, i) => {
+                    const safeNick = f.nickname.replace(/[_*[`]/g, '\\$&');
+                    return `${i + 1}. 👤 **${safeNick}** (${f.rating}⭐)`;
+                }).join('\n');
+
                 if (accepted.length > 10) friendListText += "\n...";
             } else {
                 friendListText = "\n\n_" + t(lang, 'friends.list_empty') + "_";
@@ -230,7 +234,8 @@ function init(token) {
                 return showFriendsMenu(ctx);
             }
             const request = incoming[0];
-            const text = t(lang, 'friends.incoming_request', { username: request.nickname });
+            const safeNick = request.nickname.replace(/[_*[`]/g, '\\$&');
+            const text = t(lang, 'friends.incoming_request', { username: safeNick });
 
             const keyboard = [
                 [
@@ -284,10 +289,21 @@ function init(token) {
 
             rows.forEach((row, index) => {
                 let icon = '👤';
-                if (index === 0) icon = '🥇'; if (index === 1) icon = '🥈'; if (index === 2) icon = '🥉';
+                if (index === 0) icon = '🥇';
+                if (index === 1) icon = '🥈';
+                if (index === 2) icon = '🥉';
                 if (row.is_verified) icon += '☑️';
+
                 const score = type === 'rating' ? `${row.rating} ⭐` : `${row.wins} 🏅`;
-                text += t(lang, 'leaderboard.format', { rank: index + 1, icon, username: row.username, score }) + "\n";
+
+                const safeUsername = row.username.replace(/[_*[`]/g, '\\$&');
+
+                text += t(lang, 'leaderboard.format', {
+                    rank: index + 1,
+                    icon,
+                    username: safeUsername,
+                    score
+                }) + "\n";
             });
 
             const keyboard = [
