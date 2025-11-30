@@ -280,7 +280,7 @@ function init(token) {
         const limit = 10;
         try {
             const orderBy = type === 'rating' ? 'rating' : 'wins';
-            const sql = `SELECT username, rating, wins, is_verified FROM users WHERE (is_banned = 0 OR is_banned = FALSE) ORDER BY ${orderBy} DESC LIMIT ?`;
+            const sql = `SELECT username, rating, wins, is_verified FROM users WHERE is_banned = FALSE ORDER BY ${orderBy} DESC LIMIT ?`;
             const rows = await dbAll(sql, [limit]);
 
             if (!rows.length) return ctx.answerCbQuery(t(lang, 'leaderboard.empty'));
