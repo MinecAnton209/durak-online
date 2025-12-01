@@ -6,6 +6,7 @@ import TermsView from '../views/TermsView.vue'
 import RouletteView from '../views/RouletteView.vue'
 import ErrorView from '../views/ErrorView.vue'
 import MaintenanceView from '../views/MaintenanceView.vue'
+import LobbyBrowser from "@/views/LobbyBrowser.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -14,6 +15,20 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomeView
+    },
+    {
+      path: '/lobbies',
+      name: 'lobbies',
+      component: LobbyBrowser
+    },
+    {
+      path: '/game/:id',
+      name: 'game',
+      component: GameView
+    },
+    {
+      path: '/lobby/:id',
+      component: GameView
     },
     {
       path: '/terms',

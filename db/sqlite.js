@@ -241,7 +241,7 @@ function runGamesMigrations() {
     const migrations = [
         { column: 'status', type: 'TEXT', options: "DEFAULT 'waiting' NOT NULL" },
         { column: 'lobby_type', type: 'TEXT', options: "DEFAULT 'public' NOT NULL" },
-        { column: 'invite_code', type: 'TEXT', options: 'UNIQUE' },
+        { column: 'invite_code', type: 'TEXT', options: '' },
         { column: 'max_players', type: 'INTEGER', options: 'DEFAULT 2 NOT NULL' },
         { column: 'game_settings', type: 'TEXT', options: '' },
     ];
@@ -256,13 +256,33 @@ function runGamesMigrations() {
         migrations.forEach(migration => {
             if (!existingColumns.includes(migration.column)) {
                 const sql = `ALTER TABLE games ADD COLUMN ${migration.column} ${migration.type} ${migration.options};`;
+
                 db.run(sql, (alterErr) => {
                     if (alterErr) {
-                        console.error(`Помилка додавання колонки '${migration.column}' в games:`, alterErr.message);
+                        if (!alterErr.message.includes('duplicate column')) {
+                            console.error(`Помилка додавання колонки '${migration.column}' в games:`, alterErr.message);
+                        }
                     } else {
                         console.log(`Колонка '${migration.column}' успішно додана в таблицю games.`);
+
+                        if (migration.column === 'invite_code') {
+                            db.run(
+                                'CREATE UNIQUE INDEX IF NOT EXISTS idx_games_invite_code ON games (invite_code);',
+                                (indexErr) => {
+                                    if(indexErr) console.error("Помилка створення UNIQUE індексу для invite_code:", indexErr.message);
+                                    else console.log("UNIQUE індекс для invite_code створено.");
+                                }
+                            );
+                        }
                     }
                 });
+            } else {
+                if (migration.column === 'invite_code') {
+                    db.run(
+                        'CREATE UNIQUE INDEX IF NOT EXISTS idx_games_invite_code ON games (invite_code);',
+                        (indexErr) => { if(!indexErr) console.log("Перевірка/створення індексу invite_code виконана."); }
+                    );
+                }
             }
         });
     });

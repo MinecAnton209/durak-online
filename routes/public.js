@@ -35,4 +35,25 @@ router.get('/leaderboard', (req, res) => {
     });
 });
 
+router.get('/lobbies', (req, res) => {
+    const games = req.app.get('activeGames');
+
+    if (!games) {
+        return res.json([]);
+    }
+
+    const publicLobbies = Object.values(games)
+        .filter(game => game.status === 'waiting' && game.settings.lobbyType === 'public')
+        .map(game => ({
+            gameId: game.id,
+            hostName: game.players[game.hostId]?.name || 'Unknown',
+            playerCount: Object.keys(game.players).length,
+            maxPlayers: game.settings.maxPlayers,
+            betAmount: game.settings.betAmount || 0,
+            deckSize: game.settings.deckSize || 36
+        }));
+
+    res.json(publicLobbies);
+});
+
 module.exports = router;

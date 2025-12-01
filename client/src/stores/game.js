@@ -1,13 +1,12 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import router from '@/router';
 import { useSocketStore } from './socket';
 import { useToastStore } from './toast';
 import i18n from '@/i18n';
 
 export const useGameStore = defineStore('game', () => {
   const socketStore = useSocketStore();
-  const router = useRouter();
   const toast = useToastStore();
 
   const gameId = ref(null);
@@ -90,19 +89,19 @@ export const useGameStore = defineStore('game', () => {
     const socket = socketStore.socket;
     if (!socket) return;
 
-    socket.off('gameCreated'); socket.off('joinSuccess'); socket.off('lobbyStateUpdate');
+    socket.off('lobbyCreated'); socket.off('joinSuccess'); socket.off('lobbyStateUpdate');
     socket.off('playerJoined'); socket.off('playerLeft'); socket.off('gameStateUpdate');
     socket.off('invalidMove'); socket.off('musicStateUpdate'); socket.off('newLogEntry');
     socket.off('rematchUpdate');
 
-    socket.on('gameCreated', (data) => {
+    socket.on('lobbyCreated', (data) => {
       resetState();
       gameId.value = data.gameId;
-      playerId.value = data.playerId;
-      hostId.value = data.playerId;
+      playerId.value = socket.id;
+      hostId.value = socket.id;
       gameStatus.value = 'lobby';
-      router.push(`/game/${data.gameId}`);
-      socketStore.emit('getLobbyState', { gameId: data.gameId });
+
+      router.push(`/lobby/${data.gameId}`);
     });
 
     socket.on('joinSuccess', (data) => {
@@ -110,11 +109,12 @@ export const useGameStore = defineStore('game', () => {
       gameId.value = data.gameId;
       playerId.value = data.playerId;
       gameStatus.value = 'lobby';
-      router.push(`/game/${data.gameId}`);
-      socketStore.emit('getLobbyState', { gameId: data.gameId });
+
+      router.push(`/lobby/${data.gameId}`);
     });
 
     socket.on('lobbyStateUpdate', (data) => {
+      console.log('⚡ EVENT RECEIVED: lobbyStateUpdate', data);
       players.value = data.players || [];
       if (data.hostId) {
         hostId.value = data.hostId;
@@ -122,7 +122,16 @@ export const useGameStore = defineStore('game', () => {
     });
 
     socket.on('playerJoined', () => { if (gameId.value) socketStore.emit('getLobbyState', { gameId: gameId.value }); });
-    socket.on('playerLeft', () => { if (gameId.value) socketStore.emit('getLobbyState', { gameId: gameId.value }); });
+    socket.on('playerLeft', (data) => {
+      console.log('⚡ EVENT RECEIVED: playerLeft', data);
+      if (data && data.playerId) {
+        players.value = players.value.filter(p => p.id !== data.playerId);
+      }
+
+      if (gameId.value) {
+        socketStore.emit('getLobbyState', { gameId: gameId.value });
+      }
+    });
 
     socket.on('gameStateUpdate', (state) => {
       console.log('⚡ Game State:', state);
@@ -187,6 +196,55 @@ export const useGameStore = defineStore('game', () => {
 
     socket.on('invalidMove', ({ reason }) => toast.addToast('⚠️ ' + reason, 'warning'));
     socket.on('rematchUpdate', (data) => rematchStatus.value = data);
+  }
+
+  function createLobby(settings) {
+    socketStore.emit('createLobby', settings);
+  }
+
+  function joinLobby({ gameId, inviteCode, playerName = null }) {
+
+    const nameToSend = playerName ||
+      (authStore.user ? authStore.user.username : `Guest ${Math.floor(Math.random()*1000)}`);
+
+    socketStore.emit('joinLobby', {
+      gameId,
+      inviteCode,
+      playerName: nameToSend
+    });
+  }
+
+  async function findAndJoinPublicLobby(guestName = null) {
+    try {
+      toast.addToast(i18n.global.t('searching_for_game'), 'info');
+      const response = await fetch('/api/public/lobbies');
+      if (!response.ok) throw new Error('Network error');
+
+      const lobbies = await response.json();
+
+      const suitableLobby = lobbies.find(lobby =>
+        lobby.playerCount < lobby.maxPlayers &&
+        lobby.maxPlayers >= 2 &&
+        lobby.maxPlayers <= 4
+      );
+
+      if (suitableLobby) {
+        console.log(`Found suitable lobby: ${suitableLobby.gameId}`);
+        joinLobby({ gameId: suitableLobby.gameId, playerName: guestName });
+      } else {
+        console.log('No suitable lobbies found, creating a new one.');
+        createLobby({
+          lobbyType: 'public',
+          maxPlayers: 2,
+          deckSize: 36,
+          betAmount: 0,
+          playerName: guestName
+        });
+      }
+    } catch (error) {
+      console.error('Quick play failed:', error);
+      toast.addToast(i18n.global.t('error_finding_game'), 'error');
+    }
   }
 
   function resetState() {
@@ -266,6 +324,7 @@ export const useGameStore = defineStore('game', () => {
     chatLog, unreadMessages, musicState,
     initListeners, createGame, joinGame, makeMove, takeCards, passTurn,
     canPlayCard, stopDealingAnimation, leaveGame, requestRematch,
-    sendMessage, markChatRead, changeTrack, suggestTrack
+    sendMessage, markChatRead, changeTrack, suggestTrack,
+    createLobby, joinLobby, findAndJoinPublicLobby,
   };
 });

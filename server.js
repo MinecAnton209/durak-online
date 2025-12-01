@@ -324,6 +324,7 @@ function logEvent(game, message, options = {}) {
 async function startGame(gameId) {
     const game = games[gameId];
     if (!game) return;
+    game.status = 'in_progress';
     const betAmount = game.settings.betAmount || 0;
     if (betAmount > 0) {
         game.bank = 0;
@@ -370,26 +371,33 @@ async function startGame(gameId) {
     const gameType = `${game.playerOrder.length}_player`;
     const hostUserId = game.players[game.hostId]?.dbId || null;
     const isBotGame = Object.values(game.players).some(p => p.isGuest);
-    db.run(`INSERT INTO games (id, start_time, game_type, host_user_id, is_bot_game)
-            VALUES (?, ?, ?, ?,
-                    ?)`, [game.id, game.startTime.toISOString(), gameType, hostUserId, isBotGame], (err) => {
-        if (err) {
-            return console.error(`Помилка створення запису для гри ${game.id} в 'games':`, err.message);
-        }
-        game.playerOrder.forEach((playerId, index) => {
+
+    try {
+        await dbRun(
+            `UPDATE games 
+             SET start_time = ?, game_type = ?, is_bot_game = ?, status = 'in_progress', host_user_id = ?
+             WHERE id = ?`,
+            [game.startTime.toISOString(), gameType, isBotGame, hostUserId, game.id]
+        );
+
+        await dbRun('DELETE FROM game_participants WHERE game_id = ?', [game.id]);
+
+        for (let index = 0; index < game.playerOrder.length; index++) {
+            const playerId = game.playerOrder[index];
             const player = game.players[playerId];
             const isFirstAttacker = (index === firstAttackerIndex);
+
             if (player.dbId) {
-                db.run(`INSERT INTO game_participants (game_id, user_id, is_bot, is_first_attacker)
-                        VALUES (?, ?, ?,
-                                ?)`, [game.id, player.dbId, player.isGuest, isFirstAttacker], (participantErr) => {
-                    if (participantErr) {
-                        console.error(`Помилка додавання учасника ${player.name} до гри ${game.id}:`, participantErr.message);
-                    }
-                });
+                await dbRun(
+                    `INSERT INTO game_participants (game_id, user_id, is_bot, is_first_attacker) VALUES (?, ?, ?, ?)`,
+                    [game.id, player.dbId, player.isGuest, isFirstAttacker]
+                );
             }
-        });
-    });
+        }
+
+    } catch (err) {
+        console.error(`Помилка старту гри ${game.id} в БД:`, err.message);
+    }
     logEvent(game, null, {
         i18nKey: 'log_game_start',
         options: { trump: game.trumpSuit, player: game.players[game.playerOrder[firstAttackerIndex]].name }
@@ -460,7 +468,7 @@ async function updateStatsAfterGame(game) {
         const allPlayersInGame = [...winners, loser].filter(p => p);
 
         for (const player of allPlayersInGame) {
-            if (player && !player.isGuest) {
+            if (player && !player.isGuest && player.dbId) {
                 const outcome = winners.some(w => w.id === player.id) ? 'win' : 'loss';
                 await dbRun(`UPDATE game_participants SET outcome = ?, cards_at_end = ? WHERE game_id = ? AND user_id = ?`,
                     [outcome, player.cards.length, game.id, player.dbId]);
@@ -741,15 +749,7 @@ io.on('connection', (socket) => {
     } else {
         console.log(`Клієнт підключився: ${socket.id} (гість)`);
     }
-    socket.on('createGame', async (settings) => {
-
-        const maintenanceMode = app.get('maintenanceMode');
-        const betAmount = settings.betAmount || 0;
-
-        if (maintenanceMode.startTime && Date.now() < maintenanceMode.startTime) {
-            return socket.emit('error', { i18nKey: 'error_maintenance_scheduled' });
-        }
-
+    socket.on('createLobby', async (settings) => {
         const sessionUser = socket.request.session?.user;
 
         if (sessionUser) {
@@ -759,6 +759,10 @@ io.on('connection', (socket) => {
             }
         }
 
+        const playerName = sessionUser ? sessionUser.username : (settings.playerName || "Guest");
+        const userId = sessionUser ? sessionUser.id : null;
+
+        const betAmount = settings.betAmount || 0;
         if (betAmount > 0) {
             if (!sessionUser) {
                 return socket.emit('error', { i18nKey: 'error_guests_cannot_bet' });
@@ -767,54 +771,53 @@ io.on('connection', (socket) => {
                 return socket.emit('error', { i18nKey: 'error_not_enough_coins_host' });
             }
         }
-        const { playerName } = settings;
-        let gameId = (settings.customId || Math.random().toString(36).substr(2, 6)).toUpperCase();
-        if (games[gameId]) {
-            return socket.emit('error', { i18nKey: 'error_game_exists', text: `Гра з ID "${gameId}" вже існує.` });
-        }
-        socket.join(gameId);
-        games[gameId] = {
-            id: gameId,
-            players: {},
-            playerOrder: [],
-            hostId: socket.id,
-            settings: settings,
-            deck: [],
-            table: [],
-            discardPile: [],
-            trumpCard: null,
-            trumpSuit: null,
-            attackerId: null,
-            defenderId: null,
-            turn: null,
-            winner: null,
-            rematchVotes: new Set(),
-            log: [],
-            lastAction: null,
-            startTime: null,
-            spectators: [],
-            musicState: {
-                currentTrackId: null,
-                isPlaying: false,
-                trackTitle: 'Тиша...',
-                suggester: null,
-                stateChangeTimestamp: null,
-                seekTimestamp: 0
-            }
-        };
-        addPlayerToGame(socket, games[gameId], playerName);
-        socket.emit('gameCreated', { gameId, playerId: socket.id });
-    });
-    socket.on('joinGame', async ({ gameId, playerName }) => {
-        const maintenanceMode = app.get('maintenanceMode');
-        if (maintenanceMode.startTime && Date.now() < maintenanceMode.startTime) {
-            return socket.emit('error', { i18nKey: 'error_maintenance_scheduled' });
-        }
-        if (!gameId) {
-            return socket.emit('error', { i18nKey: 'error_no_game_id' });
-        }
 
+        const gameId = crypto.randomBytes(3).toString('hex').toUpperCase();
+
+        const lobbySettings = {
+            maxPlayers: settings.maxPlayers || 2,
+            lobbyType: settings.lobbyType || 'public',
+            gameMode: settings.gameMode || 'podkidnoy',
+            betAmount: betAmount,
+            deckSize: settings.deckSize || 36
+        };
+
+        try {
+            const inviteCode = lobbySettings.lobbyType === 'private' ? crypto.randomBytes(3).toString('hex').toUpperCase() : null;
+
+            await dbRun(
+                `INSERT INTO games (id, status, lobby_type, invite_code, max_players, host_user_id, game_settings, start_time)
+                 VALUES (?, 'waiting', ?, ?, ?, ?, ?, ?)`,
+                [gameId, lobbySettings.lobbyType, inviteCode, lobbySettings.maxPlayers, userId, JSON.stringify(lobbySettings), new Date().toISOString()]
+            );
+
+            games[gameId] = {
+                id: gameId,
+                status: 'waiting',
+                hostId: socket.id,
+                players: {},
+                playerOrder: [],
+                settings: lobbySettings,
+                deck: [], table: [], discardPile: [], trumpCard: null, trumpSuit: null,
+                attackerId: null, defenderId: null, turn: null, winner: null,
+                rematchVotes: new Set(), log: [], lastAction: null, startTime: null,
+                spectators: [], musicState: { currentTrackId: null, isPlaying: false, trackTitle: 'Silence', suggester: null, stateChangeTimestamp: null, seekTimestamp: 0 }
+            };
+
+            socket.join(gameId);
+            addPlayerToGame(socket, games[gameId], playerName);
+
+            console.log(`[Lobby] Lobby created: ${gameId} by ${playerName} (Guest: ${!sessionUser})`);
+            socket.emit('lobbyCreated', { gameId, inviteCode });
+
+        } catch (e) {
+            console.error("[Lobby] Error creating lobby:", e);
+            socket.emit('error', { i18nKey: 'error_database' });
+        }
+    });
+    socket.on('joinLobby', async ({ gameId, inviteCode, playerName }) => {
         const sessionUser = socket.request.session?.user;
+
         if (sessionUser) {
             const banReason = await checkBanStatus(sessionUser.id);
             if (banReason) {
@@ -822,72 +825,84 @@ io.on('connection', (socket) => {
             }
         }
 
-        const upperCaseGameId = gameId.toUpperCase();
-        const game = games[upperCaseGameId];
+        const actualPlayerName = sessionUser ? sessionUser.username : (playerName || "Guest");
 
-        if (!game) {
-            return socket.emit('error', { i18nKey: 'error_room_full_or_not_exist' });
-        }
+        let lobbyToJoinId = gameId ? gameId.toUpperCase() : null;
+        let gameFromDb;
 
-        if (sessionUser) {
-            const isAlreadyInGame = Object.values(game.players).some(
-                player => player.dbId === sessionUser.id
-            );
-            if (isAlreadyInGame) {
+        try {
+            if (inviteCode) {
+                gameFromDb = await dbGet("SELECT id, max_players FROM games WHERE invite_code = ? AND status = 'waiting'", [inviteCode.toUpperCase()]);
+                if (gameFromDb) lobbyToJoinId = gameFromDb.id;
+            } else if (lobbyToJoinId) {
+                gameFromDb = await dbGet("SELECT id, max_players FROM games WHERE id = ? AND status = 'waiting' AND lobby_type = 'public'", [lobbyToJoinId]);
+            }
+
+            if (!lobbyToJoinId || !gameFromDb) {
+                return socket.emit('error', { i18nKey: 'error_lobby_not_found' });
+            }
+
+            const game = games[lobbyToJoinId];
+            if (!game) {
+                await dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [lobbyToJoinId]);
+                return socket.emit('error', { i18nKey: 'error_lobby_not_found_in_memory' });
+            }
+
+            if (sessionUser && Object.values(game.players).some(p => p.dbId === sessionUser.id)) {
                 return socket.emit('error', { i18nKey: 'error_already_in_game' });
             }
-        }
 
-        const betAmount = game.settings.betAmount || 0;
-
-        if (betAmount > 0) {
-            if (!sessionUser) {
-                return socket.emit('error', { i18nKey: 'error_guests_cannot_bet' });
+            if (Object.keys(game.players).length >= game.settings.maxPlayers) {
+                return socket.emit('error', { i18nKey: 'error_lobby_full' });
             }
 
-            try {
-                const dbUser = await dbGet('SELECT coins FROM users WHERE id = ?', [sessionUser.id]);
-                if (!dbUser) {
-                    return socket.emit('error', { i18nKey: 'error_database' });
-                }
-                if (dbUser.coins < betAmount) {
-                    return socket.emit('error', { i18nKey: 'error_not_enough_coins_join' });
-                }
-                socket.request.session.user.coins = dbUser.coins;
-                socket.request.session.save();
-            } catch (error) {
-                console.error("DB error on checking balance:", error);
-                return socket.emit('error', { i18nKey: 'error_database' });
+            const betAmount = game.settings.betAmount || 0;
+            if (betAmount > 0) {
+                if (!sessionUser) return socket.emit('error', { i18nKey: 'error_guests_cannot_bet' });
+                if (sessionUser.coins < betAmount) return socket.emit('error', { i18nKey: 'error_not_enough_coins_join' });
             }
-        }
 
-        if (game.playerOrder.length < game.settings.maxPlayers) {
-            socket.join(upperCaseGameId);
-            addPlayerToGame(socket, game, playerName);
-            socket.emit('joinSuccess', { playerId: socket.id, gameId: upperCaseGameId });
-            io.to(upperCaseGameId).emit('playerJoined');
-            if (game.musicState.currentTrackId) {
-                socket.emit('musicStateUpdate', game.musicState);
-            }
-        } else {
-            socket.emit('error', { i18nKey: 'error_room_full_or_not_exist' });
+            socket.join(lobbyToJoinId);
+            addPlayerToGame(socket, game, actualPlayerName);
+
+            console.log(`[Lobby] ${actualPlayerName} joined lobby ${lobbyToJoinId}`);
+
+            socket.emit('joinSuccess', { gameId: lobbyToJoinId, playerId: socket.id });
+
+            io.to(lobbyToJoinId).emit('lobbyStateUpdate', {
+                players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified })),
+                hostId: game.hostId,
+                maxPlayers: game.settings.maxPlayers
+            });
+
+        } catch (e) {
+            console.error("[Lobby] Error joining lobby:", e);
+            socket.emit('error', { i18nKey: 'error_database' });
         }
     });
     socket.on('getLobbyState', ({ gameId }) => {
         const game = games[gameId];
         if (game) {
+            if (game.players[socket.id] || game.spectators.includes(socket.id)) {
+                socket.join(gameId);
+            }
+
             const playersForLobby = Object.values(game.players).map(p => ({
                 id: p.id,
                 name: p.name,
                 isVerified: p.isVerified,
-                streak: p.streak,
-                rating: p.rating
+                streak: p.streak || 0,
+                rating: p.rating,
+                isHost: p.id === game.hostId,
             }));
-            io.to(gameId).emit('lobbyStateUpdate', {
+
+            socket.emit('lobbyStateUpdate', {
                 players: playersForLobby,
                 maxPlayers: game.settings.maxPlayers,
                 hostId: game.hostId
             });
+        } else {
+            socket.emit('error', { i18nKey: 'error_game_not_found' });
         }
     });
     socket.on('forceStartGame', ({ gameId }) => {
@@ -1027,7 +1042,6 @@ io.on('connection', (socket) => {
     });
     socket.on('disconnect', () => {
         let disconnectedUserId = null;
-        let disconnectedUsername = "Гість";
 
         for (const [userId, socketId] of onlineUsers.entries()) {
             if (socketId === socket.id) {
@@ -1038,84 +1052,88 @@ io.on('connection', (socket) => {
         }
 
         if (disconnectedUserId) {
-            console.log(`[Online Status] User with ID ${disconnectedUserId} disconnected. Total online: ${onlineUsers.size}`);
+            console.log(`[Online Status] User ID ${disconnectedUserId} disconnected. Total online: ${onlineUsers.size}`);
         } else {
-            console.log(`Клієнт відключився: ${socket.id} (гість)`);
+            console.log(`[Disconnect] Guest client disconnected: ${socket.id}`);
         }
 
         for (const gameId in games) {
             const game = games[gameId];
+
             const spectatorIndex = game.spectators.indexOf(socket.id);
             if (spectatorIndex > -1) {
                 game.spectators.splice(spectatorIndex, 1);
-                console.log(`Спостерігач (socket ID: ${socket.id}) покинув гру ${gameId}`);
+                console.log(`[Spectator] Spectator left game ${gameId}`);
+                break;
             }
 
             if (game.players[socket.id]) {
                 const disconnectedPlayer = game.players[socket.id];
-                disconnectedUsername = disconnectedPlayer.name;
-                console.log(`Гравець ${disconnectedPlayer.name} (${socket.id}) відключився з гри ${gameId}`);
-                delete game.players[socket.id];
-                game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
-                game.rematchVotes.delete(socket.id);
 
-                if (!game.trumpSuit) {
-                    if (game.hostId === socket.id) {
-                        if (game.playerOrder.length > 0) {
+                if (game.status === 'waiting') {
+
+                    delete game.players[socket.id];
+                    game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
+
+                    if (game.playerOrder.length > 0) {
+                        if (game.hostId === socket.id) {
                             game.hostId = game.playerOrder[0];
-                            console.log(`Хост вийшов. Новий хост: ${game.players[game.hostId].name}`);
-                            io.to(gameId).emit('playerJoined');
-                        } else {
-                            io.to(gameId).emit('error', { i18nKey: 'error_host_left_lobby' });
-                            delete games[gameId];
-                            console.log(`Хост вийшов з лобі ${gameId}. Гру видалено.`);
+                            const newHostName = game.players[game.hostId].name;
+                            console.log(`[Lobby] Host left. New host for ${gameId} is ${newHostName}`);
+                            logEvent(game, null, { i18nKey: 'log_new_host', options: { name: newHostName }});
                         }
+
+                        io.to(gameId).emit('lobbyStateUpdate', {
+                            players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified })),
+                            hostId: game.hostId,
+                            maxPlayers: game.settings.maxPlayers
+                        });
+                        io.to(gameId).emit('playerLeft', { playerId: socket.id, name: disconnectedPlayer.name });
+                        console.log(`[Lobby] ${disconnectedPlayer.name} removed. Lobby ${gameId} updated.`);
+
                     } else {
-                        io.to(gameId).emit('playerJoined');
+                        delete games[gameId];
+                        dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+                        console.log(`[Lobby] Lobby ${gameId} is empty and was deleted.`);
                     }
                 }
-                else if (!game.winner) {
+
+                else if (game.status === 'in_progress' && !game.winner) {
+
+                    const playerWhoLeft = { ...disconnectedPlayer };
+                    delete game.players[socket.id];
+                    game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
+
                     if (game.playerOrder.length < 2) {
+                        console.log(`[Game] Game ${gameId} finished due to disconnect (1 player left).`);
+
+                        const winners = game.playerOrder.map(id => game.players[id]).filter(p => p);
+
                         game.winner = {
+                            winners: winners,
+                            loser: playerWhoLeft,
                             reason: {
                                 i18nKey: 'game_over_player_left',
-                                options: { player: disconnectedPlayer.name }
+                                options: { player: playerWhoLeft.name }
                             }
                         };
+                        game.status = 'finished';
+
                         updateStatsAfterGame(game);
                         broadcastGameState(gameId);
-                    } else {
-                        logEvent(game, null, {
-                            i18nKey: 'log_player_left_continue',
-                            options: { name: disconnectedPlayer.name }
-                        });
+                    }
+                    else {
+                        console.log(`[Game] Game ${gameId} continues without ${disconnectedPlayer.name}`);
+                        logEvent(game, null, { i18nKey: 'log_player_left_continue', options: { name: playerWhoLeft.name }});
 
                         if (game.turn === socket.id) {
-                            const attackerIndex = game.playerOrder.indexOf(game.attackerId);
-                            if (socket.id === game.attackerId || attackerIndex === -1) {
-                                const defenderIndex = game.playerOrder.indexOf(game.defenderId);
-                                updateTurn(game, defenderIndex !== -1 ? defenderIndex : 0);
-                            } else {
-                                updateTurn(game, game.playerOrder.indexOf(game.turn));
-                            }
+                            const nextIndex = 0;
+                            updateTurn(game, nextIndex);
                         }
                         broadcastGameState(gameId);
                     }
                 }
-                else {
-                    const remainingPlayers = game.playerOrder.filter(id => game.players[id]);
-                    if (remainingPlayers.length > 0) {
-                        io.to(gameId).emit('rematchUpdate', {
-                            votes: game.rematchVotes.size,
-                            total: remainingPlayers.length
-                        });
-                    }
-                }
 
-                if (game && games[gameId] && Object.keys(game.players).length === 0) {
-                    console.log(`Гра ${gameId} порожня, видаляємо.`);
-                    delete games[gameId];
-                }
                 break;
             }
         }
@@ -1319,6 +1337,58 @@ io.on('connection', (socket) => {
         } catch (error) {
             console.error(`[Roulette] Bet error for user ${userId}:`, error);
             socket.emit('roulette:betError', { messageKey: 'error_database' });
+        }
+    });
+    socket.on('startGame', async ({ gameId }) => {
+        const sessionUser = socket.request.session?.user;
+        const game = games[gameId];
+
+        if (!game || !sessionUser || game.players[socket.id]?.dbId !== sessionUser.id || game.hostId !== socket.id) {
+            return socket.emit('error', { i18nKey: 'error_not_host' });
+        }
+
+        if (Object.keys(game.players).length < 2) {
+            return socket.emit('error', { i18nKey: 'error_not_enough_players' });
+        }
+
+        try {
+            await dbRun("UPDATE games SET status = 'in_progress' WHERE id = ?", [gameId]);
+
+            startGame(gameId);
+
+        } catch (e) {
+            console.error(`[Game] Error starting game ${gameId}:`, e);
+        }
+    });
+    socket.on('leaveLobby', ({ gameId }) => {
+        const game = games[gameId];
+        if (!game || !game.players[socket.id] || game.status !== 'waiting') return;
+
+        const player = game.players[socket.id];
+        console.log(`[Lobby] Player ${player.name} left lobby ${gameId}`);
+
+        socket.leave(gameId);
+
+        delete game.players[socket.id];
+        game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
+
+        if (game.playerOrder.length > 0) {
+            if (game.hostId === socket.id) {
+                game.hostId = game.playerOrder[0];
+                console.log(`[Lobby] New host for ${gameId}: ${game.players[game.hostId].name}`);
+                logEvent(game, null, { i18nKey: 'log_new_host', options: { name: game.players[game.hostId].name }});
+            }
+
+            io.to(gameId).emit('lobbyStateUpdate', {
+                players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified })),
+                hostId: game.hostId,
+                maxPlayers: game.settings.maxPlayers
+            });
+
+        } else {
+            console.log(`[Lobby] Lobby ${gameId} is empty. Deleting.`);
+            delete games[gameId];
+            dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
         }
     });
 });

@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref, computed, watch, onUnmounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useGameStore } from '@/stores/game';
 import { useSocketStore } from '@/stores/socket';
 import { useAuthStore } from '@/stores/auth';
@@ -17,6 +17,7 @@ import MusicPlayer from '@/components/game/MusicPlayer.vue';
 import FriendsModal from '@/components/ui/FriendsModal.vue';
 
 const route = useRoute();
+const router = useRouter();
 const gameStore = useGameStore();
 const socketStore = useSocketStore();
 const authStore = useAuthStore();
@@ -27,9 +28,9 @@ const { t } = useI18n();
 const urlGameId = route.params.id.toUpperCase();
 
 const guestName = ref('');
+
 const errorMessage = ref('');
 const isLoading = ref(true);
-
 const isFriendsOpen = ref(false);
 const friendsModalTab = ref('friends');
 
@@ -40,14 +41,9 @@ const currentUrl = computed(() => window.location.href);
 const opponents = computed(() => {
   if (!gameStore.players.length) return [];
   if (!gameStore.playerId) return gameStore.players;
-
   const myIndex = gameStore.players.findIndex(p => p.id === gameStore.playerId);
   if (myIndex === -1) return gameStore.players;
-
-  return [
-    ...gameStore.players.slice(myIndex + 1),
-    ...gameStore.players.slice(0, myIndex)
-  ];
+  return [...gameStore.players.slice(myIndex + 1), ...gameStore.players.slice(0, myIndex)];
 });
 
 const opponentsGridClass = computed(() => {
@@ -58,16 +54,13 @@ const opponentsGridClass = computed(() => {
 
 const getOpponentCardStyle = (index, total) => {
   if (total <= 1) return { zIndex: index };
-
   const center = (total - 1) / 2;
   const spread = 8;
   const height = 1.5;
   const offsetY = 12;
-
   const rotate = (index - center) * spread;
   const translateY = Math.abs(index - center) * height + offsetY;
   const translateX = (index - center) * 2;
-
   return {
     transform: `translateX(${translateX}px) translateY(${translateY}px) rotate(${rotate}deg)`,
     zIndex: index,
@@ -76,59 +69,68 @@ const getOpponentCardStyle = (index, total) => {
 };
 
 onMounted(() => {
-  if (authStore.user?.username) guestName.value = authStore.user.username;
-  if (!socketStore.isConnected) socketStore.connect();
+  if (!socketStore.isConnected) {
+    socketStore.connect();
+    socketStore.socket.once('connect', checkRoomStatus);
+  } else {
+    checkRoomStatus();
+  }
 
-  checkRoomStatus();
   socketStore.socket?.on('error', handleSocketError);
+
+  socketStore.socket?.on('kicked', (data) => {
+    toast.addToast(data.reason || t('you_were_kicked'), 'warning');
+    gameStore.leaveGame();
+  });
 });
 
-onUnmounted(() => { socketStore.socket?.off('error', handleSocketError); });
-
-watch(() => authStore.user, (newUser) => {
-  if (newUser && newUser.username && !isPlayerInGame.value) guestName.value = newUser.username;
+onUnmounted(() => {
+  socketStore.socket?.off('error', handleSocketError);
+  socketStore.socket?.off('kicked');
 });
 
 const checkRoomStatus = () => {
   isLoading.value = true;
   errorMessage.value = '';
-  socketStore.emit('getLobbyState', { gameId: urlGameId });
-  if (isPlayerInGame.value) isLoading.value = false;
-  else setTimeout(() => { if (isLoading.value && !errorMessage.value && gameStore.players.length === 0) isLoading.value = false; }, 1500);
+
+  if (isPlayerInGame.value) {
+    socketStore.emit('getLobbyState', { gameId: urlGameId });
+  }
+  else {
+    console.log('🔗 Direct link detected. Auto-joining...');
+
+    let nameToJoin = '';
+
+    if (authStore.user && authStore.user.username) {
+      nameToJoin = authStore.user.username;
+    } else {
+      if (!guestName.value) {
+        guestName.value = t('default_guest_name') + ' ' + Math.floor(Math.random() * 1000);
+      }
+      nameToJoin = guestName.value;
+    }
+
+    gameStore.joinLobby({
+      gameId: urlGameId,
+      playerName: nameToJoin
+    });
+  }
 };
 
 const handleSocketError = (err) => {
   isLoading.value = false;
-
   let msg = '';
-
-  if (typeof err === 'string') {
-    msg = err;
-  } else if (err.i18nKey) {
-    msg = t(err.i18nKey, err.options || {});
-  } else if (err.message) {
-    msg = err.message;
-  } else if (err.text) {
-    msg = err.text;
-  } else {
-    msg = t('error_unknown');
-  }
+  if (typeof err === 'string') msg = err;
+  else if (err.i18nKey) msg = t(err.i18nKey, err.options || {});
+  else msg = t('error_unknown');
 
   if (msg.toLowerCase().includes('not found') || err.i18nKey === 'error_game_not_found') {
     errorMessage.value = t('error_game_not_found');
-  }
-  else if (msg.toLowerCase().includes('full') || err.i18nKey === 'error_room_full') {
+  } else if (msg.toLowerCase().includes('full') || err.i18nKey === 'error_lobby_full') {
     errorMessage.value = t('error_room_full');
+  } else {
+    toast.addToast(msg, 'error');
   }
-  else {
-    if (!isPlayerInGame.value) toast.addToast(msg, 'error');
-  }
-};
-
-const handleJoin = () => {
-  if (!guestName.value.trim()) return toast.addToast(t('error_enter_name'), 'warning');
-  isLoading.value = true;
-  gameStore.joinGame(urlGameId, guestName.value);
 };
 
 const copyLink = () => {
@@ -152,20 +154,21 @@ const openFriendsList = () => {
   isFriendsOpen.value = true;
 };
 
-watch(() => gameStore.players, (val) => { if (val.length > 0) isLoading.value = false; });
+watch(() => gameStore.players, (val) => {
+  if (val && val.length > 0) isLoading.value = false;
+});
 </script>
 
 <template>
-  <div
-    class="h-[100dvh] w-full flex flex-col relative overflow-hidden font-sans bg-background select-none touch-manipulation">
+  <div class="h-[100dvh] w-full flex flex-col relative overflow-hidden font-sans bg-background select-none touch-manipulation">
 
     <div v-if="!isGameStarted" class="flex-1 flex items-center justify-center p-4 overflow-y-auto">
-      <div
-        class="w-full max-w-xl bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 p-6 md:p-8 animate-fade-in text-on-surface my-auto">
+      <div class="w-full max-w-xl bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 p-6 md:p-8 animate-fade-in text-on-surface my-auto">
 
         <h2 class="text-center text-on-surface-variant mb-1 text-sm uppercase">{{ $t('room_label') }}</h2>
-        <h1 class="text-4xl md:text-5xl text-center font-bold text-primary tracking-widest font-mono uppercase mb-6">{{
-            urlGameId }}</h1>
+        <h1 class="text-4xl md:text-5xl text-center font-bold text-primary tracking-widest font-mono uppercase mb-6">
+          {{ urlGameId }}
+        </h1>
 
         <div v-if="errorMessage" class="text-center py-4">
           <p class="text-error font-bold text-lg mb-2">{{ errorMessage }}</p>
@@ -176,16 +179,8 @@ watch(() => gameStore.players, (val) => { if (val.length > 0) isLoading.value = 
           <ShufflingLoader />
         </div>
 
-        <div v-else-if="!isPlayerInGame" class="flex flex-col gap-4">
-          <p class="text-center text-white">{{ $t('enter_name_to_join') }}</p>
-          <input v-model="guestName"
-                 class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 text-white focus:border-primary outline-none transition-colors"
-                 :placeholder="$t('placeholder_name')" :disabled="!!authStore.user">
-          <button @click="handleJoin"
-                  class="w-full bg-primary text-on-primary font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-transform">{{ $t('join_button') }}</button>
-        </div>
-
         <div v-else class="flex flex-col gap-4">
+
           <div class="flex gap-2">
             <input type="text" :value="currentUrl" readonly
                    class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-2 text-white text-xs md:text-sm truncate">
@@ -204,19 +199,19 @@ watch(() => gameStore.players, (val) => { if (val.length > 0) isLoading.value = 
             <li v-for="p in gameStore.players" :key="p.id"
                 class="flex items-center justify-between bg-black/20 p-2.5 rounded-xl border border-white/5">
               <div class="flex items-center gap-3 min-w-0">
-                <div
-                  class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
-                  {{ p.name[0] }}</div>
+                <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
+                  {{ p.name[0] }}
+                </div>
                 <div class="flex flex-col min-w-0">
                   <div class="flex items-center gap-1.5">
                     <span class="text-white text-sm font-medium truncate">{{ p.name }}</span>
-                    <svg v-if="p.isVerified" class="w-3 h-3 text-blue-400 shrink-0" viewBox="0 0 24 24"
-                         fill="currentColor">
+                    <svg v-if="p.isVerified" class="w-3 h-3 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <span v-if="p.streak > 3"
-                          class="text-[10px] text-orange-500 font-bold bg-orange-500/10 px-1 rounded border border-orange-500/20 shrink-0">🔥{{
-                        p.streak }}</span>
+                          class="text-[10px] text-orange-500 font-bold bg-orange-500/10 px-1 rounded border border-orange-500/20 shrink-0">
+                      🔥{{ p.streak }}
+                    </span>
                   </div>
                   <span v-if="p.id === gameStore.playerId" class="text-[10px] text-gray-400">{{ $t('you_label') }}</span>
                 </div>
@@ -228,7 +223,7 @@ watch(() => gameStore.players, (val) => { if (val.length > 0) isLoading.value = 
                         :title="$t('tooltip_add_friend')">
                   +
                 </button>
-                <span v-if="gameStore.isHost && p.id === gameStore.playerId" :title="$t('tooltip_host')" class="text-lg">👑</span>
+                <span v-if="gameStore.isHost && p.id === gameStore.hostId" :title="$t('tooltip_host')" class="text-lg">👑</span>
               </div>
             </li>
           </ul>
@@ -238,6 +233,10 @@ watch(() => gameStore.players, (val) => { if (val.length > 0) isLoading.value = 
             {{ $t('start_game_button') }}
           </button>
           <p v-else class="text-center text-xs text-white/50 animate-pulse">{{ $t('waiting_for_host') }}</p>
+
+          <button @click="gameStore.leaveGame" class="w-full bg-transparent border border-white/10 text-white/70 hover:bg-white/5 font-bold py-2 rounded-xl transition-all">
+            {{ $t('leave_lobby') }}
+          </button>
         </div>
       </div>
     </div>
@@ -253,29 +252,22 @@ watch(() => gameStore.players, (val) => { if (val.length > 0) isLoading.value = 
           <div v-for="(opp, oppIdx) in opponents" :key="opp.id"
                class="flex flex-col items-center relative group transition-all min-w-[4rem] md:min-w-[6rem]">
 
-            <div
-              class="w-10 h-10 md:w-16 md:h-16 rounded-full flex items-center justify-center text-white font-bold text-sm md:text-xl border-2 md:border-4 transition-all z-10 bg-surface shadow-md relative"
-              :class="opp.id === gameStore.turnPlayerId ? 'border-primary shadow-[0_0_15px_rgba(0,191,165,0.6)] scale-110' : 'border-white/10'">
+            <div class="w-10 h-10 md:w-16 md:h-16 rounded-full flex items-center justify-center text-white font-bold text-sm md:text-xl border-2 md:border-4 transition-all z-10 bg-surface shadow-md relative"
+                 :class="opp.id === gameStore.turnPlayerId ? 'border-primary shadow-[0_0_15px_rgba(0,191,165,0.6)] scale-110' : 'border-white/10'">
               {{ opp.name[0] }}
-              <div v-if="gameStore.attackerId === opp.id"
-                   class="absolute -bottom-1 -right-1 text-base md:text-2xl drop-shadow-md animate-bounce z-20">⚔️</div>
-              <div v-if="gameStore.defenderId === opp.id"
-                   class="absolute -bottom-1 -right-1 text-base md:text-2xl drop-shadow-md animate-pulse z-20">🛡️</div>
+              <div v-if="gameStore.attackerId === opp.id" class="absolute -bottom-1 -right-1 text-base md:text-2xl drop-shadow-md animate-bounce z-20">⚔️</div>
+              <div v-if="gameStore.defenderId === opp.id" class="absolute -bottom-1 -right-1 text-base md:text-2xl drop-shadow-md animate-pulse z-20">🛡️</div>
             </div>
 
-            <div
-              class="mt-1 bg-black/40 px-1.5 py-0.5 rounded-full backdrop-blur-sm w-full flex justify-center max-w-full z-30">
-              <p class="text-white text-[10px] md:text-xs font-medium truncate text-center leading-tight flex-1">{{
-                  opp.name }}</p>
+            <div class="mt-1 bg-black/40 px-1.5 py-0.5 rounded-full backdrop-blur-sm w-full flex justify-center max-w-full z-30">
+              <p class="text-white text-[10px] md:text-xs font-medium truncate text-center leading-tight flex-1">{{ opp.name }}</p>
               <svg v-if="opp.isVerified" class="w-3 h-3 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span v-if="opp.streak > 3" class="text-[10px] text-orange-500 font-bold shrink-0">🔥{{ opp.streak
-                }}</span>
+              <span v-if="opp.streak > 3" class="text-[10px] text-orange-500 font-bold shrink-0">🔥{{ opp.streak }}</span>
             </div>
 
-            <transition-group tag="div" name="opp-cards"
-                              class="flex justify-center items-end relative w-full h-16 md:h-20 -mt-2">
+            <transition-group tag="div" name="opp-cards" class="flex justify-center items-end relative w-full h-16 md:h-20 -mt-2">
               <div v-for="(n, idx) in (opp.cardCount || opp.cards?.length || 0)" :key="idx"
                    class="absolute bottom-0 origin-bottom transition-transform"
                    :style="getOpponentCardStyle(idx, (opp.cardCount || opp.cards?.length || 0))">
@@ -287,24 +279,19 @@ watch(() => gameStore.players, (val) => { if (val.length > 0) isLoading.value = 
         </div>
 
         <div class="relative w-full flex items-center justify-center min-h-0">
-
-          <div
-            class="absolute left-2 top-1/2 -translate-y-1/2 flex items-center z-0 scale-[0.6] md:scale-100 origin-left">
+          <div class="absolute left-2 top-1/2 -translate-y-1/2 flex items-center z-0 scale-[0.6] md:scale-100 origin-left">
             <Card v-if="gameStore.trumpCard" :rank="gameStore.trumpCard.rank" :suit="gameStore.trumpCard.suit"
                   class="rotate-90 translate-x-12 opacity-100 z-0" />
             <div v-if="gameStore.deckCount > 0" class="relative z-10">
               <Card :is-back="true" class="shadow-xl" card-style="default" />
-              <div
-                class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-white font-bold bg-black/60 px-2 rounded text-xs border border-white/10">
+              <div class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-white font-bold bg-black/60 px-2 rounded text-xs border border-white/10">
                 {{ gameStore.deckCount }}</div>
             </div>
-            <div v-else
-                 class="absolute left-0 text-white/30 font-bold border-2 border-dashed border-white/10 w-20 h-28 rounded-xl flex items-center justify-center z-0">
+            <div v-else class="absolute left-0 text-white/30 font-bold border-2 border-dashed border-white/10 w-20 h-28 rounded-xl flex items-center justify-center z-0">
               0</div>
           </div>
 
-          <div
-            class="flex flex-wrap justify-center items-center content-center gap-2 md:gap-4 px-8 md:px-32 w-full h-full max-w-4xl gap-y-6 overflow-auto">
+          <div class="flex flex-wrap justify-center items-center content-center gap-2 md:gap-4 px-8 md:px-32 w-full h-full max-w-4xl gap-y-6 overflow-auto">
             <div v-for="(card, i) in gameStore.tableCards" :key="`${card.rank}-${card.suit}-${i}`"
                  class="relative transition-all duration-300 transform scale-[0.85] sm:scale-100" :class="{
                 'z-0 ml-1 md:ml-2': i % 2 === 0,
@@ -316,13 +303,11 @@ watch(() => gameStore.players, (val) => { if (val.length > 0) isLoading.value = 
         </div>
 
         <div class="shrink-0 flex flex-col items-center w-full pb-2 md:pb-4 gap-1">
-
           <div class="mb-1">
             <div v-if="!gameStore.canPass && !gameStore.canTake"
                  class="px-3 py-1 bg-black/60 backdrop-blur text-white/90 rounded-full text-xs md:text-sm border border-white/10 animate-pulse">
               <span v-if="!gameStore.isMyTurn">{{ gameStore.isAttacker ? $t('status_waiting') : $t('status_opponent_turn') }}</span>
-              <span v-else class="text-primary font-bold">{{ gameStore.isAttacker ? $t('status_your_turn') : $t('status_defend')
-                }}</span>
+              <span v-else class="text-primary font-bold">{{ gameStore.isAttacker ? $t('status_your_turn') : $t('status_defend') }}</span>
             </div>
           </div>
 
@@ -369,68 +354,22 @@ watch(() => gameStore.players, (val) => { if (val.length > 0) isLoading.value = 
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+.hand-enter-active, .hand-leave-active { transition: all 0.4s ease; }
+.hand-enter-from { opacity: 0; transform: translateY(100px); }
+.hand-leave-to { opacity: 0; transform: translateY(-100px); }
+.hand-move { transition: transform 0.4s ease; position: relative; }
 
-.hand-enter-active,
-.hand-leave-active {
-  transition: all 0.4s ease;
-}
+.pop-enter-active { transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.pop-leave-active { transition: all 0.2s ease-in; }
+.pop-enter-from, .pop-leave-to { opacity: 0; transform: scale(0.5); }
 
-.hand-enter-from {
-  opacity: 0;
-  transform: translateY(100px);
-}
-
-.hand-leave-to {
-  opacity: 0;
-  transform: translateY(-100px);
-}
-
-.hand-move {
-  transition: transform 0.4s ease;
-  position: relative;
-}
-
-.pop-enter-active {
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.pop-leave-active {
-  transition: all 0.2s ease-in;
-}
-
-.pop-enter-from,
-.pop-leave-to {
-  opacity: 0;
-  transform: scale(0.5);
-}
-
-.opp-cards-enter-active,
-.opp-cards-leave-active {
-  transition: all 0.3s ease;
-}
-
-.opp-cards-enter-from,
-.opp-cards-leave-to {
-  opacity: 0;
-  transform: scale(0);
-}
+.opp-cards-enter-active, .opp-cards-leave-active { transition: all 0.3s ease; }
+.opp-cards-enter-from, .opp-cards-leave-to { opacity: 0; transform: scale(0); }
 </style>
