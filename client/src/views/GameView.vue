@@ -37,6 +37,31 @@ const friendsModalTab = ref('friends');
 const isPlayerInGame = computed(() => gameStore.gameId === urlGameId && !!gameStore.playerId);
 const isGameStarted = computed(() => gameStore.gameStatus === 'playing');
 const currentUrl = computed(() => window.location.href);
+const localMaxPlayers = ref(2);
+const localDeckSize = ref(36);
+
+watch(() => gameStore.settings, (newSettings) => {
+  if (newSettings) {
+    localMaxPlayers.value = newSettings.maxPlayers;
+    localDeckSize.value = newSettings.deckSize;
+  }
+}, { immediate: true, deep: true });
+
+const updateSettings = () => {
+  socketStore.emit('updateLobbySettings', {
+    gameId: urlGameId,
+    settings: {
+      maxPlayers: localMaxPlayers.value,
+      deckSize: localDeckSize.value
+    }
+  });
+};
+
+const kickPlayer = (playerId) => {
+  if (confirm(t('confirm_kick'))) {
+    socketStore.emit('kickPlayer', { gameId: urlGameId, playerIdToKick: playerId });
+  }
+};
 
 const opponents = computed(() => {
   if (!gameStore.players.length) return [];
@@ -181,6 +206,29 @@ watch(() => gameStore.players, (val) => {
 
         <div v-else class="flex flex-col gap-4">
 
+          <div class="bg-black/20 p-3 rounded-xl border border-white/5 flex flex-col gap-2">
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-on-surface-variant">{{ $t('players_count_label') }}</span>
+              <select v-if="gameStore.isHost" @change="updateSettings" v-model="localMaxPlayers" class="bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white outline-none">
+                <option :value="2">2</option><option :value="3">3</option><option :value="4">4</option>
+              </select>
+              <span v-else class="font-bold text-white">{{ gameStore.settings?.maxPlayers || 2 }}</span>
+            </div>
+
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-on-surface-variant">{{ $t('deck_size_label') }}</span>
+              <select v-if="gameStore.isHost" @change="updateSettings" v-model="localDeckSize" class="bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white outline-none">
+                <option :value="24">24</option><option :value="36">36</option><option :value="52">52</option>
+              </select>
+              <span v-else class="font-bold text-white">{{ gameStore.settings?.deckSize || 36 }}</span>
+            </div>
+
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-on-surface-variant">{{ $t('bet_amount_label') }}</span>
+              <span class="font-bold text-primary">💰 {{ gameStore.settings?.betAmount || 0 }}</span>
+            </div>
+          </div>
+
           <div class="flex gap-2">
             <input type="text" :value="currentUrl" readonly
                    class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-2 text-white text-xs md:text-sm truncate">
@@ -188,16 +236,10 @@ watch(() => gameStore.players, (val) => {
                     class="bg-surface border border-outline/50 px-3 rounded-xl hover:bg-white/10 text-white transition-colors">📋</button>
           </div>
 
-          <div v-if="authStore.isAuthenticated" class="flex justify-end">
-            <button @click="openFriendsList"
-                    class="text-xs font-bold text-primary flex items-center gap-1 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors">
-              <span>👥</span> {{ $t('invite_button') }}
-            </button>
-          </div>
-
           <ul class="space-y-2">
             <li v-for="p in gameStore.players" :key="p.id"
-                class="flex items-center justify-between bg-black/20 p-2.5 rounded-xl border border-white/5">
+                class="flex items-center justify-between bg-black/20 p-2.5 rounded-xl border border-white/5 relative group">
+
               <div class="flex items-center gap-3 min-w-0">
                 <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
                   {{ p.name[0] }}
@@ -205,25 +247,20 @@ watch(() => gameStore.players, (val) => {
                 <div class="flex flex-col min-w-0">
                   <div class="flex items-center gap-1.5">
                     <span class="text-white text-sm font-medium truncate">{{ p.name }}</span>
-                    <svg v-if="p.isVerified" class="w-3 h-3 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span v-if="p.streak > 3"
-                          class="text-[10px] text-orange-500 font-bold bg-orange-500/10 px-1 rounded border border-orange-500/20 shrink-0">
-                      🔥{{ p.streak }}
-                    </span>
                   </div>
                   <span v-if="p.id === gameStore.playerId" class="text-[10px] text-gray-400">{{ $t('you_label') }}</span>
                 </div>
               </div>
 
               <div class="flex items-center gap-2">
-                <button v-if="p.id !== gameStore.playerId && authStore.isAuthenticated" @click="openAddFriend(p.name)"
-                        class="w-7 h-7 rounded-lg bg-white/5 hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors"
-                        :title="$t('tooltip_add_friend')">
-                  +
+                <span v-if="p.isHost" :title="$t('tooltip_host')" class="text-lg">👑</span>
+
+                <button v-if="gameStore.isHost && p.id !== gameStore.playerId"
+                        @click="kickPlayer(p.id)"
+                        class="text-error hover:bg-white/10 p-1 rounded transition-colors"
+                        :title="$t('kick_player')">
+                  🚫
                 </button>
-                <span v-if="gameStore.isHost && p.id === gameStore.hostId" :title="$t('tooltip_host')" class="text-lg">👑</span>
               </div>
             </li>
           </ul>

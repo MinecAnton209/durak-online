@@ -32,6 +32,10 @@ const cookieParser = require('cookie-parser');
 const { attachUserFromToken, socketAttachUser } = require('./middlewares/jwtAuth')
 const telegramBot = require('./services/telegramBot');
 
+dbRun("UPDATE games SET status = 'cancelled' WHERE status = 'waiting'")
+    .then(() => console.log('🧹 DB cleaned: Stale lobbies cancelled.'))
+    .catch(err => console.error('DB Clean error:', err));
+
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
@@ -724,6 +728,27 @@ function checkWin(winningNumber, bet) {
             return false;
     }
 }
+
+function broadcastPublicLobbies() {
+    const publicLobbies = Object.values(games)
+        .filter(game => {
+            return game.status === 'waiting' &&
+                game.settings.lobbyType === 'public' &&
+                game.playerOrder &&
+                game.playerOrder.length > 0;
+        })
+        .map(game => ({
+            gameId: game.id,
+            hostName: game.players[game.hostId]?.name || 'Unknown',
+            playerCount: game.playerOrder.length,
+            maxPlayers: game.settings.maxPlayers,
+            betAmount: game.settings.betAmount || 0,
+            deckSize: game.settings.deckSize || 36
+        }));
+
+    io.to('lobby_browser').emit('lobbyListUpdate', publicLobbies);
+}
+
 io.on('connection', (socket) => {
     const session = socket.request.session;
     const sessionUser = session?.user;
@@ -808,7 +833,8 @@ io.on('connection', (socket) => {
             addPlayerToGame(socket, games[gameId], playerName);
 
             console.log(`[Lobby] Lobby created: ${gameId} by ${playerName} (Guest: ${!sessionUser})`);
-            socket.emit('lobbyCreated', { gameId, inviteCode });
+            socket.emit('lobbyCreated', { gameId, inviteCode, settings: lobbySettings });
+            broadcastPublicLobbies();
 
         } catch (e) {
             console.error("[Lobby] Error creating lobby:", e);
@@ -816,43 +842,56 @@ io.on('connection', (socket) => {
         }
     });
     socket.on('joinLobby', async ({ gameId, inviteCode, playerName }) => {
+        console.log(`[JoinLobby] Request received: GameId=${gameId}, Code=${inviteCode}, Name=${playerName}`);
+
         const sessionUser = socket.request.session?.user;
 
         if (sessionUser) {
             const banReason = await checkBanStatus(sessionUser.id);
-            if (banReason) {
-                return socket.emit('forceDisconnect', { i18nKey: 'error_account_banned_with_reason', options: { reason: banReason } });
-            }
+            if (banReason) return socket.emit('forceDisconnect', { i18nKey: 'error_account_banned_with_reason', options: { reason: banReason } });
         }
 
         const actualPlayerName = sessionUser ? sessionUser.username : (playerName || "Guest");
-
         let lobbyToJoinId = gameId ? gameId.toUpperCase() : null;
         let gameFromDb;
 
         try {
             if (inviteCode) {
-                gameFromDb = await dbGet("SELECT id, max_players FROM games WHERE invite_code = ? AND status = 'waiting'", [inviteCode.toUpperCase()]);
+                const codeToCheck = inviteCode.toUpperCase();
+
+                gameFromDb = await dbGet("SELECT id, max_players FROM games WHERE invite_code = ? AND status = 'waiting'", [codeToCheck]);
+
+                if (!gameFromDb) {
+                    gameFromDb = await dbGet("SELECT id, max_players FROM games WHERE id = ? AND status = 'waiting'", [codeToCheck]);
+                }
+
                 if (gameFromDb) lobbyToJoinId = gameFromDb.id;
+
             } else if (lobbyToJoinId) {
-                gameFromDb = await dbGet("SELECT id, max_players FROM games WHERE id = ? AND status = 'waiting' AND lobby_type = 'public'", [lobbyToJoinId]);
+                gameFromDb = await dbGet("SELECT id, max_players FROM games WHERE id = ? AND status = 'waiting'", [lobbyToJoinId]);
             }
 
+            console.log(`[JoinLobby] DB Search Result:`, gameFromDb);
+
             if (!lobbyToJoinId || !gameFromDb) {
+                console.log(`[JoinLobby] Lobby not found in DB or wrong status`);
                 return socket.emit('error', { i18nKey: 'error_lobby_not_found' });
             }
 
             const game = games[lobbyToJoinId];
             if (!game) {
+                console.log(`[JoinLobby] Lobby found in DB but NOT in Memory. Cancelling DB record.`);
                 await dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [lobbyToJoinId]);
                 return socket.emit('error', { i18nKey: 'error_lobby_not_found_in_memory' });
             }
 
             if (sessionUser && Object.values(game.players).some(p => p.dbId === sessionUser.id)) {
+                console.log(`[JoinLobby] User already in game`);
                 return socket.emit('error', { i18nKey: 'error_already_in_game' });
             }
 
             if (Object.keys(game.players).length >= game.settings.maxPlayers) {
+                console.log(`[JoinLobby] Lobby is full`);
                 return socket.emit('error', { i18nKey: 'error_lobby_full' });
             }
 
@@ -899,7 +938,8 @@ io.on('connection', (socket) => {
             socket.emit('lobbyStateUpdate', {
                 players: playersForLobby,
                 maxPlayers: game.settings.maxPlayers,
-                hostId: game.hostId
+                hostId: game.hostId,
+                settings: game.settings
             });
         } else {
             socket.emit('error', { i18nKey: 'error_game_not_found' });
@@ -1090,11 +1130,13 @@ io.on('connection', (socket) => {
                         });
                         io.to(gameId).emit('playerLeft', { playerId: socket.id, name: disconnectedPlayer.name });
                         console.log(`[Lobby] ${disconnectedPlayer.name} removed. Lobby ${gameId} updated.`);
+                        broadcastPublicLobbies();
 
                     } else {
                         delete games[gameId];
                         dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
                         console.log(`[Lobby] Lobby ${gameId} is empty and was deleted.`);
+                        broadcastPublicLobbies();
                     }
                 }
 
@@ -1356,6 +1398,7 @@ io.on('connection', (socket) => {
 
             startGame(gameId);
 
+            broadcastPublicLobbies();
         } catch (e) {
             console.error(`[Game] Error starting game ${gameId}:`, e);
         }
@@ -1391,6 +1434,84 @@ io.on('connection', (socket) => {
             dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
         }
     });
+    socket.on('updateLobbySettings', async ({ gameId, settings }) => {
+        const game = games[gameId];
+        if (!game || game.status !== 'waiting' || game.hostId !== socket.id) return;
+
+        if (settings.maxPlayers) {
+            if (game.playerOrder.length <= settings.maxPlayers) {
+                game.settings.maxPlayers = parseInt(settings.maxPlayers);
+            }
+        }
+        if (settings.deckSize) game.settings.deckSize = parseInt(settings.deckSize);
+
+        try {
+            await dbRun("UPDATE games SET game_settings = ?, max_players = ? WHERE id = ?",
+                [JSON.stringify(game.settings), game.settings.maxPlayers, gameId]
+            );
+
+            io.to(gameId).emit('lobbyStateUpdate', {
+                players: Object.values(game.players).map(p => ({
+                    id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified, isHost: p.id === game.hostId
+                })),
+                hostId: game.hostId,
+                maxPlayers: game.settings.maxPlayers,
+                settings: game.settings
+            });
+
+            broadcastPublicLobbies();
+
+        } catch (e) {
+            console.error("Error updating settings:", e);
+        }
+    });
+
+    socket.on('kickPlayer', ({ gameId, playerIdToKick }) => {
+        const game = games[gameId];
+        if (!game || game.status !== 'waiting' || game.hostId !== socket.id) return;
+        if (playerIdToKick === socket.id) return;
+
+        const kickedSocket = io.sockets.sockets.get(playerIdToKick);
+
+        console.log(`[Lobby] Host kicked player ${playerIdToKick} from ${gameId}`);
+
+        if (game.players[playerIdToKick]) {
+            delete game.players[playerIdToKick];
+            game.playerOrder = game.playerOrder.filter(id => id !== playerIdToKick);
+
+            io.to(gameId).emit('playerLeft', { playerId: playerIdToKick });
+            io.to(gameId).emit('lobbyStateUpdate', {
+                players: Object.values(game.players).map(p => ({
+                    id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified
+                })),
+                hostId: game.hostId,
+                maxPlayers: game.settings.maxPlayers
+            });
+        }
+
+        if (kickedSocket) {
+            kickedSocket.emit('kicked', { reason: 'Host kicked you.' });
+            kickedSocket.leave(gameId);
+        }
+    });
+    socket.on('joinLobbyBrowser', () => {
+        socket.join('lobby_browser');
+        const list = Object.values(games)
+            .filter(game => game.status === 'waiting' && game.settings.lobbyType === 'public' && game.playerOrder.length > 0)
+            .map(game => ({
+                gameId: game.id,
+                hostName: game.players[game.hostId]?.name || 'Unknown',
+                playerCount: game.playerOrder.length,
+                maxPlayers: game.settings.maxPlayers,
+                betAmount: game.settings.betAmount || 0,
+                deckSize: game.settings.deckSize || 36
+            }));
+        socket.emit('lobbyListUpdate', list);
+    });
+
+    socket.on('leaveLobbyBrowser', () => {
+        socket.leave('lobby_browser');
+    });
 });
 
 rouletteTick();
@@ -1402,6 +1523,22 @@ setInterval(() => {
         io.emit('roulette:timer', { timer: rouletteState.timer, phase: rouletteState.phase });
     }
 }, 1000);
+
+setInterval(() => {
+    let hasChanges = false;
+    for (const gameId in games) {
+        const game = games[gameId];
+        if (game.status === 'waiting' && (!game.playerOrder || game.playerOrder.length === 0)) {
+            console.log(`[GC] Removing zombie lobby: ${gameId}`);
+            delete games[gameId];
+            dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+            hasChanges = true;
+        }
+    }
+    if (hasChanges) {
+        broadcastPublicLobbies();
+    }
+}, 30000);
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Сервер запущено на порті ${PORT}`);

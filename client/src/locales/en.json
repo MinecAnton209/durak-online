@@ -194,7 +194,7 @@
   "lobby_list_public": "Public Lobbies",
   "no_public_lobbies": "No open lobbies atm. Create one!",
   "join_private_lobby": "Join via Code",
-  "enter_code_placeholder": "Invite code...",
+  "enter_code_placeholder": "Invite Code or Game ID...",
   "lobby_type": "Lobby Type",
   "lobby_public": "Public",
   "lobby_private": "Private",

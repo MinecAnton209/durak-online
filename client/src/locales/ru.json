@@ -193,7 +193,7 @@
   "lobby_list_public": "Публичные игры",
   "no_public_lobbies": "Сейчас нет открытых игр. Создайте свою!",
   "join_private_lobby": "Войти по коду",
-  "enter_code_placeholder": "Код приглашения...",
+  "enter_code_placeholder": "Код или ID игры...",
   "lobby_type": "Тип лобби",
   "lobby_public": "Открытое",
   "lobby_private": "Приватное",

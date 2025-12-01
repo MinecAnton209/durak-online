@@ -3,16 +3,21 @@ import { ref, computed } from 'vue';
 import router from '@/router';
 import { useSocketStore } from './socket';
 import { useToastStore } from './toast';
+import { useAuthStore } from './auth';
 import i18n from '@/i18n';
 
 export const useGameStore = defineStore('game', () => {
   const socketStore = useSocketStore();
   const toast = useToastStore();
+  const authStore = useAuthStore();
 
   const gameId = ref(null);
   const playerId = ref(null);
   const hostId = ref(null);
   const players = ref([]);
+  const settings = ref({});
+
+  const publicLobbies = ref([]);
 
   const gameStatus = ref('lobby');
   const isDealing = ref(false);
@@ -32,6 +37,7 @@ export const useGameStore = defineStore('game', () => {
 
   const chatLog = ref([]);
   const unreadMessages = ref(0);
+
   const musicState = ref({
     currentTrackId: null,
     isPlaying: false,
@@ -41,15 +47,10 @@ export const useGameStore = defineStore('game', () => {
     stateChangeTimestamp: 0
   });
 
-  const isHost = computed(() => {
-    return hostId.value && playerId.value && hostId.value === playerId.value;
-  });
-
+  const isHost = computed(() => hostId.value && playerId.value && hostId.value === playerId.value);
   const myPlayer = computed(() => players.value.find(p => p.id === playerId.value));
-
   const isAttacker = computed(() => myPlayer.value?.isAttacker || false);
   const isDefender = computed(() => myPlayer.value?.isDefender || false);
-
   const attackerId = computed(() => players.value.find(p => p.isAttacker)?.id);
   const defenderId = computed(() => players.value.find(p => p.isDefender)?.id);
 
@@ -99,8 +100,10 @@ export const useGameStore = defineStore('game', () => {
       gameId.value = data.gameId;
       playerId.value = socket.id;
       hostId.value = socket.id;
+      if (data.settings) {
+        settings.value = data.settings;
+      }
       gameStatus.value = 'lobby';
-
       router.push(`/lobby/${data.gameId}`);
     });
 
@@ -109,28 +112,26 @@ export const useGameStore = defineStore('game', () => {
       gameId.value = data.gameId;
       playerId.value = data.playerId;
       gameStatus.value = 'lobby';
-
       router.push(`/lobby/${data.gameId}`);
     });
 
     socket.on('lobbyStateUpdate', (data) => {
       console.log('⚡ EVENT RECEIVED: lobbyStateUpdate', data);
       players.value = data.players || [];
-      if (data.hostId) {
-        hostId.value = data.hostId;
-      }
+      if (data.hostId) hostId.value = data.hostId;
+      if (data.settings) settings.value = data.settings;
     });
 
-    socket.on('playerJoined', () => { if (gameId.value) socketStore.emit('getLobbyState', { gameId: gameId.value }); });
     socket.on('playerLeft', (data) => {
       console.log('⚡ EVENT RECEIVED: playerLeft', data);
       if (data && data.playerId) {
         players.value = players.value.filter(p => p.id !== data.playerId);
       }
+      if (gameId.value) socketStore.emit('getLobbyState', { gameId: gameId.value });
+    });
 
-      if (gameId.value) {
-        socketStore.emit('getLobbyState', { gameId: gameId.value });
-      }
+    socket.on('playerJoined', () => {
+      if (gameId.value) socketStore.emit('getLobbyState', { gameId: gameId.value });
     });
 
     socket.on('gameStateUpdate', (state) => {
@@ -153,9 +154,7 @@ export const useGameStore = defineStore('game', () => {
       deckCount.value = state.deckCardCount;
       players.value = state.players;
 
-      if (state.hostId) {
-        hostId.value = state.hostId;
-      }
+      if (state.hostId) hostId.value = state.hostId;
 
       isMyTurn.value = state.isYourTurn;
       canTake.value = state.canTake;
@@ -181,9 +180,7 @@ export const useGameStore = defineStore('game', () => {
         else if (amILoser) new Audio('/sounds/lose.mp3').play().catch(() => null);
       }
 
-      if (state.musicState) {
-        musicState.value = state.musicState;
-      }
+      if (state.musicState) musicState.value = state.musicState;
     });
 
     socket.on('musicStateUpdate', (state) => musicState.value = state);
@@ -198,14 +195,28 @@ export const useGameStore = defineStore('game', () => {
     socket.on('rematchUpdate', (data) => rematchStatus.value = data);
   }
 
-  function createLobby(settings) {
-    socketStore.emit('createLobby', settings);
+  function resetState() {
+    gameStatus.value = 'lobby';
+    tableCards.value = [];
+    myCards.value = [];
+    winnerData.value = null;
+    rematchStatus.value = null;
+    isMyTurn.value = false;
+    hostId.value = null;
+    settings.value = {};
+  }
+
+  function stopDealingAnimation() { isDealing.value = false; }
+
+  function createLobby(lobbySettings) {
+    initListeners();
+    socketStore.emit('createLobby', lobbySettings);
   }
 
   function joinLobby({ gameId, inviteCode, playerName = null }) {
+    initListeners();
 
-    const nameToSend = playerName ||
-      (authStore.user ? authStore.user.username : `Guest ${Math.floor(Math.random()*1000)}`);
+    const nameToSend = playerName || (authStore.user ? authStore.user.username : `Guest ${Math.floor(Math.random()*1000)}`);
 
     socketStore.emit('joinLobby', {
       gameId,
@@ -216,7 +227,9 @@ export const useGameStore = defineStore('game', () => {
 
   async function findAndJoinPublicLobby(guestName = null) {
     try {
+      initListeners();
       toast.addToast(i18n.global.t('searching_for_game'), 'info');
+
       const response = await fetch('/api/public/lobbies');
       if (!response.ok) throw new Error('Network error');
 
@@ -247,20 +260,22 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  function resetState() {
-    gameStatus.value = 'lobby';
-    tableCards.value = [];
-    myCards.value = [];
-    winnerData.value = null;
-    rematchStatus.value = null;
-    isMyTurn.value = false;
-    hostId.value = null;
+
+  function subscribeToLobbies() {
+    if (!socketStore.socket) return;
+    socketStore.emit('joinLobbyBrowser');
+
+    socketStore.socket.on('lobbyListUpdate', (list) => {
+      publicLobbies.value = list;
+    });
   }
 
-  function stopDealingAnimation() { isDealing.value = false; }
+  function unsubscribeFromLobbies() {
+    if (!socketStore.socket) return;
+    socketStore.emit('leaveLobbyBrowser');
+    socketStore.socket.off('lobbyListUpdate');
+  }
 
-  function createGame(settings) { socketStore.emit('createGame', settings); }
-  function joinGame(id, name) { socketStore.emit('joinGame', { gameId: id, playerName: name }); }
   function makeMove(card) {
     socketStore.emit('makeMove', { gameId: gameId.value, card });
     new Audio('/sounds/play.mp3').play().catch(() => null);
@@ -273,20 +288,18 @@ export const useGameStore = defineStore('game', () => {
     socketStore.emit('passTurn', { gameId: gameId.value });
     new Audio('/sounds/play.mp3').play().catch(() => null);
   }
-
   function requestRematch() {
     if (!gameId.value) return;
     socketStore.emit('requestRematch', { gameId: gameId.value });
   }
-
   function leaveGame() {
+    socketStore.emit('leaveLobby', { gameId: gameId.value });
     gameId.value = null;
     playerId.value = null;
     hostId.value = null;
     resetState();
     router.push('/');
   }
-
   function sendMessage(text) { if (text.trim()) socketStore.emit('sendMessage', { gameId: gameId.value, message: text }); }
   function markChatRead() { unreadMessages.value = 0; }
 
@@ -297,7 +310,6 @@ export const useGameStore = defineStore('game', () => {
     if (!title) return;
     socketStore.emit('hostChangeTrack', { gameId: gameId.value, trackId: id, trackTitle: title });
   }
-
   function suggestTrack(url) {
     const id = getYouTubeID(url);
     if (!id) return toast.addToast(i18n.global.t('game_invalid_link'), 'error');
@@ -307,24 +319,37 @@ export const useGameStore = defineStore('game', () => {
       toast.addToast(i18n.global.t('sent_to_host'), 'success');
     }
   }
-
   function getYouTubeID(url) {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
   }
 
+  async function refreshLobbyList() {
+    try {
+      const response = await fetch('/api/public/lobbies');
+      if (response.ok) {
+        const list = await response.json();
+        publicLobbies.value = list;
+      }
+    } catch (error) {
+      console.error("Auto-sync error:", error);
+    }
+  }
+
   return {
-    gameId, playerId, players, hostId,
-    isHost,
-    gameStatus, tableCards, myCards, trumpCard, deckCount,
+    gameId, playerId, players, hostId, settings,
+    publicLobbies,
+    isHost, gameStatus, tableCards, myCards, trumpCard, deckCount,
     turnPlayerId, attackerId, defenderId,
     isMyTurn, isAttacker, isDefender,
     canTake, canPass, isDealing, winnerData, rematchStatus,
     chatLog, unreadMessages, musicState,
-    initListeners, createGame, joinGame, makeMove, takeCards, passTurn,
+
+    initListeners, createLobby, joinLobby, findAndJoinPublicLobby,
+    subscribeToLobbies, unsubscribeFromLobbies,
+    makeMove, takeCards, passTurn,
     canPlayCard, stopDealingAnimation, leaveGame, requestRematch,
-    sendMessage, markChatRead, changeTrack, suggestTrack,
-    createLobby, joinLobby, findAndJoinPublicLobby,
+    sendMessage, markChatRead, changeTrack, suggestTrack, refreshLobbyList
   };
 });

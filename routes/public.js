@@ -37,17 +37,21 @@ router.get('/leaderboard', (req, res) => {
 
 router.get('/lobbies', (req, res) => {
     const games = req.app.get('activeGames');
-
-    if (!games) {
-        return res.json([]);
-    }
+    if (!games) return res.json([]);
 
     const publicLobbies = Object.values(games)
-        .filter(game => game.status === 'waiting' && game.settings.lobbyType === 'public')
+        .filter(game => {
+            // 1. Статус должен быть waiting
+            // 2. Тип public
+            // 3. Игроков должно быть > 0 (Фикс фантомных лобби)
+            return game.status === 'waiting' &&
+                game.settings.lobbyType === 'public' &&
+                game.playerOrder.length > 0;
+        })
         .map(game => ({
             gameId: game.id,
             hostName: game.players[game.hostId]?.name || 'Unknown',
-            playerCount: Object.keys(game.players).length,
+            playerCount: game.playerOrder.length, // Используем playerOrder.length для точности
             maxPlayers: game.settings.maxPlayers,
             betAmount: game.settings.betAmount || 0,
             deckSize: game.settings.deckSize || 36
