@@ -99,3 +99,57 @@ body {
     opacity: 0;
     transform: translateY(20px) scale(0.9) rotate(0deg);
 }
+
+body.winter-theme {
+  background: linear-gradient(135deg, #1a2a3a 0%, #0f172a 100%) !important;
+}
+
+.winter-theme .w-8.h-8.rounded-full,
+.winter-theme .w-10.h-10.rounded-full,
+.winter-theme .w-16.h-16.rounded-full {
+  position: relative;
+  overflow: visible !important;
+}
+
+.winter-theme .w-8.h-8.rounded-full::after,
+.winter-theme .w-10.h-10.rounded-full::after,
+.winter-theme .w-16.h-16.rounded-full::after {
+  content: '';
+  position: absolute;
+
+  background-image: url('https://cdn-icons-png.flaticon.com/512/744/744546.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+
+  pointer-events: none;
+  z-index: 50;
+
+  transform-origin: bottom center;
+  animation: hatBounceFlipped 3s infinite ease-in-out;
+}
+
+.winter-theme .w-8.h-8.rounded-full::after,
+.winter-theme .w-10.h-10.rounded-full::after {
+  width: 24px;
+  height: 24px;
+
+  top: -8px;
+
+  left: -8px;
+  right: auto;
+}
+
+.winter-theme .w-16.h-16.rounded-full::after {
+  width: 42px;
+  height: 42px;
+
+  top: -15px;
+
+  left: -10px;
+  right: auto;
+}
+
+@keyframes hatBounceFlipped {
+  0%, 100% { transform: scaleX(-1) rotate(5deg) translateY(0); }
+  50% { transform: scaleX(-1) rotate(15deg) translateY(-2px); }
+}

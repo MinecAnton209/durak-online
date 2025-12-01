@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, onUnmounted } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
@@ -10,6 +10,7 @@ import { useI18n } from 'vue-i18n';
 import ToastContainer from '@/components/ui/ToastContainer.vue';
 import GameInviteModal from '@/components/game/GameInviteModal.vue';
 import BanModal from '@/components/ui/BanModal.vue';
+import SnowEffect from '@/components/ui/SnowEffect.vue';
 
 const authStore = useAuthStore();
 const socketStore = useSocketStore();
@@ -17,6 +18,7 @@ const gameStore = useGameStore();
 const telegramStore = useTelegramStore();
 const router = useRouter();
 const { t } = useI18n();
+const isWinter = ref(false);
 
 const isBanned = ref(false);
 const banReason = ref('');
@@ -24,7 +26,16 @@ const banReason = ref('');
 const maintenanceMsg = ref('');
 const maintenanceTime = ref('');
 
+const shouldShowSnow = computed(() => {
+  return isWinter.value && gameStore.gameStatus !== 'playing';
+});
+
 onMounted(async () => {
+  const month = new Date().getMonth();
+  if ([11, 0, 1].includes(month)) {
+    isWinter.value = true;
+    document.body.classList.add('winter-theme');
+  }
   telegramStore.init();
 
   await authStore.checkSession();
@@ -66,6 +77,7 @@ const handleBanClose = () => {
 </script>
 
 <template>
+  <SnowEffect v-if="shouldShowSnow" />
   <RouterView />
 
   <ToastContainer />

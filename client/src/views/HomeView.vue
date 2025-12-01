@@ -75,10 +75,6 @@ const quickPlay = () => {
 };
 
 const goToLobbyBrowser = () => {
-  if (!authStore.isAuthenticated) {
-    openAuth('login');
-    return;
-  }
   router.push('/lobbies');
 };
 </script>
@@ -86,7 +82,8 @@ const goToLobbyBrowser = () => {
 <template>
   <div class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-background">
 
-    <button @click="router.push('/settings')"
+    <button v-if="authStore.isAuthenticated"
+            @click="router.push('/settings')"
             class="absolute top-4 left-4 z-10 text-2xl p-2 bg-surface/50 rounded-full hover:bg-surface text-on-surface transition-all active:scale-95 border border-white/10 shadow-lg"
             :title="$t('settings_tooltip')">
       ⚙️

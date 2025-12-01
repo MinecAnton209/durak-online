@@ -2,11 +2,17 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useGameStore } from '@/stores/game';
+import { useAuthStore } from '@/stores/auth';
+import { useToastStore } from '@/stores/toast';
 import { useI18n } from 'vue-i18n';
+
+import AuthModal from '@/components/ui/AuthModal.vue';
 
 const { t } = useI18n();
 const router = useRouter();
 const gameStore = useGameStore();
+const authStore = useAuthStore();
+const toast = useToastStore();
 
 const activeTab = ref('find');
 const inviteCode = ref('');
@@ -25,17 +31,31 @@ const deckSize = ref(36);
 const isBetting = ref(false);
 const betAmount = ref(10);
 
+const isAuthModalOpen = ref(false);
+const authMode = ref('login');
+
+const openAuth = (mode) => {
+  authMode.value = mode;
+  isAuthModalOpen.value = true;
+};
+
+const handleAuthSubmit = async ({ mode, username, password, onComplete }) => {
+  try {
+    await authStore.authenticate(mode, { username, password });
+    onComplete(null);
+    isAuthModalOpen.value = false;
+  } catch (err) {
+    onComplete(t(err.message || 'error_generic'));
+  }
+};
+
 onMounted(() => {
   gameStore.subscribeToLobbies();
   gameStore.refreshLobbyList();
 
   syncInterval = setInterval(() => {
     if (activeTab.value === 'find') {
-      isLoading.value = true;
-
-      gameStore.refreshLobbyList().finally(() => {
-        setTimeout(() => { isLoading.value = false; }, 500);
-      });
+      gameStore.refreshLobbyList();
     }
   }, 5000);
 
@@ -56,27 +76,26 @@ function forceRefresh() {
 
 function joinPublicLobby(gameId) {
   if (joiningLobbyId.value) return;
-
   joiningLobbyId.value = gameId;
   gameStore.joinLobby({ gameId });
-
-  setTimeout(() => {
-    if (joiningLobbyId.value === gameId) {
-      joiningLobbyId.value = null;
-    }
-  }, 3000);
+  setTimeout(() => { if (joiningLobbyId.value === gameId) joiningLobbyId.value = null; }, 3000);
 }
 
 function joinPrivateLobby() {
   const code = inviteCode.value.trim();
   if (!code) return;
-
   isJoiningCode.value = true;
   gameStore.joinLobby({ inviteCode: code.toUpperCase() });
+  setTimeout(() => { isJoiningCode.value = false; }, 3000);
+}
 
-  setTimeout(() => {
-    isJoiningCode.value = false;
-  }, 3000);
+function toggleBetting() {
+  if (!authStore.isAuthenticated) {
+    toast.addToast(t('error_guests_cannot_bet'), 'warning');
+    openAuth('login');
+    return;
+  }
+  isBetting.value = !isBetting.value;
 }
 
 function createLobby() {
@@ -85,6 +104,7 @@ function createLobby() {
     maxPlayers: parseInt(maxPlayers.value),
     deckSize: parseInt(deckSize.value),
     betAmount: isBetting.value ? parseInt(betAmount.value) : 0,
+    playerName: authStore.isAuthenticated ? authStore.user.username : `Guest ${Math.floor(Math.random() * 1000)}`
   };
   gameStore.createLobby(settings);
 }
@@ -113,29 +133,19 @@ function createLobby() {
           <div>
             <div class="flex justify-between items-center mb-3">
               <h3 class="font-bold text-lg text-white">{{ $t('lobby_list_public') }}</h3>
-
-              <button @click="forceRefresh"
-                      class="p-2 rounded-lg text-primary hover:text-white hover:bg-white/10 transition-all active:scale-95 flex items-center gap-2"
-                      :title="$t('refresh_list')">
+              <button @click="forceRefresh" class="p-2 rounded-lg text-primary hover:text-white hover:bg-white/10 transition-all active:scale-95 flex items-center gap-2" :title="$t('refresh_list')">
                 <span class="text-xs font-bold uppercase tracking-wider hidden sm:inline-block">{{ $t('refresh_list') }}</span>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
-                     class="w-5 h-5 transition-transform duration-500"
-                     :class="{ 'animate-spin': isLoading }">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 transition-transform duration-500" :class="{ 'animate-spin': isLoading }">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                 </svg>
               </button>
             </div>
 
             <div v-if="isLoading && publicLobbies.length === 0" class="text-center py-8 text-on-surface-variant">{{ $t('loading') }}...</div>
-
-            <div v-else-if="publicLobbies.length === 0" class="text-center py-8 text-on-surface-variant bg-black/10 rounded-xl border border-white/5">
-              {{ $t('no_public_lobbies') }}
-            </div>
+            <div v-else-if="publicLobbies.length === 0" class="text-center py-8 text-on-surface-variant bg-black/10 rounded-xl border border-white/5">{{ $t('no_public_lobbies') }}</div>
 
             <div v-else class="space-y-3">
-              <div v-for="lobby in publicLobbies" :key="lobby.gameId"
-                   class="bg-black/20 p-3 rounded-xl flex items-center justify-between border border-white/5 hover:border-white/20 transition-colors">
-
+              <div v-for="lobby in publicLobbies" :key="lobby.gameId" class="bg-black/20 p-3 rounded-xl flex items-center justify-between border border-white/5 hover:border-white/20 transition-colors">
                 <div class="flex flex-col">
                   <span class="font-bold text-on-surface text-lg">#{{ lobby.gameId }}</span>
                   <div class="flex items-center gap-2 text-xs text-on-surface-variant">
@@ -145,10 +155,7 @@ function createLobby() {
                     <span v-if="lobby.betAmount > 0" class="text-primary font-bold">💰{{ lobby.betAmount }}</span>
                   </div>
                 </div>
-
-                <button @click="joinPublicLobby(lobby.gameId)"
-                        :disabled="joiningLobbyId === lobby.gameId"
-                        class="bg-primary hover:bg-[#00A891] text-on-primary font-bold py-2 px-6 rounded-lg transition-all active:scale-95 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 min-w-[80px] justify-center">
+                <button @click="joinPublicLobby(lobby.gameId)" :disabled="joiningLobbyId === lobby.gameId" class="bg-primary hover:bg-[#00A891] text-on-primary font-bold py-2 px-6 rounded-lg transition-all active:scale-95 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 min-w-[80px] justify-center">
                   <span v-if="joiningLobbyId === lobby.gameId" class="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
                   <span v-else>{{ $t('join_button') }}</span>
                 </button>
@@ -162,28 +169,14 @@ function createLobby() {
 
           <div>
             <h3 class="font-bold text-lg text-white mb-3">{{ $t('join_private_lobby') }}</h3>
-
             <div class="flex gap-2">
               <div class="relative flex-1">
-                <div class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
-                    <path fill-rule="evenodd" d="M15.75 1.5a6.75 6.75 0 00-6.651 7.906c-1.067.322-2.02 1.01-2.529 1.906l-1.074 1.89c-.3.528-.106 1.209.435 1.51l.97.543a1.125 1.125 0 01.36.85v.42c0 .499-.251.968-.669 1.25l-.59.4a2.656 2.656 0 00-.974 2.965l.947 3.315c.16.56.737.906 1.293.775l2.427-.57c.718-.169 1.267-.775 1.37-1.503l.36-2.404c.057-.38.318-.707.677-.849l.525-.21c.642-.256 1.396.06 1.638.69l.17.442c.275.715 1.055 1.116 1.8.925l1.63-.417c.596-.152.966-.757.825-1.353-.255-1.079.227-2.195 1.172-2.71a6.75 6.75 0 011.056-10.795zm.75 6.75a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
-                  </svg>
-                </div>
-                <input type="text"
-                       v-model="inviteCode"
-                       @keyup.enter="joinPrivateLobby"
-                       class="w-full bg-black/20 border border-outline/50 rounded-xl pl-10 pr-4 py-3 text-on-surface focus:outline-none focus:border-primary transition-all uppercase placeholder-on-surface-variant/50 font-mono tracking-widest"
-                       :placeholder="$t('enter_code_placeholder')">
+                <div class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M15.75 1.5a6.75 6.75 0 00-6.651 7.906c-1.067.322-2.02 1.01-2.529 1.906l-1.074 1.89c-.3.528-.106 1.209.435 1.51l.97.543a1.125 1.125 0 01.36.85v.42c0 .499-.251.968-.669 1.25l-.59.4a2.656 2.656 0 00-.974 2.965l.947 3.315c.16.56.737.906 1.293.775l2.427-.57c.718-.169 1.267-.775 1.37-1.503l.36-2.404c.057-.38.318-.707.677-.849l.525-.21c.642-.256 1.396.06 1.638.69l.17.442c.275.715 1.055 1.116 1.8.925l1.63-.417c.596-.152.966-.757.825-1.353-.255-1.079.227-2.195 1.172-2.71a6.75 6.75 0 011.056-10.795zm.75 6.75a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" /></svg></div>
+                <input type="text" v-model="inviteCode" @keyup.enter="joinPrivateLobby" class="w-full bg-black/20 border border-outline/50 rounded-xl pl-10 pr-4 py-3 text-on-surface focus:outline-none focus:border-primary transition-all uppercase placeholder-on-surface-variant/50 font-mono tracking-widest" :placeholder="$t('enter_code_placeholder')">
               </div>
-
-              <button @click="joinPrivateLobby"
-                      :disabled="!inviteCode.trim() || isJoiningCode"
-                      class="bg-surface-variant hover:bg-on-surface-variant/20 text-on-surface font-bold py-2 px-6 rounded-xl transition-all active:scale-95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[80px]">
+              <button @click="joinPrivateLobby" :disabled="!inviteCode.trim() || isJoiningCode" class="bg-surface-variant hover:bg-on-surface-variant/20 text-on-surface font-bold py-2 px-6 rounded-xl transition-all active:scale-95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[80px]">
                 <span v-if="isJoiningCode" class="animate-spin h-5 w-5 border-2 border-white/50 border-t-white rounded-full"></span>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                </svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
               </button>
             </div>
           </div>
@@ -219,7 +212,7 @@ function createLobby() {
 
           <div
             class="flex items-center justify-between p-3 rounded-xl border border-transparent transition-colors cursor-pointer"
-            :class="isBetting ? 'bg-primary/10 border-primary/30' : 'bg-black/20 hover:bg-black/30'" @click="isBetting = !isBetting">
+            :class="isBetting ? 'bg-primary/10 border-primary/30' : 'bg-black/20 hover:bg-black/30'" @click="toggleBetting">
             <div class="flex items-center gap-3">
               <span class="text-xl">{{ isBetting ? '💰' : '🎲' }}</span>
               <span class="font-bold text-sm" :class="isBetting ? 'text-primary' : 'text-on-surface'">{{ $t('bet_toggle_label') }}</span>
@@ -245,24 +238,12 @@ function createLobby() {
         </div>
       </div>
     </div>
+
+    <AuthModal :is-open="isAuthModalOpen" :mode="authMode" @close="isAuthModalOpen = false" @submit="handleAuthSubmit" />
   </div>
 </template>
 
 <style scoped>
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
+.animate-fade-in { animation: fadeIn 0.3s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
