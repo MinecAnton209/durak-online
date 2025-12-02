@@ -105,6 +105,12 @@ function init(token) {
 
     bot.action('edit_nick', async (ctx) => {
         const lang = ctx.from.language_code;
+
+        if (ctx.chat?.type !== 'private') {
+            await ctx.answerCbQuery(t(lang, 'error_private_only'), { show_alert: true });
+            return;
+        }
+
         userStates[ctx.from.id] = { action: 'awaiting_nick' };
         await ctx.answerCbQuery();
         await ctx.reply(t(lang, 'profile.enter_new_nick'), {
@@ -115,6 +121,12 @@ function init(token) {
     bot.action('edit_pass', async (ctx) => {
         const lang = ctx.from.language_code;
         const userId = ctx.from.id;
+
+        if (ctx.chat?.type !== 'private') {
+            await ctx.answerCbQuery(t(lang, 'error_private_only'), { show_alert: true });
+            return;
+        }
+
         try {
             const user = await dbGet('SELECT password FROM users WHERE telegram_id = ?', [userId]);
             if (isTelegramOnly(user.password)) {
@@ -281,6 +293,11 @@ function init(token) {
 
     const askForDonation = async (ctx) => {
         const lang = ctx.from.language_code;
+
+        if (ctx.chat?.type !== 'private') {
+            return ctx.reply(t(lang, 'errors.error_private_only'));
+        }
+
         userStates[ctx.from.id] = { action: 'awaiting_donation_amount' };
         await ctx.reply(t(lang, 'donate.ask_amount'), {
             parse_mode: 'Markdown',
