@@ -172,6 +172,7 @@ app.use(helmet({
             objectSrc: ["'none'"],
             mediaSrc: ["'self'"],
             frameSrc: ["'none'"],
+            frameAncestors: ["'self'", "https://*.telegram.org", "https://*.t.me"],
         },
     },
     crossOriginEmbedderPolicy: false,
