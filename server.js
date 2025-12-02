@@ -69,6 +69,11 @@ const io = socketIo(server, {
 const onlineUsers = new Map();
 app.set('onlineUsers', onlineUsers);
 
+const globalChatHistory = [];
+const chatSpamTracker = new Map();
+const CHAT_HISTORY_LIMIT = 500;
+const CHAT_PAGE_SIZE = 50;
+
 let games = {};
 
 let rouletteState = {
@@ -1449,21 +1454,28 @@ io.on('connection', (socket) => {
                     game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
 
                     if (game.playerOrder.length > 0) {
-                        if (game.hostId === socket.id) {
-                            game.hostId = game.playerOrder[0];
-                            const newHostName = game.players[game.hostId].name;
-                            console.log(`[Lobby] Host left. New host for ${gameId} is ${newHostName}`);
-                            logEvent(game, null, { i18nKey: 'log_new_host', options: { name: newHostName }});
-                        }
+                        const humanIds = game.playerOrder.filter(id => game.players[id] && !game.players[id].isBot);
+                        if (humanIds.length === 0) {
+                            delete games[gameId];
+                            dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+                            console.log(`[Lobby] Lobby ${gameId} has only bots and was deleted.`);
+                        } else {
+                            if (game.hostId === socket.id) {
+                                game.hostId = humanIds[0];
+                                const newHostName = game.players[game.hostId].name;
+                                console.log(`[Lobby] Host left. New host for ${gameId} is ${newHostName}`);
+                                logEvent(game, null, { i18nKey: 'log_new_host', options: { name: newHostName }});
+                            }
 
-                        io.to(gameId).emit('lobbyStateUpdate', {
-                            players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified, isHost: p.id === game.hostId })),
-                            hostId: game.hostId,
-                            maxPlayers: game.settings.maxPlayers,
-                            settings: game.settings
-                        });
-                        io.to(gameId).emit('playerLeft', { playerId: socket.id, name: disconnectedPlayer.name });
-                        console.log(`[Lobby] ${disconnectedPlayer.name} removed. Lobby ${gameId} updated.`);
+                            io.to(gameId).emit('lobbyStateUpdate', {
+                                players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified, isHost: p.id === game.hostId })),
+                                hostId: game.hostId,
+                                maxPlayers: game.settings.maxPlayers,
+                                settings: game.settings
+                            });
+                            io.to(gameId).emit('playerLeft', { playerId: socket.id, name: disconnectedPlayer.name });
+                            console.log(`[Lobby] ${disconnectedPlayer.name} removed. Lobby ${gameId} updated.`);
+                        }
                     } else {
                         delete games[gameId];
                         dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
@@ -1768,22 +1780,31 @@ io.on('connection', (socket) => {
         game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
 
         if (game.playerOrder.length > 0) {
-            if (game.hostId === socket.id) {
-                game.hostId = game.playerOrder[0];
-                console.log(`[Lobby] New host for ${gameId}: ${game.players[game.hostId].name}`);
-                logEvent(game, null, { i18nKey: 'log_new_host', options: { name: game.players[game.hostId].name }});
-            }
+            const humanIds = game.playerOrder.filter(id => game.players[id] && !game.players[id].isBot);
+            if (humanIds.length === 0) {
+                console.log(`[Lobby] Lobby ${gameId} has only bots. Deleting.`);
+                delete games[gameId];
+                dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+            } else {
+                if (game.hostId === socket.id) {
+                    game.hostId = humanIds[0];
+                    console.log(`[Lobby] New host for ${gameId}: ${game.players[game.hostId].name}`);
+                    logEvent(game, null, { i18nKey: 'log_new_host', options: { name: game.players[game.hostId].name }});
+                }
 
-            io.to(gameId).emit('lobbyStateUpdate', {
-                players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified })),
-                hostId: game.hostId,
-                maxPlayers: game.settings.maxPlayers
-            });
+                io.to(gameId).emit('lobbyStateUpdate', {
+                    players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified })),
+                    hostId: game.hostId,
+                    maxPlayers: game.settings.maxPlayers
+                });
+                broadcastPublicLobbies();
+            }
 
         } else {
             console.log(`[Lobby] Lobby ${gameId} is empty. Deleting.`);
             delete games[gameId];
             dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+            broadcastPublicLobbies();
         }
     });
     socket.on('updateLobbySettings', async ({ gameId, settings }) => {
@@ -2012,6 +2033,155 @@ io.on('connection', (socket) => {
             settings: game.settings
         });
         broadcastPublicLobbies();
+    });
+    socket.on('chat:joinGlobal', () => {
+        socket.join('global_chat');
+
+        const lastPage = globalChatHistory.slice(-CHAT_PAGE_SIZE);
+        socket.emit('chat:history', {
+            messages: lastPage,
+            hasMore: globalChatHistory.length > CHAT_PAGE_SIZE
+        });
+    });
+
+    socket.on('chat:leaveGlobal', () => {
+        socket.leave('global_chat');
+    });
+
+    socket.on('chat:sendGlobal', (message) => {
+        const sessionUser = socket.request.session?.user;
+
+        if (!sessionUser) return socket.emit('systemMessage', { i18nKey: 'error_chat_auth_required', type: 'error' });
+        if (sessionUser.is_muted) return socket.emit('systemMessage', { i18nKey: 'error_chat_muted', type: 'error' });
+
+        const now = Date.now();
+        const userData = chatSpamTracker.get(sessionUser.id) || { lastTime: 0, violations: 0 };
+
+        if (now - userData.lastTime > 60000) {
+            userData.violations = 0;
+        }
+
+        const BASE_COOLDOWN = 3000;
+        const PENALTY_PER_VIOLATION = 5000;
+        const requiredCooldown = BASE_COOLDOWN + (userData.violations * PENALTY_PER_VIOLATION);
+
+        if (now - userData.lastTime < requiredCooldown) {
+            userData.violations++;
+            chatSpamTracker.set(sessionUser.id, userData);
+
+            const timeLeft = Math.ceil((requiredCooldown - (now - userData.lastTime)) / 1000);
+
+            return socket.emit('chat:error', {
+                i18nKey: 'error_chat_spam_wait',
+                options: { seconds: timeLeft }
+            });
+
+            return socket.emit('systemMessage', { i18nKey: 'error_chat_spam_wait', options: { seconds: timeLeft }, type: 'warning' });
+        }
+
+        userData.lastTime = now;
+        chatSpamTracker.set(sessionUser.id, userData);
+
+        const trimmedMessage = message.trim();
+        if (trimmedMessage.length === 0 || trimmedMessage.length > 255) {
+            return;
+        }
+
+        const messageObject = {
+            id: `msg_${now}_${sessionUser.id}`,
+            author: {
+                id: sessionUser.id,
+                username: sessionUser.username,
+                isAdmin: sessionUser.is_admin,
+                isVerified: sessionUser.isVerified
+            },
+            text: trimmedMessage,
+            timestamp: now
+        };
+
+        globalChatHistory.push(messageObject);
+        if (globalChatHistory.length > CHAT_HISTORY_LIMIT) {
+            globalChatHistory.splice(0, globalChatHistory.length - CHAT_HISTORY_LIMIT);
+        }
+
+        io.to('global_chat').emit('chat:newMessage', messageObject);
+    });
+
+    socket.on('chat:deleteMessage', async ({ messageId }) => {
+        const sessionUser = socket.request.session?.user;
+        if (!sessionUser || !sessionUser.is_admin) return;
+
+        const messageIndex = globalChatHistory.findIndex(msg => msg.id === messageId);
+        if (messageIndex > -1) {
+            globalChatHistory[messageIndex].text = '[deleted by admin]';
+            globalChatHistory[messageIndex].deleted = true;
+
+            io.to('global_chat').emit('chat:updateMessage', globalChatHistory[messageIndex]);
+        }
+    });
+
+    socket.on('chat:loadMore', ({ beforeTimestamp }) => {
+        if (!beforeTimestamp) return;
+
+        const lastIndex = globalChatHistory.findIndex(msg => msg.timestamp < beforeTimestamp);
+
+        if (lastIndex > -1) {
+            const startIndex = Math.max(0, lastIndex - CHAT_PAGE_SIZE);
+            const page = globalChatHistory.slice(startIndex, lastIndex);
+
+            socket.emit('chat:historyPage', {
+                messages: page,
+                hasMore: startIndex > 0
+            });
+        }
+    });
+
+    socket.on('chat:editMessage', ({ messageId, newText }) => {
+        const sessionUser = socket.request.session?.user;
+        if (!sessionUser) return;
+
+        const trimmedText = newText.trim();
+        if (trimmedText.length === 0 || trimmedText.length > 255) return;
+
+        const message = globalChatHistory.find(msg => msg.id === messageId);
+
+        if (message && message.author.id === sessionUser.id) {
+
+            const TIME_LIMIT = 5 * 60 * 1000;
+            if (Date.now() - message.timestamp > TIME_LIMIT) {
+                return socket.emit('chat:error', { i18nKey: 'error_edit_time_expired' });
+            }
+
+            message.text = trimmedText;
+            message.edited = true;
+            message.editedAt = Date.now();
+
+            io.to('global_chat').emit('chat:updateMessage', message);
+        }
+    });
+
+    socket.on('chat:deleteOwnMessage', ({ messageId }) => {
+        const sessionUser = socket.request.session?.user;
+        if (!sessionUser) return;
+
+        const messageIndex = globalChatHistory.findIndex(msg => msg.id === messageId);
+
+        if (messageIndex > -1) {
+            const message = globalChatHistory[messageIndex];
+
+            if (message.author.id === sessionUser.id) {
+
+                const TIME_LIMIT = 5 * 60 * 1000;
+                if (Date.now() - message.timestamp > TIME_LIMIT) {
+                    return socket.emit('chat:error', { i18nKey: 'error_delete_time_expired' });
+                }
+
+                message.text = '[message deleted]';
+                message.deleted = true;
+
+                io.to('global_chat').emit('chat:updateMessage', message);
+            }
+        }
     });
 });
 

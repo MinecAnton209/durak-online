@@ -1,13 +1,40 @@
-﻿<script setup>
-const props = defineProps({
-  isOpen: Boolean,
-  title: String,
-  message: String,
-  confirmText: { type: String, default: 'Так' },
-  cancelText: { type: String, default: 'Ні' }
-});
+﻿<script>
+import { useI18n } from 'vue-i18n';
 
+export default {
+  props: {
+    isOpen: Boolean,
+    title: String,
+    message: String,
+    confirmText: {
+      type: String,
+      default: () => {
+        const { t } = useI18n();
+        return t('confirm_text');
+      }
+    },
+    cancelText: {
+      type: String,
+      default: () => {
+        const { t } = useI18n();
+        return t('cancel_text');
+      }
+    }
+  }
+}
+</script>
+
+<script setup>
+import { watch, defineEmits } from 'vue';
+
+const props = defineProps();
 const emit = defineEmits(['confirm', 'cancel']);
+
+watch(() => props.isOpen, (val) => {
+  const onEsc = (e) => { if (e.key === 'Escape') emit('cancel'); };
+  if (val) document.addEventListener('keydown', onEsc);
+  else document.removeEventListener('keydown', onEsc);
+});
 </script>
 
 <template>
@@ -30,7 +57,6 @@ const emit = defineEmits(['confirm', 'cancel']);
             {{ confirmText }}
           </button>
         </div>
-
       </div>
     </div>
   </transition>
