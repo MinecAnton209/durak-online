@@ -5,36 +5,45 @@ const util = require('util');
 const dbRun = util.promisify(db.run.bind(db));
 const router = express.Router();
 const { signToken, setAuthCookie, clearAuthCookie } = require('../middlewares/jwtAuth');
+const { validateUsername, validatePassword } = require('../utils/validation');
+const { loginLimiter, registerLimiter, passwordChangeLimiter } = require('../middlewares/rateLimiters');
 const saltRounds = 10;
 const statsService = require('../services/statsService');
 
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
     try {
         const { username, password, deviceId } = req.body;
-        if (!username || !password) { return res.status(400).json({ message: 'Всі поля обов\'язкові.' }); }
-        if (password.length < 4) { return res.status(400).json({ message: 'Пароль має містити щонайменше 4 символи.' }); }
+
+        const usernameValidation = validateUsername(username);
+        if (!usernameValidation.valid) {
+            return res.status(400).json({ message: usernameValidation.error });
+        }
+
+        const passwordValidation = validatePassword(password);
+        if (!passwordValidation.valid) {
+            return res.status(400).json({ message: passwordValidation.error });
+        }
+
         const hashedPassword = await bcrypt.hash(password, saltRounds);
+
         await dbRun(
             'INSERT INTO users (username, password, device_id) VALUES (?, ?, ?)',
-            [username, hashedPassword, deviceId || null]
+            [usernameValidation.value, hashedPassword, deviceId || null]
         );
-        const sql = `INSERT INTO users (username, password) VALUES (?, ?)`;
-        db.run(sql, [username, hashedPassword], function(err) {
-            if (err) {
-                if (err.code === 'SQLITE_CONSTRAINT') { return res.status(409).json({ message: 'Це ім\'я користувача вже зайняте.' }); }
-                console.error(err.message);
-                return res.status(500).json({ message: 'Помилка бази даних.' });
-            }
-            statsService.incrementDailyCounter('new_registrations');
-            res.status(201).json({ message: 'Реєстрація успішна! Тепер можете увійти.' });
-        });
+
+        await statsService.incrementDailyCounter('new_registrations');
+        res.status(201).json({ message: 'Реєстрація успішна! Тепер можете увійти.' });
+
     } catch (error) {
         console.error(error);
+        if (error.code === 'SQLITE_CONSTRAINT' || error.code === '23505') {
+            return res.status(409).json({ message: 'Це ім\'я користувача вже зайняте.' });
+        }
         res.status(500).json({ message: 'Внутрішня помилка сервера.' });
     }
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', loginLimiter, (req, res) => {
     try {
         const { username, password, deviceId } = req.body;
         if (!username || !password) { return res.status(400).json({ message: 'Всі поля обов\'язкові.' }); }
@@ -67,7 +76,7 @@ router.post('/login', (req, res) => {
                 }
                 const token = signToken(payload)
                 setAuthCookie(req, res, token)
-                req.session = { user: payload, save() {}, destroy() {} }
+                req.session = { user: payload, save() { }, destroy() { } }
                 res.status(200).json({ message: 'Вхід успішний!', user: payload, token });
             } else {
                 res.status(401).json({ message: 'Неправильне ім\'я або пароль.' });
@@ -121,7 +130,7 @@ router.get('/check-session', (req, res) => {
                 is_muted: user.is_muted,
                 rating: user.rating
             };
-            req.session = { user: sessionUser, save() {}, destroy() {} };
+            req.session = { user: sessionUser, save() { }, destroy() { } };
             res.status(200).json({ isLoggedIn: true, user: sessionUser });
         });
     } else {
@@ -151,7 +160,7 @@ router.post('/update-settings', (req, res) => {
     });
 });
 
-router.post('/change-password', (req, res) => {
+router.post('/change-password', passwordChangeLimiter, (req, res) => {
     const currentUser = req.session?.user;
     if (!currentUser) {
         return res.status(401).json({ message: 'Unauthorized' });
@@ -161,8 +170,10 @@ router.post('/change-password', (req, res) => {
     if (!currentPassword || !newPassword) {
         return res.status(400).json({ message: 'All fields are required.' });
     }
-    if (typeof newPassword !== 'string' || newPassword.length < 6) {
-        return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
+
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.valid) {
+        return res.status(400).json({ message: passwordValidation.error });
     }
 
     const userId = currentUser.id;

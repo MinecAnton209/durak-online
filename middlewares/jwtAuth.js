@@ -12,41 +12,53 @@ function getCookieDomain(hostname) {
 }
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || process.env.SESSION_SECRET || 'change-me'
+    const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET || 'change-me';
+
+    if (process.env.NODE_ENV === 'production' && (secret === 'change-me' || secret.length < 32)) {
+        console.error('FATAL ERROR: JWT_SECRET must be set to a strong value (32+ characters) in production!');
+        console.error('Set JWT_SECRET in your .env file immediately.');
+        process.exit(1);
+    }
+
+    if (secret === 'change-me' || secret.length < 32) {
+        console.warn('WARNING: Using weak JWT_SECRET. Set a strong JWT_SECRET in your .env file!');
+    }
+
+    return secret;
 }
 
 function signToken(payload, options = {}) {
-  const secret = getJwtSecret()
+    const secret = getJwtSecret()
     const defaultOpts = {
         expiresIn: '7d',
         issuer: 'durak-api',
         audience: 'durak-client'
     }
-  return jwt.sign(payload, secret, { ...defaultOpts, ...options })
+    return jwt.sign(payload, secret, { ...defaultOpts, ...options })
 }
 
 function verifyToken(token) {
-  if (!token) return null
-  try {
-      return jwt.verify(token, getJwtSecret(), {
-          issuer: 'durak-api',
-          audience: 'durak-client'
-      })
-  } catch (_) {
-    return null
-  }
+    if (!token) return null
+    try {
+        return jwt.verify(token, getJwtSecret(), {
+            issuer: 'durak-api',
+            audience: 'durak-client'
+        })
+    } catch (_) {
+        return null
+    }
 }
 
 function parseCookieHeader(cookieHeader) {
-  const result = {}
-  if (!cookieHeader) return result
-  cookieHeader.split(';').forEach(part => {
-    const idx = part.indexOf('=')
-    const key = part.slice(0, idx).trim()
-    const val = part.slice(idx + 1).trim()
-    if (key) result[key] = decodeURIComponent(val)
-  })
-  return result
+    const result = {}
+    if (!cookieHeader) return result
+    cookieHeader.split(';').forEach(part => {
+        const idx = part.indexOf('=')
+        const key = part.slice(0, idx).trim()
+        const val = part.slice(idx + 1).trim()
+        if (key) result[key] = decodeURIComponent(val)
+    })
+    return result
 }
 
 function setAuthCookie(req, res, token) {
@@ -86,8 +98,8 @@ function attachUserFromToken(req, _res, next) {
             req.user = decoded;
             req.session = {
                 user: decoded,
-                save() {},
-                destroy() {},
+                save() { },
+                destroy() { },
             };
         }
     }
@@ -100,8 +112,6 @@ function socketAttachUser(socket, next) {
 
     socket.deviceId = deviceId || 'unknown_device';
 
-    console.log(`[Auth] Attaching data to socket. Socket ID: ${socket.id}, Device ID: ${socket.deviceId}`);
-
     const cookies = parseCookieHeader(socket.request.headers.cookie);
     const authHeader = socket.request.headers['authorization'] || '';
     const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -111,9 +121,9 @@ function socketAttachUser(socket, next) {
 
     if (decoded) {
         socket.request.user = decoded;
-        socket.request.session = { user: decoded, save() {}, destroy() {} };
+        socket.request.session = { user: decoded, save() { }, destroy() { } };
     } else {
-        socket.request.session = { user: null, save() {}, destroy() {} };
+        socket.request.session = { user: null, save() { }, destroy() { } };
     }
 
     next();
@@ -131,11 +141,11 @@ function authMiddleware(req, res, next) {
 
 
 module.exports = {
-  signToken,
-  verifyToken,
-  setAuthCookie,
-  clearAuthCookie,
-  attachUserFromToken,
-  socketAttachUser,
-  authMiddleware,
+    signToken,
+    verifyToken,
+    setAuthCookie,
+    clearAuthCookie,
+    attachUserFromToken,
+    socketAttachUser,
+    authMiddleware,
 }

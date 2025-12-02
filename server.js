@@ -29,9 +29,12 @@ const util = require('util');
 const dbRun = util.promisify(db.run.bind(db));
 const dbGet = util.promisify(db.get.bind(db));
 const cookieParser = require('cookie-parser');
-const { attachUserFromToken, socketAttachUser } = require('./middlewares/jwtAuth')
+const { attachUserFromToken, socketAttachUser } = require('./middlewares/jwtAuth');
 const telegramBot = require('./services/telegramBot');
 const botLogic = require('./services/botLogic');
+const { escapeHtml, validateLobbySettings, validateCard, validateGameId } = require('./utils/validation');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 dbRun("UPDATE games SET status = 'cancelled' WHERE status = 'waiting'")
     .then(() => console.log('🧹 DB cleaned: Stale lobbies cancelled.'))
@@ -156,6 +159,23 @@ app.use((req, res, next) => {
 });
 
 app.use(cookieParser());
+
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "https:"],
+            connectSrc: ["'self'", ...allowedOrigins],
+            fontSrc: ["'self'", "data:"],
+            objectSrc: ["'none'"],
+            mediaSrc: ["'self'"],
+            frameSrc: ["'none'"],
+        },
+    },
+    crossOriginEmbedderPolicy: false,
+}));
 
 app.use(cors({
     origin: function (origin, callback) {
@@ -1069,10 +1089,17 @@ io.on('connection', (socket) => {
             }
         }
 
+        const validation = validateLobbySettings(settings);
+        if (!validation.valid) {
+            return socket.emit('error', { i18nKey: 'error_invalid_settings', message: validation.error });
+        }
+
+        const lobbySettings = validation.sanitized;
+
         const playerName = sessionUser ? sessionUser.username : (settings.playerName || "Guest");
         const userId = sessionUser ? sessionUser.id : null;
 
-        const betAmount = settings.betAmount || 0;
+        const betAmount = lobbySettings.betAmount;
         if (betAmount > 0) {
             if (!sessionUser) {
                 return socket.emit('error', { i18nKey: 'error_guests_cannot_bet' });
@@ -1083,15 +1110,6 @@ io.on('connection', (socket) => {
         }
 
         const gameId = crypto.randomBytes(3).toString('hex').toUpperCase();
-
-        const lobbySettings = {
-            maxPlayers: settings.maxPlayers || 2,
-            lobbyType: settings.lobbyType || 'public',
-            gameMode: settings.gameMode || 'podkidnoy',
-            betAmount: betAmount,
-            deckSize: settings.deckSize || 36,
-            turnDuration: parseInt(settings.turnDuration) || 60
-        };
 
         try {
             const inviteCode = lobbySettings.lobbyType === 'private' ? crypto.randomBytes(3).toString('hex').toUpperCase() : null;
@@ -1248,18 +1266,24 @@ io.on('connection', (socket) => {
         }
         const trimmedMessage = message.trim();
         if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) {
-            const cleanedMessage = trimmedMessage;
-            let authorHTML = player.name;
+            const escapedMessage = escapeHtml(trimmedMessage);
+            const escapedName = escapeHtml(player.name);
+            let authorHTML = escapedName;
             if (player.isVerified) {
                 authorHTML += VERIFIED_BADGE_SVG;
             }
-            const chatMessage = `<span class="message-author">${authorHTML}:</span> <span class="message-text">${cleanedMessage}</span>`;
+            const chatMessage = `<span class="message-author">${authorHTML}:</span> <span class="message-text">${escapedMessage}</span>`;
             logEvent(game, chatMessage);
         }
     });
     socket.on('makeMove', ({ gameId, card }) => {
         const game = games[gameId];
         if (!game || !game.players[socket.id] || game.winner) return;
+
+        const cardValidation = validateCard(card);
+        if (!cardValidation.valid) {
+            return socket.emit('invalidMove', { reason: "error_invalid_card" });
+        }
 
         game.lastAction = 'move';
         const player = game.players[socket.id];
@@ -1464,7 +1488,7 @@ io.on('connection', (socket) => {
                                 game.hostId = humanIds[0];
                                 const newHostName = game.players[game.hostId].name;
                                 console.log(`[Lobby] Host left. New host for ${gameId} is ${newHostName}`);
-                                logEvent(game, null, { i18nKey: 'log_new_host', options: { name: newHostName }});
+                                logEvent(game, null, { i18nKey: 'log_new_host', options: { name: newHostName } });
                             }
 
                             io.to(gameId).emit('lobbyStateUpdate', {
@@ -1494,7 +1518,7 @@ io.on('connection', (socket) => {
                         playerId: socket.id,
                         timeout: 60
                     });
-                    logEvent(game, null, { i18nKey: 'log_player_disconnected', options: { name: disconnectedPlayer.name }});
+                    logEvent(game, null, { i18nKey: 'log_player_disconnected', options: { name: disconnectedPlayer.name } });
 
                     disconnectedPlayer.reconnectTimeout = setTimeout(() => {
                         const currentGame = games[gameId];
@@ -1522,14 +1546,14 @@ io.on('connection', (socket) => {
                                     loser: playerWhoLeft,
                                     reason: {
                                         i18nKey: 'game_over_player_left_timeout',
-                                        options: {player: playerWhoLeft.name}
+                                        options: { player: playerWhoLeft.name }
                                     }
                                 };
                                 currentGame.status = 'finished';
                             }
                             updateStatsAfterGame(currentGame);
                         } else {
-                            logEvent(currentGame, null, { i18nKey: 'log_player_left_continue', options: { name: playerWhoLeft.name }});
+                            logEvent(currentGame, null, { i18nKey: 'log_player_left_continue', options: { name: playerWhoLeft.name } });
                             if (currentGame.turn === socket.id) {
                                 const nextIndex = 0;
                                 updateTurn(currentGame, nextIndex);
@@ -1789,7 +1813,7 @@ io.on('connection', (socket) => {
                 if (game.hostId === socket.id) {
                     game.hostId = humanIds[0];
                     console.log(`[Lobby] New host for ${gameId}: ${game.players[game.hostId].name}`);
-                    logEvent(game, null, { i18nKey: 'log_new_host', options: { name: game.players[game.hostId].name }});
+                    logEvent(game, null, { i18nKey: 'log_new_host', options: { name: game.players[game.hostId].name } });
                 }
 
                 io.to(gameId).emit('lobbyStateUpdate', {
@@ -1926,47 +1950,47 @@ io.on('connection', (socket) => {
 
         if (oldPlayerSocketId && oldPlayerData) {
             console.log(`[Reconnect] Player ${oldPlayerData.name} found in game ${gameId}. Reconnecting...`);
-                clearTimeout(oldPlayerData.reconnectTimeout);
+            clearTimeout(oldPlayerData.reconnectTimeout);
 
-                const newPlayerId = socket.id;
-                game.players[newPlayerId] = oldPlayerData;
+            const newPlayerId = socket.id;
+            game.players[newPlayerId] = oldPlayerData;
 
-                game.players[newPlayerId].id = newPlayerId;
-                game.players[newPlayerId].disconnected = false;
-                game.players[newPlayerId].disconnectTime = null;
-                game.players[newPlayerId].reconnectTimeout = null;
+            game.players[newPlayerId].id = newPlayerId;
+            game.players[newPlayerId].disconnected = false;
+            game.players[newPlayerId].disconnectTime = null;
+            game.players[newPlayerId].reconnectTimeout = null;
 
-                const playerIndex = game.playerOrder.indexOf(oldPlayerSocketId);
-                if (playerIndex > -1) {
-                    game.playerOrder[playerIndex] = newPlayerId;
-                }
+            const playerIndex = game.playerOrder.indexOf(oldPlayerSocketId);
+            if (playerIndex > -1) {
+                game.playerOrder[playerIndex] = newPlayerId;
+            }
 
-                if (game.hostId === oldPlayerSocketId) {
-                    game.hostId = newPlayerId;
-                }
+            if (game.hostId === oldPlayerSocketId) {
+                game.hostId = newPlayerId;
+            }
 
-                if (game.attackerId === oldPlayerSocketId) {
-                    game.attackerId = newPlayerId;
-                }
-                if (game.defenderId === oldPlayerSocketId) {
-                    game.defenderId = newPlayerId;
-                }
-                if (game.turn === oldPlayerSocketId) {
-                    game.turn = newPlayerId;
-                }
+            if (game.attackerId === oldPlayerSocketId) {
+                game.attackerId = newPlayerId;
+            }
+            if (game.defenderId === oldPlayerSocketId) {
+                game.defenderId = newPlayerId;
+            }
+            if (game.turn === oldPlayerSocketId) {
+                game.turn = newPlayerId;
+            }
 
-                delete game.players[oldPlayerSocketId];
+            delete game.players[oldPlayerSocketId];
 
-                socket.join(gameId);
+            socket.join(gameId);
 
-                io.to(gameId).emit('playerReconnected', {
-                    playerId: newPlayerId,
-                    oldPlayerId: oldPlayerSocketId,
-                    name: oldPlayerData.name
-                });
-                logEvent(game, null, { i18nKey: 'log_player_reconnected', options: { name: oldPlayerData.name } });
+            io.to(gameId).emit('playerReconnected', {
+                playerId: newPlayerId,
+                oldPlayerId: oldPlayerSocketId,
+                name: oldPlayerData.name
+            });
+            logEvent(game, null, { i18nKey: 'log_player_reconnected', options: { name: oldPlayerData.name } });
 
-                broadcastGameState(gameId);
+            broadcastGameState(gameId);
 
             return;
         }
