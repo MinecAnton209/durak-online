@@ -30,7 +30,7 @@ function verifyTelegramWebAppData(telegramInitData) {
 
 
 router.post('/auth', async (req, res) => {
-    const { initData } = req.body;
+    const { initData, deviceId } = req.body;
     if (!initData) return res.status(400).json({ message: "initData is required" });
 
     try {
@@ -59,11 +59,15 @@ router.post('/auth', async (req, res) => {
             }
 
             await dbRun(
-                'INSERT INTO users (username, password, telegram_id) VALUES (?, ?, ?)',
-                [finalUsername, 'telegram_user', telegramId]
+                'INSERT INTO users (username, password, telegram_id, device_id) VALUES (?, ?, ?, ?)',
+                [finalUsername, 'telegram_user', telegramId, deviceId || null]
             );
 
             user = await dbGet('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+        } else {
+            if (deviceId) {
+                await dbRun('UPDATE users SET device_id = ? WHERE id = ?', [deviceId, user.id]);
+            }
         }
 
         delete user.password;
@@ -202,11 +206,15 @@ router.post('/widget-auth', async (req, res) => {
             }
 
             await dbRun(
-                'INSERT INTO users (username, password, telegram_id) VALUES (?, ?, ?)',
-                [finalUsername, 'telegram_user_widget', telegramId]
+                'INSERT INTO users (username, password, telegram_id, device_id) VALUES (?, ?, ?, ?)',
+                [finalUsername, 'telegram_user_widget', telegramId, deviceId || null]
             );
 
             user = await dbGet('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+        } else {
+            if (deviceId) {
+                await dbRun('UPDATE users SET device_id = ? WHERE id = ?', [deviceId, user.id]);
+            }
         }
 
         delete user.password;

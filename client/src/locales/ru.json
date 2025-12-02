@@ -205,5 +205,10 @@
   "back_to_main_menu": "На главную",
   "loading": "Загрузка...",
   "refresh_list": "Обновить список",
-  "error_lobby_not_found": "Лобби не найдено или игра уже началась."
+  "error_lobby_not_found": "Лобби не найдено или игра уже началась.",
+  "log_player_disconnected": "{name} отключился. Ожидание возвращения (60с)...",
+  "game_over_player_left_timeout": "Игра окончена, так как {name} не вернулся.",
+  "log_player_reconnected": "{name} вернулся в игру!",
+  "error_reconnect_failed": "Не удалось вернуться в игру. Возможно, она уже закончилась.",
+  "kick_player": "Выгнать"
 }

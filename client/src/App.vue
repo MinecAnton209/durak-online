@@ -39,6 +39,12 @@ onMounted(async () => {
   telegramStore.init();
 
   await authStore.checkSession();
+  try {
+    await socketStore.connect();
+    gameStore.initListeners();
+  } catch (error) {
+    console.error("Socket connection failed:", error);
+  }
   socketStore.connect();
 
   gameStore.initListeners();

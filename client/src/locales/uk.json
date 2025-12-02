@@ -205,5 +205,10 @@
   "back_to_main_menu": "На головну",
   "loading": "Завантаження...",
   "refresh_list": "Оновити список",
-  "error_lobby_not_found": "Лобі не знайдено або гра вже почалася."
+  "error_lobby_not_found": "Лобі не знайдено або гра вже почалася.",
+  "log_player_disconnected": "{name} від'єднався. Очікування повернення (60с)...",
+  "game_over_player_left_timeout": "Гра завершена, оскільки {name} не повернувся.",
+  "log_player_reconnected": "{name} повернувся в гру!",
+  "error_reconnect_failed": "Не вдалося повернутися в гру. Можливо, вона вже закінчилася.",
+  "kick_player": "Вигнати"
 }

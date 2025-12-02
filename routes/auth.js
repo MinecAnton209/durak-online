@@ -1,6 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const db = require('../db');
+const util = require('util');
+const dbRun = util.promisify(db.run.bind(db));
 const router = express.Router();
 const { signToken, setAuthCookie, clearAuthCookie } = require('../middlewares/jwtAuth');
 const saltRounds = 10;
@@ -8,10 +10,14 @@ const statsService = require('../services/statsService');
 
 router.post('/register', async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, password, deviceId } = req.body;
         if (!username || !password) { return res.status(400).json({ message: 'Всі поля обов\'язкові.' }); }
         if (password.length < 4) { return res.status(400).json({ message: 'Пароль має містити щонайменше 4 символи.' }); }
         const hashedPassword = await bcrypt.hash(password, saltRounds);
+        await dbRun(
+            'INSERT INTO users (username, password, device_id) VALUES (?, ?, ?)',
+            [username, hashedPassword, deviceId || null]
+        );
         const sql = `INSERT INTO users (username, password) VALUES (?, ?)`;
         db.run(sql, [username, hashedPassword], function(err) {
             if (err) {
@@ -30,7 +36,7 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, password, deviceId } = req.body;
         if (!username || !password) { return res.status(400).json({ message: 'Всі поля обов\'язкові.' }); }
         const sql = `SELECT * FROM users WHERE username = ?`;
         db.get(sql, [username], async (err, user) => {
@@ -55,6 +61,9 @@ router.post('/login', (req, res) => {
                     rating: user.rating,
                     card_back_style: user.card_back_style,
                     isVerified: user.is_verified,
+                }
+                if (deviceId) {
+                    await dbRun('UPDATE users SET device_id = ? WHERE id = ?', [deviceId, user.id]);
                 }
                 const token = signToken(payload)
                 setAuthCookie(req, res, token)

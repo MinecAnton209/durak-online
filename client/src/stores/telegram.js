@@ -4,6 +4,7 @@ import WebApp from '@twa-dev/sdk';
 import { useToastStore } from './toast';
 import { useAuthStore } from './auth';
 import i18n from '@/i18n';
+import {getDeviceId} from "@/utils/deviceId.js";
 
 export const useTelegramStore = defineStore('telegram', () => {
   const toast = useToastStore();
@@ -31,11 +32,12 @@ export const useTelegramStore = defineStore('telegram', () => {
     if (!isTelegram.value || authStore.isAuthenticated) return;
     authStore.isAuthChecking = true;
     try {
+      const devId = await getDeviceId();
       const res = await fetch('/api/telegram/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ initData: WebApp.initData })
+        body: JSON.stringify({ initData: WebApp.initData, deviceId: devId })
       });
       const data = await res.json();
       if (res.ok && data.user) {

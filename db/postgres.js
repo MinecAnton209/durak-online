@@ -358,6 +358,18 @@ pool.query(`
 `).then(() => console.log('Перевірено наявність колонок лоббі в таблиці "games" в PostgreSQL.'))
     .catch(err => console.error('Помилка при додаванні колонок лоббі в "games" в PostgreSQL:', err.stack));
 
+pool.query(`
+    DO $$
+    BEGIN
+        IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='device_id')
+        THEN
+            ALTER TABLE "users" ADD COLUMN device_id text;
+        END IF;
+    END;
+    $$;
+`).then(() => console.log('Перевірено наявність колонки device_id.'))
+    .catch(err => console.error('Помилка при перевірці/додаванні колонки device_id:', err));
+
 function formatSql(sql) {
     let i = 0;
     return sql.replace(/\?/g, () => `$${++i}`);

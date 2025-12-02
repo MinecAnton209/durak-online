@@ -206,5 +206,10 @@
   "back_to_main_menu": "Back to Menu",
   "loading": "Loading...",
   "refresh_list": "Refresh list",
-  "error_lobby_not_found": "Lobby not found or game already started."
+  "error_lobby_not_found": "Lobby not found or game already started.",
+  "log_player_disconnected": "{name} disconnected. Waiting for reconnect (60s)...",
+  "game_over_player_left_timeout": "Game over, {name} did not return.",
+  "log_player_reconnected": "{name} has reconnected!",
+  "error_reconnect_failed": "Failed to reconnect to the game. It may have already ended.",
+  "kick_player": "Kick Player"
 }

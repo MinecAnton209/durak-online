@@ -96,21 +96,27 @@ function attachUserFromToken(req, _res, next) {
 }
 
 function socketAttachUser(socket, next) {
-  const cookies = parseCookieHeader(socket.request.headers.cookie)
-  const authHeader = socket.request.headers['authorization'] || ''
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-  const decoded = verifyToken(bearer || cookies.durak_token)
-  if (decoded) {
-    socket.request.user = decoded
-    socket.request.session = {
-      user: decoded,
-      save() {},
-      destroy() {},
+    const deviceId = socket.handshake.auth?.deviceId;
+
+    socket.deviceId = deviceId || 'unknown_device';
+
+    console.log(`[Auth] Attaching data to socket. Socket ID: ${socket.id}, Device ID: ${socket.deviceId}`);
+
+    const cookies = parseCookieHeader(socket.request.headers.cookie);
+    const authHeader = socket.request.headers['authorization'] || '';
+    const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const token = bearer || cookies.durak_token;
+
+    const decoded = verifyToken(token);
+
+    if (decoded) {
+        socket.request.user = decoded;
+        socket.request.session = { user: decoded, save() {}, destroy() {} };
+    } else {
+        socket.request.session = { user: null, save() {}, destroy() {} };
     }
-  } else {
-    socket.request.session = { user: null, save() {}, destroy() {} }
-  }
-  next()
+
+    next();
 }
 
 function authMiddleware(req, res, next) {

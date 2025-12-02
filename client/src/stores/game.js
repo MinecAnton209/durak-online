@@ -16,8 +16,10 @@ export const useGameStore = defineStore('game', () => {
   const hostId = ref(null);
   const players = ref([]);
   const settings = ref({});
-
   const publicLobbies = ref([]);
+
+  const disconnectedPlayers = ref({});
+  const isReconnecting = ref(false);
 
   const gameStatus = ref('lobby');
   const isDealing = ref(false);
@@ -65,23 +67,16 @@ export const useGameStore = defineStore('game', () => {
   function canPlayCard(card) {
     if (isDealing.value) return false;
     if (!isMyTurn.value) return false;
-
     if (isAttacker.value) {
       if (tableCards.value.length === 0) return true;
       const ranksOnTable = tableCards.value.map(c => c.rank);
       return ranksOnTable.includes(card.rank);
     }
-
     if (isDefender.value) {
       const attackCard = tableCards.value[tableCards.value.length - 1];
       if (!attackCard) return false;
-
-      if (card.suit === attackCard.suit) {
-        return getRankValue(card.rank) > getRankValue(attackCard.rank);
-      }
-      if (trumpCard.value && card.suit === trumpCard.value.suit && attackCard.suit !== trumpCard.value.suit) {
-        return true;
-      }
+      if (card.suit === attackCard.suit) return getRankValue(card.rank) > getRankValue(attackCard.rank);
+      if (trumpCard.value && card.suit === trumpCard.value.suit && attackCard.suit !== trumpCard.value.suit) return true;
     }
     return false;
   }
@@ -94,15 +89,14 @@ export const useGameStore = defineStore('game', () => {
     socket.off('playerJoined'); socket.off('playerLeft'); socket.off('gameStateUpdate');
     socket.off('invalidMove'); socket.off('musicStateUpdate'); socket.off('newLogEntry');
     socket.off('rematchUpdate');
+    socket.off('playerDisconnected'); socket.off('playerReconnected');
 
     socket.on('lobbyCreated', (data) => {
       resetState();
       gameId.value = data.gameId;
       playerId.value = socket.id;
       hostId.value = socket.id;
-      if (data.settings) {
-        settings.value = data.settings;
-      }
+      if (data.settings) settings.value = data.settings;
       gameStatus.value = 'lobby';
       router.push(`/lobby/${data.gameId}`);
     });
@@ -134,76 +128,112 @@ export const useGameStore = defineStore('game', () => {
       if (gameId.value) socketStore.emit('getLobbyState', { gameId: gameId.value });
     });
 
+    socket.on('playerDisconnected', ({ playerId, timeout }) => {
+      const playerName = players.value.find(p => p.id === playerId)?.name || 'Player';
+      toast.addToast(i18n.global.t('log_player_disconnected', { name: playerName }), 'warning');
+
+      disconnectedPlayers.value[playerId] = timeout;
+      const interval = setInterval(() => {
+        if (disconnectedPlayers.value[playerId] > 0) disconnectedPlayers.value[playerId]--;
+        else { delete disconnectedPlayers.value[playerId]; clearInterval(interval); }
+      }, 1000);
+    });
+
+    socket.on('playerReconnected', ({ playerId: newPlayerId, oldPlayerId, name }) => {
+      toast.addToast(i18n.global.t('log_player_reconnected', { name }), 'success');
+
+      const amIReconnecting = (playerId.value === oldPlayerId) || (socketStore.socket && socketStore.socket.id === newPlayerId);
+
+      if (amIReconnecting) {
+        console.log(`[Reconnect] My ID changed from ${playerId.value} to ${newPlayerId}`);
+        playerId.value = newPlayerId;
+      }
+
+      if (disconnectedPlayers.value[oldPlayerId]) {
+        delete disconnectedPlayers.value[oldPlayerId];
+      }
+
+      if (amIReconnecting) {
+        if (!gameId.value && newPlayerId) {
+        }
+        if (gameId.value) {
+          console.log(`[Reconnect] Requesting game state for ${gameId.value}...`);
+          socketStore.emit('requestGameState', { gameId: gameId.value });
+        }
+      }
+    });
+
     socket.on('gameStateUpdate', (state) => {
       console.log('⚡ Game State:', state);
 
-      if (!state.winner) {
-        winnerData.value = null;
-        winner.value = null;
-        rematchStatus.value = null;
+      if (state?.gameId) {
+        gameId.value = state.gameId;
       }
 
-      if (gameStatus.value === 'lobby' && !state.winner && state.trumpCard) {
+      if (!isReconnecting.value && gameStatus.value === 'lobby' && !state.winner && state.trumpCard) {
         isDealing.value = true;
       }
+      isReconnecting.value = false;
 
       gameStatus.value = state.winner ? 'finished' : 'playing';
+      players.value = state.players;
+
+      const currentPlayerIds = new Set(state.players.map(p => p.id));
+      for (const pid in disconnectedPlayers.value) {
+        if (!currentPlayerIds.has(pid)) delete disconnectedPlayers.value[pid];
+      }
 
       tableCards.value = state.table || [];
       trumpCard.value = state.trumpCard;
       deckCount.value = state.deckCardCount;
-      players.value = state.players;
-
       if (state.hostId) hostId.value = state.hostId;
-
       isMyTurn.value = state.isYourTurn;
       canTake.value = state.canTake;
       canPass.value = state.canPass;
-
-      const currentSocketId = socketStore.socket?.id;
-      const myId = playerId.value || currentSocketId;
-      if (!playerId.value && currentSocketId) playerId.value = currentSocketId;
-
-      const me = state.players.find(p => p.id === myId);
-      if (me) myCards.value = me.cards || [];
-      else if (state.isSpectator) myCards.value = [];
-
-      if (state.winner) {
-        winner.value = state.winner;
-        winnerData.value = state.winner;
-        isDealing.value = false;
-
-        const amIWinner = state.winner.winners && state.winner.winners.some(w => w.id === myId);
-        const amILoser = state.winner.loser && state.winner.loser.id === myId;
-
-        if (amIWinner) new Audio('/sounds/win.mp3').play().catch(() => null);
-        else if (amILoser) new Audio('/sounds/lose.mp3').play().catch(() => null);
+      const mySocketId = socketStore.socket?.id;
+      let me = state.players.find(p => p.id === (playerId.value || mySocketId));
+      if (!me && mySocketId) {
+        me = state.players.find(p => p.id === mySocketId);
+      }
+      if (!state.isSpectator && me) {
+        myCards.value = me.cards || [];
+        if (!playerId.value || playerId.value !== me.id) {
+          playerId.value = me.id;
+        }
+      } else if (state.isSpectator) {
+        myCards.value = [];
       }
 
+      if (state.winner) {
+        winner.value = state.winner; winnerData.value = state.winner; isDealing.value = false;
+        const amIWinner = state.winner.winners && state.winner.winners.some(w => w.id === playerId.value);
+        const amILoser = state.winner.loser && state.winner.loser.id === playerId.value;
+        if (amIWinner) new Audio('/sounds/win.mp3').play().catch(() => null);
+        else if (amILoser) new Audio('/sounds/lose.mp3').play().catch(() => null);
+      } else {
+        winner.value = null; winnerData.value = null; rematchStatus.value = null;
+      }
       if (state.musicState) musicState.value = state.musicState;
     });
 
     socket.on('musicStateUpdate', (state) => musicState.value = state);
-
     socket.on('newLogEntry', (entry) => {
-      chatLog.value.push(entry);
-      unreadMessages.value++;
+      chatLog.value.push(entry); unreadMessages.value++;
       if (chatLog.value.length > 50) chatLog.value.shift();
     });
-
-    socket.on('invalidMove', ({ reason }) => toast.addToast('⚠️ ' + reason, 'warning'));
+    socket.on('invalidMove', ({ reason }) => {
+      const msg = i18n.global.t(reason);
+      toast.addToast(msg || reason, 'warning');
+    });
     socket.on('rematchUpdate', (data) => rematchStatus.value = data);
   }
 
   function resetState() {
-    gameStatus.value = 'lobby';
-    tableCards.value = [];
-    myCards.value = [];
-    winnerData.value = null;
-    rematchStatus.value = null;
-    isMyTurn.value = false;
-    hostId.value = null;
-    settings.value = {};
+    gameId.value = null; playerId.value = null; hostId.value = null;
+    players.value = []; settings.value = {}; disconnectedPlayers.value = {};
+    gameStatus.value = 'lobby'; tableCards.value = []; myCards.value = [];
+    winnerData.value = null; rematchStatus.value = null; isMyTurn.value = false;
+    isReconnecting.value = false;
   }
 
   function stopDealingAnimation() { isDealing.value = false; }
@@ -215,59 +245,35 @@ export const useGameStore = defineStore('game', () => {
 
   function joinLobby({ gameId, inviteCode, playerName = null }) {
     initListeners();
-
     const nameToSend = playerName || (authStore.user ? authStore.user.username : `Guest ${Math.floor(Math.random()*1000)}`);
-
-    socketStore.emit('joinLobby', {
-      gameId,
-      inviteCode,
-      playerName: nameToSend
-    });
+    socketStore.emit('joinLobby', { gameId, inviteCode, playerName: nameToSend });
   }
 
   async function findAndJoinPublicLobby(guestName = null) {
     try {
       initListeners();
       toast.addToast(i18n.global.t('searching_for_game'), 'info');
-
       const response = await fetch('/api/public/lobbies');
       if (!response.ok) throw new Error('Network error');
 
       const lobbies = await response.json();
+      const suitableLobby = lobbies.find(lobby => lobby.playerCount < lobby.maxPlayers && lobby.maxPlayers >= 2 && lobby.maxPlayers <= 4);
 
-      const suitableLobby = lobbies.find(lobby =>
-        lobby.playerCount < lobby.maxPlayers &&
-        lobby.maxPlayers >= 2 &&
-        lobby.maxPlayers <= 4
-      );
-
-      if (suitableLobby) {
-        console.log(`Found suitable lobby: ${suitableLobby.gameId}`);
-        joinLobby({ gameId: suitableLobby.gameId, playerName: guestName });
-      } else {
-        console.log('No suitable lobbies found, creating a new one.');
-        createLobby({
-          lobbyType: 'public',
-          maxPlayers: 2,
-          deckSize: 36,
-          betAmount: 0,
-          playerName: guestName
-        });
-      }
-    } catch (error) {
-      console.error('Quick play failed:', error);
-      toast.addToast(i18n.global.t('error_finding_game'), 'error');
-    }
+      if (suitableLobby) joinLobby({ gameId: suitableLobby.gameId, playerName: guestName });
+      else createLobby({ lobbyType: 'public', maxPlayers: 2, deckSize: 36, betAmount: 0, playerName: guestName });
+    } catch (error) { toast.addToast(i18n.global.t('error_finding_game'), 'error'); }
   }
 
+  function attemptReconnect(targetGameId = null) {
+    if (!socketStore.socket) return;
+    isReconnecting.value = true;
+    socketStore.emit('reconnectAttempt', { gameId: targetGameId });
+  }
 
   function subscribeToLobbies() {
     if (!socketStore.socket) return;
     socketStore.emit('joinLobbyBrowser');
-
-    socketStore.socket.on('lobbyListUpdate', (list) => {
-      publicLobbies.value = list;
-    });
+    socketStore.socket.on('lobbyListUpdate', (list) => { publicLobbies.value = list; });
   }
 
   function unsubscribeFromLobbies() {
@@ -276,30 +282,40 @@ export const useGameStore = defineStore('game', () => {
     socketStore.socket.off('lobbyListUpdate');
   }
 
+  async function refreshLobbyList() {
+    try {
+      const response = await fetch('/api/public/lobbies');
+      if (response.ok) publicLobbies.value = await response.json();
+    } catch (error) { console.error("Auto-sync error:", error); }
+  }
+
   function makeMove(card) {
     socketStore.emit('makeMove', { gameId: gameId.value, card });
     new Audio('/sounds/play.mp3').play().catch(() => null);
   }
+
   function takeCards() {
     socketStore.emit('takeCards', { gameId: gameId.value });
     new Audio('/sounds/take.mp3').play().catch(() => null);
   }
+
   function passTurn() {
     socketStore.emit('passTurn', { gameId: gameId.value });
     new Audio('/sounds/play.mp3').play().catch(() => null);
   }
+
   function requestRematch() {
     if (!gameId.value) return;
     socketStore.emit('requestRematch', { gameId: gameId.value });
   }
+
   function leaveGame() {
     socketStore.emit('leaveLobby', { gameId: gameId.value });
-    gameId.value = null;
-    playerId.value = null;
-    hostId.value = null;
+    gameId.value = null; playerId.value = null; hostId.value = null;
     resetState();
     router.push('/');
   }
+
   function sendMessage(text) { if (text.trim()) socketStore.emit('sendMessage', { gameId: gameId.value, message: text }); }
   function markChatRead() { unreadMessages.value = 0; }
 
@@ -310,6 +326,7 @@ export const useGameStore = defineStore('game', () => {
     if (!title) return;
     socketStore.emit('hostChangeTrack', { gameId: gameId.value, trackId: id, trackTitle: title });
   }
+
   function suggestTrack(url) {
     const id = getYouTubeID(url);
     if (!id) return toast.addToast(i18n.global.t('game_invalid_link'), 'error');
@@ -319,27 +336,16 @@ export const useGameStore = defineStore('game', () => {
       toast.addToast(i18n.global.t('sent_to_host'), 'success');
     }
   }
+
   function getYouTubeID(url) {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
   }
 
-  async function refreshLobbyList() {
-    try {
-      const response = await fetch('/api/public/lobbies');
-      if (response.ok) {
-        const list = await response.json();
-        publicLobbies.value = list;
-      }
-    } catch (error) {
-      console.error("Auto-sync error:", error);
-    }
-  }
-
   return {
     gameId, playerId, players, hostId, settings,
-    publicLobbies,
+    publicLobbies, disconnectedPlayers, isReconnecting,
     isHost, gameStatus, tableCards, myCards, trumpCard, deckCount,
     turnPlayerId, attackerId, defenderId,
     isMyTurn, isAttacker, isDefender,
@@ -347,9 +353,9 @@ export const useGameStore = defineStore('game', () => {
     chatLog, unreadMessages, musicState,
 
     initListeners, createLobby, joinLobby, findAndJoinPublicLobby,
-    subscribeToLobbies, unsubscribeFromLobbies,
-    makeMove, takeCards, passTurn,
+    subscribeToLobbies, unsubscribeFromLobbies, refreshLobbyList,
+    attemptReconnect, makeMove, takeCards, passTurn,
     canPlayCard, stopDealingAnimation, leaveGame, requestRematch,
-    sendMessage, markChatRead, changeTrack, suggestTrack, refreshLobbyList
+    sendMessage, markChatRead, changeTrack, suggestTrack
   };
 });

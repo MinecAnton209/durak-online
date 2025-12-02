@@ -206,7 +206,8 @@ function runUsersMigrations() {
     const migrations = [
         { column: 'coins', type: 'INTEGER', options: 'DEFAULT 1000 NOT NULL' },
         { column: 'last_daily_bonus_claim', type: 'DATE', options: '' },
-        { column: 'telegram_id', type: 'TEXT', options: '' }
+        { column: 'telegram_id', type: 'TEXT', options: '' },
+        { column: 'device_id', type: 'TEXT', options: '' }
     ];
     db.all(`PRAGMA table_info(users);`, [], (err, columns) => {
         if (err) {

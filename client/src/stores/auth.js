@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import WebApp from '@twa-dev/sdk';
 import { useToastStore } from './toast';
 import i18n from '@/i18n';
+import { getDeviceId } from '@/utils/deviceId';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null);
@@ -39,12 +40,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function authenticate(mode, { username, password }) {
     const endpoint = mode === 'login' ? '/login' : '/register';
+    const deviceId = await getDeviceId();
 
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, deviceId }),
     });
 
     const data = await response.json();
@@ -137,6 +139,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function loginWithTelegramWidget(tgUserData) {
     try {
       const token = getTokenFromCookies()
+      const deviceId = await getDeviceId();
       const response = await fetch('/api/telegram/widget-auth', {
         method: 'POST',
         headers: {
@@ -144,7 +147,7 @@ export const useAuthStore = defineStore('auth', () => {
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         credentials: 'include',
-        body: JSON.stringify(tgUserData)
+        body: JSON.stringify({ ...tgUserData, deviceId })
       });
 
       const data = await response.json();

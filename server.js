@@ -299,6 +299,7 @@ function addPlayerToGame(socket, game, playerName) {
     const sessionUser = socket.request.session.user;
     game.players[socket.id] = {
         id: socket.id,
+        deviceId: socket.deviceId,
         name: sessionUser ? sessionUser.username : playerName,
         dbId: sessionUser ? sessionUser.id : null,
         isGuest: !sessionUser,
@@ -444,6 +445,11 @@ function checkGameOver(game) {
 }
 
 async function updateStatsAfterGame(game) {
+    if (game.isStatsUpdating) {
+        console.log(`[Stats] Update for game ${game.id} already in progress. Skipping.`);
+        return;
+    }
+    game.isStatsUpdating = true;
     console.log(`[GAME END ${game.id}] Starting stats update.`);
     if (!game.winner || !game.startTime || !game.winner.winners || !game.winner.hasOwnProperty('loser')) {
         const endTime = new Date();
@@ -550,6 +556,10 @@ async function updateStatsAfterGame(game) {
             console.log(`[GAME END ${game.id}] Transaction rolled back successfully.`);
         } catch (rollbackError) {
             console.error(`[GAME END ${game.id}] CRITICAL: Failed to roll back transaction!`, rollbackError);
+        }
+    } finally {
+        if (game) {
+            game.isStatsUpdating = false;
         }
     }
 }
@@ -1111,6 +1121,7 @@ io.on('connection', (socket) => {
                 const disconnectedPlayer = game.players[socket.id];
 
                 if (game.status === 'waiting') {
+                    console.log(`[Lobby] Player ${disconnectedPlayer.name} leaving lobby ${gameId}...`);
 
                     delete game.players[socket.id];
                     game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
@@ -1124,56 +1135,74 @@ io.on('connection', (socket) => {
                         }
 
                         io.to(gameId).emit('lobbyStateUpdate', {
-                            players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified })),
+                            players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified, isHost: p.id === game.hostId })),
                             hostId: game.hostId,
-                            maxPlayers: game.settings.maxPlayers
+                            maxPlayers: game.settings.maxPlayers,
+                            settings: game.settings
                         });
                         io.to(gameId).emit('playerLeft', { playerId: socket.id, name: disconnectedPlayer.name });
                         console.log(`[Lobby] ${disconnectedPlayer.name} removed. Lobby ${gameId} updated.`);
-                        broadcastPublicLobbies();
-
                     } else {
                         delete games[gameId];
                         dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
                         console.log(`[Lobby] Lobby ${gameId} is empty and was deleted.`);
-                        broadcastPublicLobbies();
                     }
+                    broadcastPublicLobbies();
                 }
 
                 else if (game.status === 'in_progress' && !game.winner) {
+                    console.log(`[Game] Player ${disconnectedPlayer.name} disconnected from active game ${gameId}. Starting reconnect timer...`);
 
-                    const playerWhoLeft = { ...disconnectedPlayer };
-                    delete game.players[socket.id];
-                    game.playerOrder = game.playerOrder.filter(id => id !== socket.id);
+                    disconnectedPlayer.disconnected = true;
+                    disconnectedPlayer.disconnectTime = Date.now();
 
-                    if (game.playerOrder.length < 2) {
-                        console.log(`[Game] Game ${gameId} finished due to disconnect (1 player left).`);
+                    io.to(gameId).emit('playerDisconnected', {
+                        playerId: socket.id,
+                        timeout: 60
+                    });
+                    logEvent(game, null, { i18nKey: 'log_player_disconnected', options: { name: disconnectedPlayer.name }});
 
-                        const winners = game.playerOrder.map(id => game.players[id]).filter(p => p);
+                    disconnectedPlayer.reconnectTimeout = setTimeout(() => {
+                        const currentGame = games[gameId];
+                        if (!currentGame || !currentGame.players[socket.id] || !currentGame.players[socket.id].disconnected) {
+                            console.log(`[Reconnect] Timer for ${disconnectedPlayer.name} in ${gameId} cancelled or player already reconnected.`);
+                            return;
+                        }
 
-                        game.winner = {
-                            winners: winners,
-                            loser: playerWhoLeft,
-                            reason: {
-                                i18nKey: 'game_over_player_left',
-                                options: { player: playerWhoLeft.name }
+                        if (!currentGame || currentGame.status === 'finished') {
+                            return;
+                        }
+
+                        console.log(`[Game] Reconnect timeout for ${disconnectedPlayer.name}. Player removed permanently from ${gameId}.`);
+                        const playerWhoLeft = { ...currentGame.players[socket.id] };
+
+                        delete currentGame.players[socket.id];
+                        currentGame.playerOrder = currentGame.playerOrder.filter(id => id !== socket.id);
+
+                        if (currentGame.playerOrder.length < 2) {
+                            console.log(`[Game] Game ${gameId} finished due to timeout.`);
+                            if (currentGame.status !== 'finished') {
+                                currentGame.winner = {
+                                    winners: currentGame.playerOrder.map(id => currentGame.players[id]).filter(p => p),
+                                    loser: playerWhoLeft,
+                                    reason: {
+                                        i18nKey: 'game_over_player_left_timeout',
+                                        options: {player: playerWhoLeft.name}
+                                    }
+                                };
+                                currentGame.status = 'finished';
                             }
-                        };
-                        game.status = 'finished';
-
-                        updateStatsAfterGame(game);
-                        broadcastGameState(gameId);
-                    }
-                    else {
-                        console.log(`[Game] Game ${gameId} continues without ${disconnectedPlayer.name}`);
-                        logEvent(game, null, { i18nKey: 'log_player_left_continue', options: { name: playerWhoLeft.name }});
-
-                        if (game.turn === socket.id) {
-                            const nextIndex = 0;
-                            updateTurn(game, nextIndex);
+                            updateStatsAfterGame(currentGame);
+                        } else {
+                            logEvent(currentGame, null, { i18nKey: 'log_player_left_continue', options: { name: playerWhoLeft.name }});
+                            if (currentGame.turn === socket.id) {
+                                const nextIndex = 0;
+                                updateTurn(currentGame, nextIndex);
+                            }
                         }
                         broadcastGameState(gameId);
-                    }
+
+                    }, 60000);
                 }
 
                 break;
@@ -1511,6 +1540,95 @@ io.on('connection', (socket) => {
 
     socket.on('leaveLobbyBrowser', () => {
         socket.leave('lobby_browser');
+    });
+
+    socket.on('reconnectAttempt', async (payload) => {
+        const requestedGameId = payload && payload.gameId;
+        const sessionUser = socket.request.session?.user;
+        const deviceId = socket.deviceId;
+
+        console.log(`[Reconnect] Attempt from UserID: ${sessionUser?.id}, DeviceID: ${deviceId}`);
+
+        if (!requestedGameId || !games[requestedGameId]) {
+            return socket.emit('reconnectFailed');
+        }
+        const gameId = requestedGameId;
+        const game = games[gameId];
+        if (game.status !== 'in_progress') {
+            return socket.emit('reconnectFailed');
+        }
+
+        let oldPlayerSocketId = null;
+        let oldPlayerData = null;
+
+        for (const [socketId, player] of Object.entries(game.players)) {
+            if (player.disconnected) {
+                if (sessionUser && player.dbId === sessionUser.id) {
+                    oldPlayerSocketId = socketId;
+                    oldPlayerData = player;
+                    break;
+                }
+                if (!sessionUser && player.isGuest && player.deviceId === deviceId) {
+                    oldPlayerSocketId = socketId;
+                    oldPlayerData = player;
+                    break;
+                }
+            }
+        }
+
+        if (oldPlayerSocketId && oldPlayerData) {
+            console.log(`[Reconnect] Player ${oldPlayerData.name} found in game ${gameId}. Reconnecting...`);
+                clearTimeout(oldPlayerData.reconnectTimeout);
+
+                const newPlayerId = socket.id;
+                game.players[newPlayerId] = oldPlayerData;
+
+                game.players[newPlayerId].id = newPlayerId;
+                game.players[newPlayerId].disconnected = false;
+                game.players[newPlayerId].disconnectTime = null;
+                game.players[newPlayerId].reconnectTimeout = null;
+
+                const playerIndex = game.playerOrder.indexOf(oldPlayerSocketId);
+                if (playerIndex > -1) {
+                    game.playerOrder[playerIndex] = newPlayerId;
+                }
+
+                if (game.hostId === oldPlayerSocketId) {
+                    game.hostId = newPlayerId;
+                }
+
+                if (game.attackerId === oldPlayerSocketId) {
+                    game.attackerId = newPlayerId;
+                }
+                if (game.defenderId === oldPlayerSocketId) {
+                    game.defenderId = newPlayerId;
+                }
+                if (game.turn === oldPlayerSocketId) {
+                    game.turn = newPlayerId;
+                }
+
+                delete game.players[oldPlayerSocketId];
+
+                socket.join(gameId);
+
+                io.to(gameId).emit('playerReconnected', {
+                    playerId: newPlayerId,
+                    oldPlayerId: oldPlayerSocketId,
+                    name: oldPlayerData.name
+                });
+                logEvent(game, null, { i18nKey: 'log_player_reconnected', options: { name: oldPlayerData.name } });
+
+                broadcastGameState(gameId);
+
+            return;
+        }
+        socket.emit('reconnectFailed');
+    });
+    socket.on('requestGameState', ({ gameId }) => {
+        const game = games[gameId];
+        if (game && game.players[socket.id]) {
+            broadcastGameState(gameId);
+        }
     });
 });
 
