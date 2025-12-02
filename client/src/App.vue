@@ -11,6 +11,7 @@ import ToastContainer from '@/components/ui/ToastContainer.vue';
 import GameInviteModal from '@/components/game/GameInviteModal.vue';
 import BanModal from '@/components/ui/BanModal.vue';
 import SnowEffect from '@/components/ui/SnowEffect.vue';
+import WebApp from '@twa-dev/sdk';
 
 const authStore = useAuthStore();
 const socketStore = useSocketStore();
@@ -45,6 +46,19 @@ onMounted(async () => {
   } catch (error) {
     console.error("Socket connection failed:", error);
   }
+
+  const startParam = WebApp.initDataUnsafe?.start_param;
+
+  if (startParam) {
+    console.log("🔗 Deep Link Detected:", startParam);
+    if (startParam.startsWith('invite_')) {
+      console.log("Referral link");
+    }
+    else {
+      router.replace(`/lobby/${startParam}`);
+    }
+  }
+
   socketStore.connect();
 
   gameStore.initListeners();

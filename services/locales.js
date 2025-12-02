@@ -3,11 +3,16 @@
         welcome: "Привіт, {name}! 👋\n\nЦе легендарна гра \"Дурень Онлайн\".\nТисни кнопку нижче, щоб почати!",
         play_btn: "🃏 Грати в Дурака",
         add_group_btn: "👥 Додати в групу",
-        help: "Просто напиши @{botname} в будь-якому чаті, щоб запросити друзів!",
+        help: "Просто напиши @{botname} в будь-якому чаті, щоб запросити друзів!\n\nКоманди:\n/profile - Мій профіль\n/createroom - Створити кімнату\n/donate - Підтримати проект",
 
         btn_friends: "👥 Друзі",
         btn_leaderboard: "🏆 Топ гравців",
         btn_donate: "✨ Пожертвувати (Stars)",
+
+        buttons: {
+            cancel: "🔙 Скасувати",
+            back_to_menu: "⬅️ Головне меню"
+        },
 
         profile: {
             caption: "👤 **Твій профіль**\n\n🆔 ID: `{id}`\n👤 Нік: **{username}**\n🛡 Статус акаунта: {account_status}\n\n🏆 Перемог: **{wins}**\n📉 Поразок: **{losses}**\n⭐ Рейтинг: **{rating}**\n💰 Монети: **{coins}**",
@@ -38,7 +43,7 @@
             list_empty: "У вас поки немає друзів. Знайдіть їх у грі або запросіть посиланням!",
             btn_my_friends: "📜 Мої друзі",
             btn_requests: "📩 Заявки ({count})",
-            btn_add: "➕ Знайти друга",
+            btn_add: "➕ Додати друга",
             incoming_request: "📩 Заявка від **{username}**",
             btn_accept: "✅ Прийняти",
             btn_decline: "❌ Відхилити",
@@ -56,20 +61,33 @@
         donate: {
             ask_amount: "✨ **Підтримка розробника**\n\nВведіть кількість Telegram Stars (⭐), яку бажаєте пожертвувати (мінімум 1):",
             error_amount: "❌ Будь ласка, введіть ціле число більше 0.",
-            error_too_big: "❌ Занадто велика сума для одного платежу. Максимум: 2500 ⭐.",
+            error_too_big: "❌ Занадто велика сума. Максимум 2500 ⭐.",
             title: "Пожертва на розвиток",
             description: "Дякую за підтримку проекту Durak Online! ❤️",
             label: "пожертва",
             success: "🙏 **Дякуємо!**\nВи пожертвували **{amount}** ⭐. Ваша підтримка неймовірно важлива!"
         },
-        buttons: {
-            cancel: "🔙 Скасувати"
-        },
         inline: {
             title: "🎮 Почати гру",
             desc: "Надіслати кнопку для гри в цей чат",
             message: "Хто хоче в Дурака? Залітайте! 🃏",
-            button: "🚀 Грати"
+            button: "🚀 Грати",
+
+            create_lobby_title: "🎮 Створити приватне лобі",
+            create_lobby_desc: "Створити гру і надіслати запрошення",
+            lobby_invite_message: "👋 Хто хоче в Дурака? Створено приватне лобі!\nТисни кнопку нижче 👇",
+            lobby_join_button: "🚀 Увійти в лобі"
+        },
+        bot: {
+            lobby_created: "✅ Приватне лобі #{id} створено!\n\nКод для входу: `{code}`\n\nЗапросіть друзів за цим посиланням:",
+            lobby_expired: "Ваше лобі #{id} було видалено через неактивність.",
+            join_link_btn: "🔗 Приєднатися до гри",
+            lobby_already_exists: "⚠️ Лобі вже створено!",
+            create_error: "❌ Помилка при створенні кімнати."
+        },
+        errors: {
+            no_account: "❌ Акаунт не знайдено. Зайдіть у гру через кнопку 'Грати', щоб створити профіль.",
+            user_not_found: "❌ Користувача не знайдено."
         }
     },
 
@@ -77,11 +95,16 @@
         welcome: "Привет, {name}! 👋\n\nЭто легендарная игра \"Дурак Онлайн\".\nЖми кнопку ниже, чтобы начать!",
         play_btn: "🃏 Играть в Дурака",
         add_group_btn: "👥 Добавить в группу",
-        help: "Просто напиши @{botname} в любом чате, чтобы пригласить друзей!",
+        help: "Просто напиши @{botname} в любом чате, чтобы пригласить друзей!\n\nКоманды:\n/profile - Мой профиль\n/createroom - Создать комнату\n/donate - Поддержать проект",
 
         btn_friends: "👥 Друзья",
         btn_leaderboard: "🏆 Топ игроков",
         btn_donate: "✨ Пожертвовать (Stars)",
+
+        buttons: {
+            cancel: "🔙 Отмена",
+            back_to_menu: "⬅️ Главное меню"
+        },
 
         profile: {
             caption: "👤 **Твой профиль**\n\n🆔 ID: `{id}`\n👤 Ник: **{username}**\n🛡 Статус аккаунта: {account_status}\n\n🏆 Побед: **{wins}**\n📉 Поражений: **{losses}**\n⭐ Рейтинг: **{rating}**\n💰 Монеты: **{coins}**",
@@ -112,7 +135,7 @@
             list_empty: "У вас пока нет друзей. Найдите их в игре или пригласите ссылкой!",
             btn_my_friends: "📜 Мои друзья",
             btn_requests: "📩 Заявки ({count})",
-            btn_add: "➕ Найти друга",
+            btn_add: "➕ Добавить друга",
             incoming_request: "📩 Заявка от **{username}**",
             btn_accept: "✅ Принять",
             btn_decline: "❌ Отклонить",
@@ -130,20 +153,33 @@
         donate: {
             ask_amount: "✨ **Поддержка разработчика**\n\nВведите количество Telegram Stars (⭐), которое хотите пожертвовать (минимум 1):",
             error_amount: "❌ Пожалуйста, введите целое число больше 0.",
-            error_too_big: "❌ Слишком большая сумма для одного платежа. Максимум: 2500 ⭐.",
+            error_too_big: "❌ Слишком большая сумма. Максимум 2500 ⭐.",
             title: "Пожертвование на развитие",
             description: "Спасибо за поддержку проекта Durak Online! ❤️",
             label: "пожертвование",
             success: "🙏 **Спасибо!**\nВы пожертвовали **{amount}** ⭐. Ваша поддержка невероятно важна!"
         },
-        buttons: {
-            cancel: "🔙 Отмена"
-        },
         inline: {
             title: "🎮 Начать игру",
             desc: "Отправить кнопку для игры в этот чат",
             message: "Кто хочет в Дурака? Залетайте! 🃏",
-            button: "🚀 Играть"
+            button: "🚀 Играть",
+
+            create_lobby_title: "🎮 Создать приватное лобби",
+            create_lobby_desc: "Создать игру и отправить приглашение",
+            lobby_invite_message: "👋 Кто хочет в Дурака? Создано приватное лобби!\nЖми кнопку ниже 👇",
+            lobby_join_button: "🚀 Войти в лобби"
+        },
+        bot: {
+            lobby_created: "✅ Приватное лобби #{id} создано!\n\nКод для входа: `{code}`\n\nПригласите друзей по этой ссылке:",
+            lobby_expired: "Ваше лобби #{id} было удалено из-за неактивности.",
+            join_link_btn: "🔗 Присоединиться к игре",
+            lobby_already_exists: "⚠️ Лобби уже создано!",
+            create_error: "❌ Ошибка при создании комнаты."
+        },
+        errors: {
+            no_account: "❌ Аккаунт не найден. Зайдите в игру через кнопку 'Играть', чтобы создать профиль.",
+            user_not_found: "❌ Пользователь не найден."
         }
     },
 
@@ -151,11 +187,16 @@
         welcome: "Hello, {name}! 👋\n\nThis is the legendary \"Durak Online\".\nPress the button below to start!",
         play_btn: "🃏 Play Durak",
         add_group_btn: "👥 Add to Group",
-        help: "Just type @{botname} in any chat to invite friends!",
+        help: "Just type @{botname} in any chat to invite friends!\n\nCommands:\n/profile - My Profile\n/createroom - Create Room\n/donate - Support Project",
 
         btn_friends: "👥 Friends",
         btn_leaderboard: "🏆 Leaderboard",
         btn_donate: "✨ Donate (Stars)",
+
+        buttons: {
+            cancel: "🔙 Cancel",
+            back_to_menu: "⬅️ Main Menu"
+        },
 
         profile: {
             caption: "👤 **Your Profile**\n\n🆔 ID: `{id}`\n👤 Nick: **{username}**\n🛡 Account Status: {account_status}\n\n🏆 Wins: **{wins}**\n📉 Losses: **{losses}**\n⭐ Rating: **{rating}**\n💰 Coins: **{coins}**",
@@ -186,7 +227,7 @@
             list_empty: "You have no friends yet. Find them in game or invite via link!",
             btn_my_friends: "📜 My Friends",
             btn_requests: "📩 Requests ({count})",
-            btn_add: "➕ Find Friend",
+            btn_add: "➕ Add Friend",
             incoming_request: "📩 Request from **{username}**",
             btn_accept: "✅ Accept",
             btn_decline: "❌ Decline",
@@ -204,20 +245,33 @@
         donate: {
             ask_amount: "✨ **Support the developer**\n\nEnter the amount of Telegram Stars (⭐) you want to donate (min 1):",
             error_amount: "❌ Please enter a whole number greater than 0.",
-            error_too_big: "❌ Amount too big for one transaction. Max: 2500 ⭐.",
+            error_too_big: "❌ Amount too big. Max 2500 ⭐.",
             title: "Donation for development",
             description: "Thanks for supporting Durak Online! ❤️",
             label: "donation",
             success: "🙏 **Thank you!**\nYou donated **{amount}** ⭐. Your support is incredibly important!"
         },
-        buttons: {
-            cancel: "🔙 Cancel"
-        },
         inline: {
             title: "🎮 Start Game",
             desc: "Send game button to this chat",
             message: "Who wants to play Durak? Join now! 🃏",
-            button: "🚀 Play"
+            button: "🚀 Play",
+
+            create_lobby_title: "🎮 Create Private Lobby",
+            create_lobby_desc: "Create game and send invite",
+            lobby_invite_message: "👋 Who wants to play Durak? Private lobby created!\nPress the button below 👇",
+            lobby_join_button: "🚀 Join Lobby"
+        },
+        bot: {
+            lobby_created: "✅ Private lobby #{id} created!\n\nEntry code: `{code}`\n\nInvite friends via this link:",
+            lobby_expired: "Your lobby #{id} was deleted due to inactivity.",
+            join_link_btn: "🔗 Join Game",
+            lobby_already_exists: "⚠️ Lobby already exists!",
+            create_error: "❌ Error creating room."
+        },
+        errors: {
+            no_account: "❌ Account not found. Enter the game via 'Play' button to create a profile.",
+            user_not_found: "❌ User not found."
         }
     }
 };
