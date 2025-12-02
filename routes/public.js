@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const path = require('path');
@@ -133,7 +133,8 @@ router.get('/lobbies', (req, res) => {
             playerCount: game.playerOrder.length,
             maxPlayers: game.settings.maxPlayers,
             betAmount: game.settings.betAmount || 0,
-            deckSize: game.settings.deckSize || 36
+            deckSize: game.settings.deckSize || 36,
+            gameMode: game.settings.gameMode || 'podkidnoy'
         }));
 
     res.json(publicLobbies);

@@ -1,4 +1,4 @@
-﻿const { Telegraf } = require('telegraf');
+const { Telegraf } = require('telegraf');
 const crypto = require('crypto');
 const locales = require('./locales');
 const db = require('../db');
@@ -302,7 +302,10 @@ function init(token) {
 
             const gameId = crypto.randomBytes(3).toString('hex').toUpperCase();
             const inviteCode = crypto.randomBytes(3).toString('hex').toUpperCase();
-            const lobbySettings = { maxPlayers: 4, lobbyType: 'private', gameMode: 'podkidnoy', betAmount: 0, deckSize: 36 };
+            const rawText = ctx.message?.text || '';
+            const lowerText = rawText.toLowerCase();
+            const isTransferMode = lowerText.includes('perevod') || lowerText.includes('перевод') || lowerText.includes('transfer');
+            const lobbySettings = { maxPlayers: 4, lobbyType: 'private', gameMode: isTransferMode ? 'perevodnoy' : 'podkidnoy', betAmount: 0, deckSize: 36 };
 
             await dbRun(`INSERT INTO games (id, status, lobby_type, invite_code, max_players, host_user_id, game_settings, start_time) VALUES (?, 'waiting', ?, ?, ?, ?, ?, ?)`,
                 [gameId, 'private', inviteCode, lobbySettings.maxPlayers, user.id, JSON.stringify(lobbySettings), new Date().toISOString()]);
@@ -435,15 +438,19 @@ function init(token) {
                     title: t(lang, 'inline.create_lobby_title'), description: t(lang, 'inline.create_lobby_desc'),
                     thumbnail_url: 'https://cdn-icons-png.flaticon.com/512/3039/3039386.png',
                     input_message_content: { message_text: t(lang, 'inline.lobby_invite_message') },
-                    reply_markup: { inline_keyboard: [[{ text: t(lang, 'inline.lobby_join_button'), callback_data: `create_lobby_inline_${user.id}` }]] }
+                    reply_markup: { inline_keyboard: [[
+                        { text: t(lang, 'inline.create_podkidnoy_btn'), callback_data: `create_lobby_inline_podkidnoy_${user.id}` },
+                        { text: t(lang, 'inline.create_perevodnoy_btn'), callback_data: `create_lobby_inline_perevodnoy_${user.id}` }
+                    ]] }
                 });
             }
             await ctx.answerInlineQuery(results, { cache_time: 0 });
         } catch (err) { console.error('Inline Query Error:', err); }
     });
 
-    bot.action(/create_lobby_inline_(\d+)/, async (ctx) => {
-        const hostUserId = parseInt(ctx.match[1]);
+    bot.action(/create_lobby_inline_(podkidnoy|perevodnoy)_(\d+)/, async (ctx) => {
+        const mode = ctx.match[1];
+        const hostUserId = parseInt(ctx.match[2]);
 
         try {
             const gameId = crypto.randomBytes(3).toString('hex').toUpperCase();
@@ -453,7 +460,7 @@ function init(token) {
                 maxPlayers: 4,
                 lobbyType: 'private',
                 deckSize: 36,
-                gameMode: 'podkidnoy',
+                gameMode: mode,
                 betAmount: 0
             };
 

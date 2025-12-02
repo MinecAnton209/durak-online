@@ -1,4 +1,4 @@
-﻿const locales = {
+const locales = {
     uk: {
         welcome: "Привіт, {name}! 👋\n\nЦе легендарна гра \"Дурень Онлайн\".\nТисни кнопку нижче, щоб почати!",
         play_btn: "🃏 Грати в Дурака",
@@ -76,7 +76,9 @@
             create_lobby_title: "🎮 Створити приватне лобі",
             create_lobby_desc: "Створити гру і надіслати запрошення",
             lobby_invite_message: "👋 Хто хоче в Дурака? Створено приватне лобі!\nТисни кнопку нижче 👇",
-            lobby_join_button: "🚀 Увійти в лобі"
+            lobby_join_button: "🚀 Увійти в лобі",
+            create_podkidnoy_btn: "Підкидний",
+            create_perevodnoy_btn: "Перевідний"
         },
         bot: {
             lobby_created: "✅ Приватне лобі #{id} створено!\n\nКод для входу: `{code}`\n\nЗапросіть друзів за цим посиланням:",
@@ -168,7 +170,9 @@
             create_lobby_title: "🎮 Создать приватное лобби",
             create_lobby_desc: "Создать игру и отправить приглашение",
             lobby_invite_message: "👋 Кто хочет в Дурака? Создано приватное лобби!\nЖми кнопку ниже 👇",
-            lobby_join_button: "🚀 Войти в лобби"
+            lobby_join_button: "🚀 Войти в лобби",
+            create_podkidnoy_btn: "Подкидной",
+            create_perevodnoy_btn: "Переводной"
         },
         bot: {
             lobby_created: "✅ Приватное лобби #{id} создано!\n\nКод для входа: `{code}`\n\nПригласите друзей по этой ссылке:",
@@ -260,7 +264,9 @@
             create_lobby_title: "🎮 Create Private Lobby",
             create_lobby_desc: "Create game and send invite",
             lobby_invite_message: "👋 Who wants to play Durak? Private lobby created!\nPress the button below 👇",
-            lobby_join_button: "🚀 Join Lobby"
+            lobby_join_button: "🚀 Join Lobby",
+            create_podkidnoy_btn: "Throw-in",
+            create_perevodnoy_btn: "Transfer"
         },
         bot: {
             lobby_created: "✅ Private lobby #{id} created!\n\nEntry code: `{code}`\n\nInvite friends via this link:",

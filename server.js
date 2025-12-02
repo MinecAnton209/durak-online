@@ -753,7 +753,8 @@ function broadcastPublicLobbies() {
             playerCount: game.playerOrder.length,
             maxPlayers: game.settings.maxPlayers,
             betAmount: game.settings.betAmount || 0,
-            deckSize: game.settings.deckSize || 36
+            deckSize: game.settings.deckSize || 36,
+            gameMode: game.settings.gameMode || 'podkidnoy'
         }));
 
     io.to('lobby_browser').emit('lobbyListUpdate', publicLobbies);
@@ -984,39 +985,83 @@ io.on('connection', (socket) => {
     socket.on('makeMove', ({ gameId, card }) => {
         const game = games[gameId];
         if (!game || !game.players[socket.id] || game.winner) return;
+
         game.lastAction = 'move';
         const player = game.players[socket.id];
         const isDefender = socket.id === game.defenderId;
         const canToss = !isDefender && game.table.length > 0 && game.table.length % 2 === 0;
+
         if (game.turn !== socket.id && !canToss) {
             return socket.emit('invalidMove', { reason: "error_invalid_move_turn" });
         }
+
         if (!player.cards.some(c => c.rank === card.rank && c.suit === card.suit)) {
             return socket.emit('invalidMove', { reason: "error_invalid_move_no_card" });
         }
+
         if (isDefender) {
+
+            const isPerevodnoy = game.settings.gameMode === 'perevodnoy';
+            const isSameRank = game.table.length > 0 && game.table.every(c => c.rank === card.rank);
+
+            if (isPerevodnoy && isSameRank) {
+                const currentDefenderIndex = game.playerOrder.indexOf(game.defenderId);
+                const nextPlayerIndex = getNextPlayerIndex(currentDefenderIndex, game.playerOrder.length);
+                const nextPlayerId = game.playerOrder[nextPlayerIndex];
+                const nextPlayer = game.players[nextPlayerId];
+
+                if (nextPlayer && nextPlayer.cards.length >= (game.table.length + 1)) {
+
+                    player.cards = player.cards.filter(c => !(c.rank === card.rank && c.suit === card.suit));
+                    game.table.push(card);
+
+                    logEvent(game, null, {
+                        i18nKey: 'log_transfer',
+                        options: { name: player.name, nextPlayer: nextPlayer.name }
+                    });
+
+                    game.attackerId = game.defenderId;
+                    game.defenderId = nextPlayerId;
+                    game.turn = nextPlayerId;
+                    game.lastAction = 'transfer';
+
+                    broadcastGameState(gameId);
+                    return;
+                } else {
+                }
+            }
+
             if (!canBeat(game.table[game.table.length - 1], card, game.trumpSuit)) {
                 return socket.emit('invalidMove', { reason: "error_invalid_move_cannot_beat" });
             }
+
             logEvent(game, null, {
                 i18nKey: 'log_defend',
                 options: { name: player.name, rank: card.rank, suit: card.suit }
             });
             game.turn = game.attackerId;
+
         } else {
             const isAttacking = game.attackerId === socket.id;
             const logKey = isAttacking ? 'log_attack' : 'log_toss';
+
             if (game.table.length > 0 && !game.table.some(c => c.rank === card.rank)) {
                 return socket.emit('invalidMove', { reason: "error_invalid_move_wrong_rank" });
             }
+
             const defender = game.players[game.defenderId];
             if (!defender) return;
-            if ((game.table.length / 2) >= defender.cards.length) {
+
+            const cardsToBeat = game.table.length - (game.table.length % 2 === 0 ? game.table.length / 2 : Math.floor(game.table.length / 2));
+
+            if ((game.table.length - Math.floor(game.table.length / 2)) >= defender.cards.length) {
                 return socket.emit('invalidMove', { reason: "error_invalid_move_toss_limit" });
             }
+
             logEvent(game, null, { i18nKey: logKey, options: { name: player.name, rank: card.rank, suit: card.suit } });
             game.turn = game.defenderId;
         }
+
         player.cards = player.cards.filter(c => !(c.rank === card.rank && c.suit === card.suit));
         game.table.push(card);
         broadcastGameState(gameId);

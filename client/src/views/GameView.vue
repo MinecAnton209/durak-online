@@ -188,12 +188,13 @@ watch(() => gameStore.players, (val) => {
         <div v-else class="flex flex-col gap-4">
 
           <div class="bg-black/20 p-3 rounded-xl border border-white/5 flex flex-col gap-2">
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-on-surface-variant">{{ $t('players_count_label') }}</span>
-              <select v-if="gameStore.isHost" @change="updateSettings" v-model="localMaxPlayers" class="bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white outline-none">
-                <option :value="2">2</option><option :value="3">3</option><option :value="4">4</option>
-              </select>
-              <span v-else class="font-bold text-white">{{ gameStore.settings?.maxPlayers || 2 }}</span>
+            <div class="flex justify-between items-center pb-2 border-b border-white/5">
+              <span class="text-sm text-on-surface-variant">{{ $t('game_mode_label') }}</span>
+              <span class="font-bold text-primary flex items-center gap-1">
+                    <span v-if="gameStore.settings?.gameMode === 'perevodnoy'">🔄</span>
+                    <span v-else>⬇️</span>
+                    {{ $t('game_mode_' + (gameStore.settings?.gameMode || 'podkidnoy')) }}
+                </span>
             </div>
             <div class="flex justify-between items-center">
               <span class="text-sm text-on-surface-variant">{{ $t('deck_size_label') }}</span>
