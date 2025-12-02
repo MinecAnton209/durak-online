@@ -305,7 +305,7 @@ function init(token) {
             const rawText = ctx.message?.text || '';
             const lowerText = rawText.toLowerCase();
             const isTransferMode = lowerText.includes('perevod') || lowerText.includes('перевод') || lowerText.includes('transfer');
-            const lobbySettings = { maxPlayers: 4, lobbyType: 'private', gameMode: isTransferMode ? 'perevodnoy' : 'podkidnoy', betAmount: 0, deckSize: 36 };
+            const lobbySettings = { maxPlayers: 4, lobbyType: 'private', gameMode: isTransferMode ? 'perevodnoy' : 'podkidnoy', betAmount: 0, deckSize: 36, turnDuration: 60 };
 
             await dbRun(`INSERT INTO games (id, status, lobby_type, invite_code, max_players, host_user_id, game_settings, start_time) VALUES (?, 'waiting', ?, ?, ?, ?, ?, ?)`,
                 [gameId, 'private', inviteCode, lobbySettings.maxPlayers, user.id, JSON.stringify(lobbySettings), new Date().toISOString()]);
@@ -464,7 +464,8 @@ function init(token) {
                 lobbyType: 'private',
                 deckSize: 36,
                 gameMode: mode,
-                betAmount: 0
+                betAmount: 0,
+                turnDuration: 60
             };
 
             await dbRun(`INSERT INTO games (id, status, lobby_type, invite_code, max_players, host_user_id, game_settings, start_time) VALUES (?, 'waiting', ?, ?, ?, ?, ?, ?)`,
