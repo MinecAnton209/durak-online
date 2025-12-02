@@ -51,7 +51,7 @@ async function showMainMenu(ctx, isEdit = false) {
     const markup = { inline_keyboard: keyboard };
 
     try {
-        if (isEdit) await ctx.editMessageText(text, { reply_markup: markup }).catch(() => {});
+        if (isEdit) await ctx.editMessageText(text, { reply_markup: markup }).catch(() => { });
         else await ctx.reply(text, { reply_markup: markup });
     } catch (e) { console.error("MainMenu Error:", e); }
 }
@@ -98,7 +98,7 @@ function init(token) {
                 ]
             };
 
-            if (isEdit) await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard }).catch(() => {});
+            if (isEdit) await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard }).catch(() => { });
             else await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
         } catch (e) { console.error(e); }
     }
@@ -177,14 +177,14 @@ function init(token) {
             const markup = { inline_keyboard: keyboard.filter(row => row.length > 0) };
 
             if (isEdit) {
-                await ctx.editMessageText(fullText, { parse_mode: 'Markdown', reply_markup: markup }).catch(() => {});
+                await ctx.editMessageText(fullText, { parse_mode: 'Markdown', reply_markup: markup }).catch(() => { });
             } else {
                 await ctx.reply(fullText, { parse_mode: 'Markdown', reply_markup: markup });
             }
 
         } catch (e) {
             console.error(e);
-            if(isEdit) ctx.answerCbQuery('Error');
+            if (isEdit) ctx.answerCbQuery('Error');
         }
     }
 
@@ -268,14 +268,14 @@ function init(token) {
             const markup = { inline_keyboard: keyboard };
 
             if (isEdit) {
-                await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: markup }).catch(() => {});
+                await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: markup }).catch(() => { });
             } else {
                 await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: markup });
             }
 
         } catch (e) {
             console.error(e);
-            if(isEdit) ctx.answerCbQuery('Db Error');
+            if (isEdit) ctx.answerCbQuery('Db Error');
         }
     }
 
@@ -353,13 +353,13 @@ function init(token) {
         }
 
         else if (state.action === 'awaiting_old_pass') {
-            try { await ctx.deleteMessage(); } catch (e) {}
+            try { await ctx.deleteMessage(); } catch (e) { }
             try {
                 const user = await dbGet('SELECT password FROM users WHERE telegram_id = ?', [userId]);
                 const isMatch = await bcrypt.compare(text, user.password);
                 if (!isMatch) {
                     const msg = await ctx.reply(t(lang, 'profile.error_wrong_pass'));
-                    setTimeout(() => ctx.telegram.deleteMessage(ctx.chat.id, msg.message_id).catch(() => {}), 3000);
+                    setTimeout(() => ctx.telegram.deleteMessage(ctx.chat.id, msg.message_id).catch(() => { }), 3000);
                     return;
                 }
                 userStates[userId] = { action: 'awaiting_new_pass' };
@@ -368,10 +368,10 @@ function init(token) {
         }
 
         else if (state.action === 'awaiting_new_pass') {
-            try { await ctx.deleteMessage(); } catch (e) {}
+            try { await ctx.deleteMessage(); } catch (e) { }
             if (text.length < 4 || text.length > 30) {
                 const msg = await ctx.reply(t(lang, 'profile.error_format'));
-                setTimeout(() => ctx.telegram.deleteMessage(ctx.chat.id, msg.message_id).catch(() => {}), 3000);
+                setTimeout(() => ctx.telegram.deleteMessage(ctx.chat.id, msg.message_id).catch(() => { }), 3000);
                 return;
             }
             try {
@@ -379,7 +379,7 @@ function init(token) {
                 await dbRun('UPDATE users SET password = ? WHERE telegram_id = ?', [hashedPassword, userId]);
                 delete userStates[userId];
                 const msg = await ctx.reply(t(lang, 'profile.pass_set_success'), { parse_mode: 'Markdown', reply_markup: { remove_keyboard: true } });
-                setTimeout(() => ctx.telegram.deleteMessage(ctx.chat.id, msg.message_id).catch(() => {}), 3000);
+                setTimeout(() => ctx.telegram.deleteMessage(ctx.chat.id, msg.message_id).catch(() => { }), 3000);
                 showProfile(ctx);
             } catch (e) { ctx.reply(t(lang, 'profile.error_db')); }
         }
@@ -390,7 +390,7 @@ function init(token) {
             if (amount > 2500) return ctx.reply(t(lang, 'donate.error_too_big'));
             delete userStates[userId];
             const tempMsg = await ctx.reply("⏳", { reply_markup: { remove_keyboard: true } });
-            try { await ctx.deleteMessage(tempMsg.message_id); } catch (e) {}
+            try { await ctx.deleteMessage(tempMsg.message_id); } catch (e) { }
             return ctx.sendInvoice({
                 chat_id: ctx.chat.id,
                 title: t(lang, 'donate.title'),
@@ -438,10 +438,12 @@ function init(token) {
                     title: t(lang, 'inline.create_lobby_title'), description: t(lang, 'inline.create_lobby_desc'),
                     thumbnail_url: 'https://cdn-icons-png.flaticon.com/512/3039/3039386.png',
                     input_message_content: { message_text: t(lang, 'inline.lobby_invite_message') },
-                    reply_markup: { inline_keyboard: [[
-                        { text: t(lang, 'inline.create_podkidnoy_btn'), callback_data: `create_lobby_inline_podkidnoy_${user.id}` },
-                        { text: t(lang, 'inline.create_perevodnoy_btn'), callback_data: `create_lobby_inline_perevodnoy_${user.id}` }
-                    ]] }
+                    reply_markup: {
+                        inline_keyboard: [[
+                            { text: t(lang, 'inline.create_podkidnoy_btn'), callback_data: `create_lobby_inline_podkidnoy_${user.id}` },
+                            { text: t(lang, 'inline.create_perevodnoy_btn'), callback_data: `create_lobby_inline_perevodnoy_${user.id}` }
+                        ]]
+                    }
                 });
             }
             await ctx.answerInlineQuery(results, { cache_time: 0 });
@@ -449,6 +451,7 @@ function init(token) {
     });
 
     bot.action(/create_lobby_inline_(podkidnoy|perevodnoy)_(\d+)/, async (ctx) => {
+        const lang = ctx.from.language_code;
         const mode = ctx.match[1];
         const hostUserId = parseInt(ctx.match[2]);
 
