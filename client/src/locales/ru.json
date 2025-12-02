@@ -222,5 +222,7 @@
   "time_60s":"60 секунд",
   "time_unlimited":"Без ограничений",
   "log_timeout_pass":"⏰ Время вышло! {name} пропускает ход.",
-  "log_timeout_take":"⏰ Время вышло! {name} забирает карты."
+  "log_timeout_take":"⏰ Время вышло! {name} забирает карты.",
+  "your_time": "Ваше время",
+  "opponent_time": "Время соперника"
 }

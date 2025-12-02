@@ -31,6 +31,7 @@ const dbGet = util.promisify(db.get.bind(db));
 const cookieParser = require('cookie-parser');
 const { attachUserFromToken, socketAttachUser } = require('./middlewares/jwtAuth')
 const telegramBot = require('./services/telegramBot');
+const botLogic = require('./services/botLogic');
 
 dbRun("UPDATE games SET status = 'cancelled' WHERE status = 'waiting'")
     .then(() => console.log('🧹 DB cleaned: Stale lobbies cancelled.'))
@@ -463,6 +464,7 @@ async function updateStatsAfterGame(game) {
         }
         return;
     }
+    const hasBots = Object.values(game.players).some(p => p.isBot);
 
     try {
         await dbRun("BEGIN TRANSACTION");
@@ -547,8 +549,11 @@ async function updateStatsAfterGame(game) {
             }
         }
 
-        await ratingService.updateRatingsAfterGame(game);
-
+        if (hasBots) {
+            console.log(`[Rating] Game ${game.id} had bots. Rating update skipped.`);
+        } else {
+            await ratingService.updateRatingsAfterGame(game);
+        }
         await dbRun("COMMIT");
 
     } catch (error) {
@@ -651,6 +656,53 @@ function broadcastGameState(gameId) {
             spectatorSocket.emit('gameStateUpdate', stateForSpectator);
         }
     });
+    const room = io.sockets.adapter.rooms.get(game.id);
+    if (room) {
+        room.forEach(socketId => {
+            if (!game.players[socketId] && !game.spectators.includes(socketId)) {
+                const socket = io.sockets.sockets.get(socketId);
+                if (socket) {
+                    const stateForSpectator = {
+                        gameId: game.id,
+                        hostId: game.hostId,
+                        isSpectator: true,
+                        players: game.playerOrder.map(id => {
+                            const p = game.players[id];
+                            if (!p) return null;
+                            return {
+                                id: p.id,
+                                name: p.name,
+                                rating: p.rating,
+                                isVerified: p.isVerified,
+                                streak: p.streak || 0,
+                                cardBackStyle: p.cardBackStyle || 'default',
+                                cards: p.cards,
+                                isAttacker: p.id === game.attackerId,
+                                isDefender: p.id === game.defenderId,
+                            };
+                        }).filter(p => p !== null),
+                        table: game.table,
+                        trumpCard: game.trumpCard,
+                        trumpSuit: game.trumpSuit,
+                        deckCardCount: game.deck.length,
+                        isYourTurn: false,
+                        canPass: false,
+                        canTake: false,
+                        winner: game.winner,
+                        lastAction: game.lastAction,
+                        musicState: game.musicState
+                    };
+                    socket.emit('gameStateUpdate', stateForSpectator);
+                }
+            }
+        });
+    }
+    if (game.status === 'in_progress' && !game.winner) {
+        const currentPlayer = game.players[game.turn];
+        if (currentPlayer && currentPlayer.isBot) {
+            processBotTurn(game, io);
+        }
+    }
 }
 
 function rouletteTick() {
@@ -885,6 +937,98 @@ function handleTurnTimeout(game, io) {
 
     broadcastGameState(game.id);
 }
+
+function processBotTurn(game, io) {
+    if (!game || game.status !== 'in_progress' || game.winner || game.isStatsUpdating) return;
+
+    const activePlayerId = game.turn;
+    const player = game.players[activePlayerId];
+
+    if (!player || !player.isBot) return;
+
+    if (player.isThinking) return;
+    player.isThinking = true;
+
+    try {
+        const { action, delay } = botLogic.getBotMove(game, player);
+
+        setTimeout(() => {
+            player.isThinking = false;
+
+            if (game.status !== 'in_progress' || game.turn !== player.id) return;
+
+
+            if (action.type === 'move') {
+                if (!action.card) {
+                    console.error(`[Bot Error] Bot tried to move without a card!`);
+                    return;
+                }
+
+                const initialCount = player.cards.length;
+                player.cards = player.cards.filter(c => !(c.rank === action.card.rank && c.suit === action.card.suit));
+
+                if (player.cards.length === initialCount) {
+                    console.error(`[Bot Error] Card not found in hand: ${action.card.rank}${action.card.suit}`);
+                    return;
+                }
+
+                game.table.push(action.card);
+                game.lastAction = 'move';
+
+                if (game.defenderId === player.id) {
+                    logEvent(game, null, { i18nKey: 'log_defend', options: { name: player.name, rank: action.card.rank, suit: action.card.suit } });
+                    game.turn = game.attackerId;
+                } else {
+                    const isAttacking = game.attackerId === player.id;
+                    logEvent(game, null, { i18nKey: isAttacking ? 'log_attack' : 'log_toss', options: { name: player.name, rank: action.card.rank, suit: action.card.suit } });
+                    game.turn = game.defenderId;
+                }
+            }
+            else if (action.type === 'take') {
+                const defender = game.players[game.defenderId];
+                logEvent(game, null, { i18nKey: 'log_timeout_take', options: { name: defender.name } });
+
+                defender.cards.push(...game.table);
+                game.table = [];
+                refillHands(game);
+
+                if (checkGameOver(game)) updateStatsAfterGame(game);
+                else {
+                    const defenderIndex = game.playerOrder.indexOf(game.defenderId);
+                    const nextPlayerIndex = getNextPlayerIndex(defenderIndex, game.playerOrder.length);
+                    updateTurn(game, nextPlayerIndex);
+                }
+            }
+            else if (action.type === 'pass') {
+                logEvent(game, null, { i18nKey: 'log_pass', options: { name: player.name } });
+
+                if (game.attackerId === player.id) {
+                    game.discardPile.push(...game.table);
+                    game.table = [];
+                    refillHands(game);
+
+                    if (checkGameOver(game)) updateStatsAfterGame(game);
+                    else {
+                        let defenderIndex = game.playerOrder.indexOf(game.defenderId);
+                        updateTurn(game, defenderIndex !== -1 ? defenderIndex : 0);
+                    }
+                } else {
+                    game.turn = game.attackerId;
+                }
+            }
+
+            player.afkStrikes = 0;
+
+            broadcastGameState(game.id);
+
+        }, delay);
+
+    } catch (e) {
+        console.error(`[Bot Critical Error]`, e);
+        player.isThinking = false;
+    }
+}
+
 io.on('connection', (socket) => {
     const session = socket.request.session;
     const sessionUser = session?.user;
@@ -1812,6 +1956,62 @@ io.on('connection', (socket) => {
         if (game && game.players[socket.id]) {
             broadcastGameState(gameId);
         }
+    });
+    socket.on('addBot', ({ gameId, difficulty }) => {
+
+        const game = games[gameId];
+
+        if (!game) {
+            console.error(`[AddBot] Error: Game ${gameId} not found in memory.`);
+            return;
+        }
+        if (game.hostId !== socket.id) {
+            console.error(`[AddBot] Error: User is not the host.`);
+            return;
+        }
+        if (game.status !== 'waiting') {
+            console.error(`[AddBot] Error: Game has already started.`);
+            return;
+        }
+        if (Object.keys(game.players).length >= game.settings.maxPlayers) {
+            console.error(`[AddBot] Error: Lobby is full.`);
+            return;
+        }
+
+        const botId = `bot_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
+        const botNames = {
+            child: "Baby Bot 👶", beginner: "Noob Bot 🤡", easy: "Simple Bot 🤖",
+            medium: "Normal Bot 😐", hard: "Pro Bot 😎", impossible: "Terminator 🦾"
+        };
+
+        game.players[botId] = {
+            id: botId,
+            name: botNames[difficulty] || "Bot",
+            isBot: true,
+            difficulty: difficulty,
+            cards: [],
+            gameStats: { cardsTaken: 0, successfulDefenses: 0, cardsBeatenInDefense: 0 },
+            afkStrikes: 0,
+            isVerified: true
+        };
+        game.playerOrder.push(botId);
+
+        io.to(gameId).emit('lobbyStateUpdate', {
+            players: Object.values(game.players).map(p => ({
+                id: p.id,
+                name: p.name,
+                rating: p.rating,
+                isVerified: p.isVerified,
+                isHost: p.id === game.hostId,
+                isBot: p.isBot || false,
+                difficulty: p.difficulty
+            })),
+            hostId: game.hostId,
+            maxPlayers: game.settings.maxPlayers,
+            settings: game.settings
+        });
+        broadcastPublicLobbies();
     });
 });
 

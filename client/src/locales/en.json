@@ -223,5 +223,7 @@
   "time_60s": "60 seconds",
   "time_unlimited": "Unlimited",
   "log_timeout_pass": "⏰ Time's up! {name} passes.",
-  "log_timeout_take": "⏰ Time's up! {name} takes cards."
+  "log_timeout_take": "⏰ Time's up! {name} takes cards.",
+  "your_time": "Your Time",
+  "opponent_time": "Opponent's Time"
 }

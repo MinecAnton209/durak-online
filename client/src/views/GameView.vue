@@ -195,6 +195,17 @@ watch(() => gameStore.turnDeadline, (deadline) => {
     }
   }, 100);
 }, { immediate: true });
+
+const botDifficulty = ref('medium');
+
+const addBot = () => {
+  console.log(`📤 Emitting addBot: gameId=${urlGameId}, difficulty=${botDifficulty.value}`);
+
+  socketStore.emit('addBot', {
+    gameId: urlGameId,
+    difficulty: botDifficulty.value
+  });
+};
 </script>
 
 <template>
@@ -254,6 +265,22 @@ watch(() => gameStore.turnDeadline, (deadline) => {
                 </span>
             </div>
 
+            <div v-if="gameStore.isHost && gameStore.players.length < localMaxPlayers" class="pt-2 border-t border-white/10 mt-2">
+              <div class="flex gap-2">
+                <select v-model="botDifficulty" class="bg-black/40 text-white text-xs rounded px-2 outline-none flex-1">
+                  <option value="child">👶 Child</option>
+                  <option value="beginner">🤡 Beginner</option>
+                  <option value="easy">🤖 Easy</option>
+                  <option value="medium">😐 Medium</option>
+                  <option value="hard">😎 Hard</option>
+                  <option value="impossible">🦾 Impossible</option>
+                </select>
+                <button @click="addBot" class="bg-surface text-white text-xs px-3 py-1.5 rounded font-bold hover:bg-white/20 transition-colors">
+                  + Bot
+                </button>
+              </div>
+            </div>
+
             <div class="flex justify-between items-center">
               <span class="text-sm text-on-surface-variant">{{ $t('bet_amount_label') }}</span>
               <span class="font-bold text-primary">💰 {{ gameStore.settings?.betAmount || 0 }}</span>
@@ -274,20 +301,31 @@ watch(() => gameStore.turnDeadline, (deadline) => {
           <ul class="space-y-2">
             <li v-for="p in gameStore.players" :key="p.id"
                 class="flex items-center justify-between bg-black/20 p-2.5 rounded-xl border border-white/5 relative group">
+
               <div class="flex items-center gap-3 min-w-0">
-                <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">{{ p.name[0] }}</div>
+                <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
+                  <span v-if="p.isBot">🤖</span>
+                  <span v-else>{{ p.name[0] }}</span>
+                </div>
+                
                 <div class="flex flex-col min-w-0">
                   <div class="flex items-center gap-1.5">
-                    <span class="text-white text-sm font-medium truncate">{{ p.name }}</span>
+                    <span class="text-sm font-medium truncate"
+                          :class="p.isBot ? 'text-cyan-400' : 'text-white'">
+                        {{ p.name }}
+                    </span>
                     <svg v-if="p.isVerified" class="w-3 h-3 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     <span v-if="p.streak > 3" class="text-[10px] text-orange-500 font-bold bg-orange-500/10 px-1 rounded border border-orange-500/20 shrink-0">🔥{{ p.streak }}</span>
                   </div>
                   <span v-if="p.id === gameStore.playerId" class="text-[10px] text-gray-400">{{ $t('you_label') }}</span>
                 </div>
               </div>
+
               <div class="flex items-center gap-2">
-                <button v-if="p.id !== gameStore.playerId && authStore.isAuthenticated" @click="openAddFriend(p.name)" class="w-7 h-7 rounded-lg bg-white/5 hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors" :title="$t('tooltip_add_friend')">+</button>
+                <button v-if="p.id !== gameStore.playerId && authStore.isAuthenticated && !p.isBot" @click="openAddFriend(p.name)" class="w-7 h-7 rounded-lg bg-white/5 hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors" :title="$t('tooltip_add_friend')">+</button>
+
                 <span v-if="p.id === gameStore.hostId" :title="$t('tooltip_host')" class="text-lg">👑</span>
+
                 <button v-if="gameStore.isHost && p.id !== gameStore.playerId" @click="kickPlayer(p.id)" class="text-error hover:bg-white/10 p-1 rounded transition-colors" :title="$t('kick_player')">🚫</button>
               </div>
             </li>
