@@ -248,7 +248,7 @@ export const useGameStore = defineStore('game', () => {
 
   function joinLobby({ gameId, inviteCode, playerName = null }) {
     initListeners();
-    const nameToSend = playerName || (authStore.user ? authStore.user.username : `Guest ${Math.floor(Math.random()*1000)}`);
+    const nameToSend = playerName || (authStore.user ? authStore.user.username : `Guest ${Math.floor(Math.random() * 1000)}`);
     socketStore.emit('joinLobby', { gameId, inviteCode, playerName: nameToSend });
   }
 
@@ -263,7 +263,7 @@ export const useGameStore = defineStore('game', () => {
       const suitableLobby = lobbies.find(lobby => lobby.playerCount < lobby.maxPlayers && lobby.maxPlayers >= 2 && lobby.maxPlayers <= 4);
 
       if (suitableLobby) joinLobby({ gameId: suitableLobby.gameId, playerName: guestName });
-      else createLobby({ lobbyType: 'public', maxPlayers: 2, deckSize: 36, betAmount: 0, playerName: guestName });
+      else createLobby({ lobbyType: 'public', maxPlayers: 2, deckSize: 36, betAmount: 0, gameMode: 'podkidnoy', turnDuration: 60, playerName: guestName });
     } catch (error) { toast.addToast(i18n.global.t('error_finding_game'), 'error'); }
   }
 
