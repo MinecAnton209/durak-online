@@ -39,6 +39,7 @@ export const useGameStore = defineStore('game', () => {
 
   const chatLog = ref([]);
   const unreadMessages = ref(0);
+  const turnDeadline = ref(null);
 
   const musicState = ref({
     currentTrackId: null,
@@ -170,6 +171,8 @@ export const useGameStore = defineStore('game', () => {
         gameId.value = state.gameId;
       }
 
+      turnDeadline.value = state.turnDeadline;
+
       if (!isReconnecting.value && gameStatus.value === 'lobby' && !state.winner && state.trumpCard) {
         isDealing.value = true;
       }
@@ -233,7 +236,7 @@ export const useGameStore = defineStore('game', () => {
     players.value = []; settings.value = {}; disconnectedPlayers.value = {};
     gameStatus.value = 'lobby'; tableCards.value = []; myCards.value = [];
     winnerData.value = null; rematchStatus.value = null; isMyTurn.value = false;
-    isReconnecting.value = false;
+    isReconnecting.value = false; turnDeadline.value = null;
   }
 
   function stopDealingAnimation() { isDealing.value = false; }
@@ -350,7 +353,7 @@ export const useGameStore = defineStore('game', () => {
     turnPlayerId, attackerId, defenderId,
     isMyTurn, isAttacker, isDefender,
     canTake, canPass, isDealing, winnerData, rematchStatus,
-    chatLog, unreadMessages, musicState,
+    chatLog, unreadMessages, musicState, turnDeadline,
 
     initListeners, createLobby, joinLobby, findAndJoinPublicLobby,
     subscribeToLobbies, unsubscribeFromLobbies, refreshLobbyList,

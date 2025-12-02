@@ -309,7 +309,8 @@ function addPlayerToGame(socket, game, playerName) {
         isVerified: sessionUser ? sessionUser.isVerified : false,
         is_muted: sessionUser ? sessionUser.is_muted : false,
         cards: [],
-        gameStats: { cardsTaken: 0, successfulDefenses: 0, cardsBeatenInDefense: 0 }
+        gameStats: { cardsTaken: 0, successfulDefenses: 0, cardsBeatenInDefense: 0 },
+        afkStrikes: 0
     };
     game.playerOrder.push(socket.id);
 }
@@ -445,6 +446,7 @@ function checkGameOver(game) {
 }
 
 async function updateStatsAfterGame(game) {
+    stopTurnTimer(game);
     if (game.isStatsUpdating) {
         console.log(`[Stats] Update for game ${game.id} already in progress. Skipping.`);
         return;
@@ -567,6 +569,13 @@ async function updateStatsAfterGame(game) {
 function broadcastGameState(gameId) {
     const game = games[gameId];
     if (!game) return;
+
+    if (game.status === 'in_progress' && !game.winner) {
+        startTurnTimer(game, io);
+    } else {
+        stopTurnTimer(game);
+    }
+
     game.playerOrder.forEach(playerId => {
         const playerSocket = io.sockets.sockets.get(playerId);
         if (playerSocket) {
@@ -596,6 +605,7 @@ function broadcastGameState(gameId) {
                 trumpSuit: game.trumpSuit,
                 deckCardCount: game.deck.length,
                 isYourTurn: playerId === game.turn && playerForWhomStateIs.cards.length > 0,
+                turnDeadline: game.turnDeadline,
                 canPass: playerId === game.attackerId && game.table.length > 0 && game.table.length % 2 === 0,
                 canTake: playerId === game.defenderId && game.table.length > 0,
                 winner: game.winner,
@@ -760,6 +770,121 @@ function broadcastPublicLobbies() {
     io.to('lobby_browser').emit('lobbyListUpdate', publicLobbies);
 }
 
+function stopTurnTimer(game) {
+    if (game.turnTimer) {
+        clearTimeout(game.turnTimer);
+        game.turnTimer = null;
+    }
+    game.turnDeadline = null;
+}
+
+function startTurnTimer(game, io) {
+    stopTurnTimer(game);
+
+    if (!game.settings.turnDuration || game.settings.turnDuration <= 0 || game.winner) return;
+
+    const durationMs = game.settings.turnDuration * 1000 + 2000;
+    game.turnDeadline = Date.now() + durationMs;
+
+    game.turnTimer = setTimeout(() => {
+        handleTurnTimeout(game, io);
+    }, durationMs);
+}
+
+function handleTurnTimeout(game, io) {
+    if (!game || game.winner) return;
+
+    const currentPlayerId = game.turn;
+    const player = game.players[currentPlayerId];
+
+    if (!player) return;
+
+    console.log(`[Game] Timeout for ${player.name} in game ${game.id}`);
+
+    player.afkStrikes = (player.afkStrikes || 0) + 1;
+
+    if (player.afkStrikes >= 2) {
+        console.log(`[Game] Player ${player.name} kicked due to AFK limit.`);
+
+        delete game.players[currentPlayerId];
+        game.playerOrder = game.playerOrder.filter(id => id !== currentPlayerId);
+
+        io.to(game.id).emit('playerLeft', { playerId: currentPlayerId, name: player.name, reason: 'afk' });
+        logEvent(game, `🚫 ${player.name} видалений з гри за неактивність.`);
+
+        if (game.playerOrder.length < 2) {
+            const winners = game.playerOrder.map(id => game.players[id]);
+            game.winner = {
+                winners: winners,
+                loser: { ...player, name: player.name + " (AFK)" },
+                reason: { i18nKey: 'game_over_afk', options: { name: player.name } }
+            };
+            game.status = 'finished';
+            updateStatsAfterGame(game);
+        } else {
+            let nextIndex = 0;
+            updateTurn(game, nextIndex);
+        }
+        broadcastGameState(game.id);
+        return;
+    }
+
+    if (game.turn === game.defenderId) {
+        logEvent(game, null, { i18nKey: 'log_timeout_take', options: { name: player.name } });
+
+        const defender = player;
+        defender.gameStats.cardsTaken += game.table.length;
+        defender.cards.push(...game.table);
+        game.table = [];
+        refillHands(game);
+
+        if (checkGameOver(game)) updateStatsAfterGame(game);
+        else {
+            const defenderIndex = game.playerOrder.indexOf(game.defenderId);
+            const nextPlayerIndex = getNextPlayerIndex(defenderIndex, game.playerOrder.length);
+            updateTurn(game, nextPlayerIndex);
+        }
+    }
+    else {
+        if (game.table.length > 0) {
+            logEvent(game, null, { i18nKey: 'log_timeout_pass', options: { name: player.name } });
+
+            game.discardPile.push(...game.table);
+            game.table = [];
+            refillHands(game);
+
+            if (checkGameOver(game)) updateStatsAfterGame(game);
+            else {
+                let defenderIndex = game.playerOrder.indexOf(game.defenderId);
+                updateTurn(game, defenderIndex !== -1 ? defenderIndex : 0);
+            }
+        } else {
+            const sortedCards = [...player.cards].sort((a, b) => {
+                const isTrumpA = a.suit === game.trumpSuit;
+                const isTrumpB = b.suit === game.trumpSuit;
+                if (isTrumpA !== isTrumpB) return isTrumpA ? 1 : -1;
+                const ranks = { '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+                return ranks[a.rank] - ranks[b.rank];
+            });
+
+            const cardToPlay = sortedCards[0];
+
+            if (cardToPlay) {
+                console.log(`[Game] Auto-playing card for ${player.name}: ${cardToPlay.rank}${cardToPlay.suit}`);
+
+                player.cards = player.cards.filter(c => c !== cardToPlay);
+
+                game.table.push(cardToPlay);
+                game.lastAction = 'move';
+                game.turn = game.defenderId;
+
+                logEvent(game, null, { i18nKey: 'log_attack', options: { name: player.name, rank: cardToPlay.rank, suit: cardToPlay.suit } });
+            }
+        }
+    }
+
+    broadcastGameState(game.id);
+}
 io.on('connection', (socket) => {
     const session = socket.request.session;
     const sessionUser = session?.user;
@@ -815,7 +940,8 @@ io.on('connection', (socket) => {
             lobbyType: settings.lobbyType || 'public',
             gameMode: settings.gameMode || 'podkidnoy',
             betAmount: betAmount,
-            deckSize: settings.deckSize || 36
+            deckSize: settings.deckSize || 36,
+            turnDuration: parseInt(settings.turnDuration) || 60
         };
 
         try {
@@ -988,6 +1114,7 @@ io.on('connection', (socket) => {
 
         game.lastAction = 'move';
         const player = game.players[socket.id];
+        player.afkStrikes = 0;
         const isDefender = socket.id === game.defenderId;
         const canToss = !isDefender && game.table.length > 0 && game.table.length % 2 === 0;
 
@@ -1069,6 +1196,9 @@ io.on('connection', (socket) => {
     socket.on('passTurn', ({ gameId }) => {
         const game = games[gameId];
         if (!game || game.attackerId !== socket.id || game.table.length === 0 || game.table.length % 2 !== 0 || game.winner) return;
+        if (game.players[socket.id]) {
+            game.players[socket.id].afkStrikes = 0;
+        }
         game.lastAction = 'pass';
         const defenderIdBeforeRefill = game.defenderId;
         const defender = game.players[defenderIdBeforeRefill];
@@ -1094,6 +1224,9 @@ io.on('connection', (socket) => {
     socket.on('takeCards', ({ gameId }) => {
         const game = games[gameId];
         if (!game || game.defenderId !== socket.id || game.table.length === 0 || game.winner) return;
+        if (game.players[socket.id]) {
+            game.players[socket.id].afkStrikes = 0;
+        }
         game.lastAction = 'take';
         const defender = game.players[game.defenderId];
         if (defender) {
@@ -1227,6 +1360,7 @@ io.on('connection', (socket) => {
                         if (currentGame.playerOrder.length < 2) {
                             console.log(`[Game] Game ${gameId} finished due to timeout.`);
                             if (currentGame.status !== 'finished') {
+                                stopTurnTimer(currentGame);
                                 currentGame.winner = {
                                     winners: currentGame.playerOrder.map(id => currentGame.players[id]).filter(p => p),
                                     loser: playerWhoLeft,
@@ -1518,6 +1652,10 @@ io.on('connection', (socket) => {
             }
         }
         if (settings.deckSize) game.settings.deckSize = parseInt(settings.deckSize);
+
+        if (settings.turnDuration !== undefined) {
+            game.settings.turnDuration = parseInt(settings.turnDuration);
+        }
 
         try {
             await dbRun("UPDATE games SET game_settings = ?, max_players = ? WHERE id = ?",

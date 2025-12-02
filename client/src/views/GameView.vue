@@ -35,10 +35,18 @@ const friendsModalTab = ref('friends');
 
 const localMaxPlayers = ref(2);
 const localDeckSize = ref(36);
+const localTurnDuration = ref(60);
 
 const isPlayerInGame = computed(() => gameStore.gameId === urlGameId && !!gameStore.playerId);
 const isGameStarted = computed(() => gameStore.gameStatus === 'playing');
 const currentUrl = computed(() => window.location.href);
+
+const timerProgress = ref(100);
+let timerInterval = null;
+
+const isTimerMine = computed(() => {
+  return gameStore.isMyTurn || gameStore.canPass || gameStore.canTake;
+});
 
 const opponents = computed(() => {
   if (!gameStore.players.length) return [];
@@ -72,7 +80,6 @@ onMounted(async () => {
   if (!socketStore.isConnected) {
     await socketStore.connect();
   }
-
   checkRoomStatus();
 
   socketStore.socket?.on('error', handleSocketError);
@@ -83,6 +90,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  if (timerInterval) clearInterval(timerInterval);
   socketStore.socket?.off('error', handleSocketError);
   socketStore.socket?.off('kicked');
 });
@@ -140,7 +148,11 @@ const openFriendsList = () => {
 const updateSettings = () => {
   socketStore.emit('updateLobbySettings', {
     gameId: urlGameId,
-    settings: { maxPlayers: localMaxPlayers.value, deckSize: localDeckSize.value }
+    settings: {
+      maxPlayers: localMaxPlayers.value,
+      deckSize: localDeckSize.value,
+      turnDuration: localTurnDuration.value
+    }
   });
 };
 
@@ -154,20 +166,35 @@ watch(() => gameStore.settings, (newSettings) => {
   if (newSettings) {
     localMaxPlayers.value = newSettings.maxPlayers;
     localDeckSize.value = newSettings.deckSize;
+    localTurnDuration.value = newSettings.turnDuration !== undefined ? newSettings.turnDuration : 60;
   }
 }, { immediate: true, deep: true });
 
 watch(() => gameStore.gameStatus, (newStatus) => {
-  if (newStatus !== 'lobby') {
-    isLoading.value = false;
-  }
+  if (newStatus !== 'lobby') isLoading.value = false;
 });
 
 watch(() => gameStore.players, (val) => {
-  if (val && val.length > 0 && gameStore.gameStatus === 'lobby') {
-    isLoading.value = false;
-  }
+  if (val && val.length > 0 && gameStore.gameStatus === 'lobby') isLoading.value = false;
 });
+
+watch(() => gameStore.turnDeadline, (deadline) => {
+  if (timerInterval) clearInterval(timerInterval);
+  if (!deadline) { timerProgress.value = 0; return; }
+
+  const totalDuration = (gameStore.settings?.turnDuration || 60) * 1000;
+
+  timerInterval = setInterval(() => {
+    const now = Date.now();
+    const left = deadline - now;
+    if (left <= 0) {
+      timerProgress.value = 0;
+      clearInterval(timerInterval);
+    } else {
+      timerProgress.value = Math.min(100, (left / totalDuration) * 100);
+    }
+  }, 100);
+}, { immediate: true });
 </script>
 
 <template>
@@ -188,6 +215,7 @@ watch(() => gameStore.players, (val) => {
         <div v-else class="flex flex-col gap-4">
 
           <div class="bg-black/20 p-3 rounded-xl border border-white/5 flex flex-col gap-2">
+
             <div class="flex justify-between items-center pb-2 border-b border-white/5">
               <span class="text-sm text-on-surface-variant">{{ $t('game_mode_label') }}</span>
               <span class="font-bold text-primary flex items-center gap-1">
@@ -196,6 +224,15 @@ watch(() => gameStore.players, (val) => {
                     {{ $t('game_mode_' + (gameStore.settings?.gameMode || 'podkidnoy')) }}
                 </span>
             </div>
+
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-on-surface-variant">{{ $t('players_count_label') }}</span>
+              <select v-if="gameStore.isHost" @change="updateSettings" v-model="localMaxPlayers" class="bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white outline-none">
+                <option :value="2">2</option><option :value="3">3</option><option :value="4">4</option>
+              </select>
+              <span v-else class="font-bold text-white">{{ gameStore.settings?.maxPlayers || 2 }}</span>
+            </div>
+
             <div class="flex justify-between items-center">
               <span class="text-sm text-on-surface-variant">{{ $t('deck_size_label') }}</span>
               <select v-if="gameStore.isHost" @change="updateSettings" v-model="localDeckSize" class="bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white outline-none">
@@ -203,6 +240,20 @@ watch(() => gameStore.players, (val) => {
               </select>
               <span v-else class="font-bold text-white">{{ gameStore.settings?.deckSize || 36 }}</span>
             </div>
+
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-on-surface-variant">{{ $t('time_limit_label') }}</span>
+              <select v-if="gameStore.isHost" @change="updateSettings" v-model="localTurnDuration" class="bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white outline-none">
+                <option :value="15">{{ $t('time_15s') }}</option>
+                <option :value="30">{{ $t('time_30s') }}</option>
+                <option :value="60">{{ $t('time_60s') }}</option>
+                <option :value="0">{{ $t('time_unlimited') }}</option>
+              </select>
+              <span v-else class="font-bold text-white">
+                    {{ gameStore.settings?.turnDuration === 0 ? $t('time_unlimited') : (gameStore.settings?.turnDuration || 60) + 's' }}
+                </span>
+            </div>
+
             <div class="flex justify-between items-center">
               <span class="text-sm text-on-surface-variant">{{ $t('bet_amount_label') }}</span>
               <span class="font-bold text-primary">💰 {{ gameStore.settings?.betAmount || 0 }}</span>
@@ -250,7 +301,26 @@ watch(() => gameStore.players, (val) => {
     </div>
 
     <div v-else class="flex flex-col h-full w-full relative">
+
+      <div v-if="gameStore.turnDeadline" class="w-full h-2 absolute top-0 left-0 z-0 pointer-events-none group">
+        <div class="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+             :class="isTimerMine ? 'text-emerald-400' : 'text-blue-400'">
+          {{ isTimerMine ? $t('your_time') : $t('opponent_time') }}
+        </div>
+
+        <div class="h-full transition-all duration-100 ease-linear shadow-[0_0_20px_currentColor]"
+             :class="{
+                  'bg-emerald-500/60 shadow-emerald-500/40': isTimerMine && timerProgress > 50,
+                  'bg-amber-500/60 shadow-amber-500/40': isTimerMine && timerProgress <= 50 && timerProgress > 20,
+                  'bg-rose-500/60 shadow-rose-500/40': isTimerMine && timerProgress <= 20,
+                  'bg-blue-400/30 shadow-blue-400/10': !isTimerMine
+               }"
+             :style="{ width: timerProgress + '%' }">
+        </div>
+      </div>
+
       <DealingAnimation v-if="gameStore.isDealing" :trump-card="gameStore.trumpCard" @finished="onDealingFinished" />
+
       <div class="grid grid-rows-[auto_1fr_auto] h-full w-full transition-opacity duration-700 pb-safe" :class="gameStore.isDealing ? 'opacity-0 pointer-events-none' : 'opacity-100'">
 
         <div class="w-full px-2 pt-2 pb-1 shrink-0 flex items-start" :class="opponentsGridClass">
@@ -291,7 +361,7 @@ watch(() => gameStore.players, (val) => {
           </div>
         </div>
 
-        <div class="shrink-0 flex flex-col items-center w-full pb-2 md:pb-4 gap-1">
+        <div class="shrink-0 flex flex-col items-center w-full pb-2 md:pb-4 gap-1 relative z-30">
           <div class="mb-1">
             <div v-if="!gameStore.canPass && !gameStore.canTake" class="px-3 py-1 bg-black/60 backdrop-blur text-white/90 rounded-full text-xs md:text-sm border border-white/10 animate-pulse">
               <span v-if="!gameStore.isMyTurn">{{ gameStore.isAttacker ? $t('status_waiting') : $t('status_opponent_turn') }}</span>

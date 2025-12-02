@@ -216,5 +216,12 @@
   "game_mode_podkidnoy": "Throw-in",
   "game_mode_perevodnoy": "Passing",
   "log_transfer": "🔄 {name} transferred turn to {nextPlayer}!",
-  "error_transfer_not_enough_cards": "⚠️ Cannot transfer: next player has too few cards."
+  "error_transfer_not_enough_cards": "⚠️ Cannot transfer: next player has too few cards.",
+  "time_limit_label": "Time per turn",
+  "time_15s": "15 seconds (Blitz)",
+  "time_30s": "30 seconds",
+  "time_60s": "60 seconds",
+  "time_unlimited": "Unlimited",
+  "log_timeout_pass": "⏰ Time's up! {name} passes.",
+  "log_timeout_take": "⏰ Time's up! {name} takes cards."
 }

@@ -134,7 +134,8 @@ router.get('/lobbies', (req, res) => {
             maxPlayers: game.settings.maxPlayers,
             betAmount: game.settings.betAmount || 0,
             deckSize: game.settings.deckSize || 36,
-            gameMode: game.settings.gameMode || 'podkidnoy'
+            gameMode: game.settings.gameMode || 'podkidnoy',
+            turnDuration: game.settings.turnDuration !== undefined ? game.settings.turnDuration : 60
         }));
 
     res.json(publicLobbies);

@@ -28,12 +28,13 @@ let syncInterval = null;
 const lobbyType = ref('public');
 const maxPlayers = ref(2);
 const deckSize = ref(36);
+const gameMode = ref('podkidnoy');
+const turnDuration = ref(60);
 const isBetting = ref(false);
 const betAmount = ref(10);
 
 const isAuthModalOpen = ref(false);
 const authMode = ref('login');
-const gameMode = ref('podkidnoy');
 
 const openAuth = (mode) => {
   authMode.value = mode;
@@ -93,7 +94,6 @@ function joinPrivateLobby() {
 function toggleBetting() {
   if (!authStore.isAuthenticated) {
     toast.addToast(t('error_guests_cannot_bet'), 'warning');
-    openAuth('login');
     return;
   }
   isBetting.value = !isBetting.value;
@@ -104,9 +104,10 @@ function createLobby() {
     lobbyType: lobbyType.value,
     maxPlayers: parseInt(maxPlayers.value),
     deckSize: parseInt(deckSize.value),
+    gameMode: gameMode.value,
+    turnDuration: parseInt(turnDuration.value),
     betAmount: isBetting.value ? parseInt(betAmount.value) : 0,
-    playerName: authStore.isAuthenticated ? authStore.user.username : `Guest ${Math.floor(Math.random() * 1000)}`,
-    gameMode: gameMode.value
+    playerName: authStore.isAuthenticated ? authStore.user.username : `Guest ${Math.floor(Math.random() * 1000)}`
   };
   gameStore.createLobby(settings);
 }
@@ -150,19 +151,26 @@ function createLobby() {
               <div v-for="lobby in publicLobbies" :key="lobby.gameId" class="bg-black/20 p-3 rounded-xl flex items-center justify-between border border-white/5 hover:border-white/20 transition-colors">
                 <div class="flex flex-col">
                   <span class="font-bold text-on-surface text-lg">#{{ lobby.gameId }}</span>
-                  <div class="flex items-center gap-2 text-xs text-on-surface-variant flex-wrap">
+
+                  <div class="flex items-center gap-2 text-xs text-on-surface-variant flex-wrap mt-1">
                     <span class="bg-white/10 px-1.5 py-0.5 rounded">👑 {{ lobby.hostName }}</span>
 
                     <span class="flex items-center gap-1 bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">
-                      <span v-if="lobby.gameMode === 'perevodnoy'">🔄</span>
-                      <span v-else>⬇️</span>
+                        <span v-if="lobby.gameMode === 'perevodnoy'">🔄</span>
+                        <span v-else>⬇️</span>
                         {{ $t('game_mode_' + (lobby.gameMode || 'podkidnoy')) }}
                       </span>
-                      <span>{{ lobby.playerCount }}/{{ lobby.maxPlayers }} 👤</span>
-                      <span>{{ lobby.deckSize }} 🃏</span>
-                      <span v-if="lobby.betAmount > 0" class="text-primary font-bold">💰{{ lobby.betAmount }}</span>
+
+                    <span class="flex items-center gap-1 bg-white/5 px-1.5 py-0.5 rounded border border-white/10" :title="$t('time_limit_label')">
+                        <span>⏱️</span>
+                        {{ lobby.turnDuration === 0 ? '∞' : lobby.turnDuration + 's' }}
+                      </span>
+
+                    <span>{{ lobby.playerCount }}/{{ lobby.maxPlayers }} 👤</span>
+                    <span v-if="lobby.betAmount > 0" class="text-primary font-bold">💰{{ lobby.betAmount }}</span>
                   </div>
                 </div>
+
                 <button @click="joinPublicLobby(lobby.gameId)" :disabled="joiningLobbyId === lobby.gameId" class="bg-primary hover:bg-[#00A891] text-on-primary font-bold py-2 px-6 rounded-lg transition-all active:scale-95 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 min-w-[80px] justify-center">
                   <span v-if="joiningLobbyId === lobby.gameId" class="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
                   <span v-else>{{ $t('join_button') }}</span>
@@ -216,6 +224,22 @@ function createLobby() {
                 <option value="52" class="bg-surface text-black">52</option>
               </select>
             </div>
+            <div>
+              <label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('game_mode_label') }}</label>
+              <select v-model="gameMode" class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
+                <option value="podkidnoy" class="bg-surface text-black">{{ $t('game_mode_podkidnoy') }}</option>
+                <option value="perevodnoy" class="bg-surface text-black">{{ $t('game_mode_perevodnoy') }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('time_limit_label') }}</label>
+              <select v-model="turnDuration" class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
+                <option :value="15" class="bg-surface text-black">{{ $t('time_15s') }}</option>
+                <option :value="30" class="bg-surface text-black">{{ $t('time_30s') }}</option>
+                <option :value="60" class="bg-surface text-black">{{ $t('time_60s') }}</option>
+                <option :value="0" class="bg-surface text-black">{{ $t('time_unlimited') }}</option>
+              </select>
+            </div>
           </div>
 
           <div
@@ -230,15 +254,6 @@ function createLobby() {
               <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform duration-300 shadow-sm"
                    :class="{ 'translate-x-6': isBetting }"></div>
             </div>
-          </div>
-
-          <div>
-            <label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('game_mode_label') }}</label>
-
-            <select v-model="gameMode" class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
-              <option value="podkidnoy" class="bg-surface text-black">{{ $t('game_mode_podkidnoy') }}</option>
-              <option value="perevodnoy" class="bg-surface text-black">{{ $t('game_mode_perevodnoy') }}</option>
-            </select>
           </div>
 
           <div v-if="isBetting" class="space-y-1.5 animate-fade-in">
