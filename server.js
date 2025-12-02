@@ -1224,6 +1224,101 @@ io.on('connection', (socket) => {
             socket.emit('error', { i18nKey: 'error_database' });
         }
     });
+    socket.on('reconnectAttempt', async ({ gameId }) => {
+        console.log(`[Reconnect] Attempt from socket ${socket.id} for game ${gameId}`);
+
+        if (!gameId) {
+            return socket.emit('reconnectFailed');
+        }
+
+        const targetGameId = gameId.toUpperCase();
+        const game = games[targetGameId];
+
+        if (!game) {
+            console.log(`[Reconnect] Game ${targetGameId} not found in memory`);
+            return socket.emit('reconnectFailed');
+        }
+
+        if (game.status === 'finished') {
+            console.log(`[Reconnect] Game ${targetGameId} already finished`);
+            return socket.emit('reconnectFailed');
+        }
+
+        const sessionUser = socket.request.session?.user;
+        const userDbId = sessionUser?.id;
+
+        let existingPlayerId = null;
+        if (userDbId) {
+            for (const [playerId, player] of Object.entries(game.players)) {
+                if (player.dbId === userDbId) {
+                    existingPlayerId = playerId;
+                    break;
+                }
+            }
+        }
+
+        if (existingPlayerId) {
+            console.log(`[Reconnect] User found in game. Old socket: ${existingPlayerId}, New socket: ${socket.id}`);
+
+            const oldPlayer = game.players[existingPlayerId];
+            const oldPlayerId = existingPlayerId;
+
+            game.players[socket.id] = { ...oldPlayer, id: socket.id };
+            delete game.players[oldPlayerId];
+
+            const orderIndex = game.playerOrder.indexOf(oldPlayerId);
+            if (orderIndex !== -1) {
+                game.playerOrder[orderIndex] = socket.id;
+            }
+
+            if (game.attackerId === oldPlayerId) game.attackerId = socket.id;
+            if (game.defenderId === oldPlayerId) game.defenderId = socket.id;
+            if (game.turn === oldPlayerId) game.turn = socket.id;
+            if (game.hostId === oldPlayerId) game.hostId = socket.id;
+
+            if (oldPlayer.reconnectTimeout) {
+                clearTimeout(oldPlayer.reconnectTimeout);
+                delete game.players[socket.id].reconnectTimeout;
+            }
+            delete game.players[socket.id].disconnected;
+            delete game.players[socket.id].disconnectTime;
+
+            socket.join(targetGameId);
+
+            io.to(targetGameId).emit('playerReconnected', {
+                playerId: socket.id,
+                oldPlayerId: oldPlayerId,
+                name: oldPlayer.name
+            });
+
+            logEvent(game, null, { i18nKey: 'log_player_reconnected', options: { name: oldPlayer.name } });
+
+            console.log(`[Reconnect] Success for ${oldPlayer.name}`);
+            broadcastGameState(targetGameId);
+
+        } else {
+            console.log(`[Reconnect] User not in game. Sending lobby state.`);
+            socket.join(targetGameId);
+
+            const playersForLobby = Object.values(game.players).map(p => ({
+                id: p.id,
+                name: p.name,
+                isVerified: p.isVerified,
+                streak: p.streak || 0,
+                rating: p.rating,
+                isHost: p.id === game.hostId,
+            }));
+
+            socket.emit('lobbyStateUpdate', {
+                players: playersForLobby,
+                maxPlayers: game.settings.maxPlayers,
+                hostId: game.hostId,
+                settings: game.settings
+            });
+
+            socket.emit('joinSuccess', { gameId: targetGameId, playerId: socket.id });
+        }
+    });
     socket.on('getLobbyState', ({ gameId }) => {
         const game = games[gameId];
         if (game) {

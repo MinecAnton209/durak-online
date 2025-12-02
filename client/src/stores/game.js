@@ -107,7 +107,10 @@ export const useGameStore = defineStore('game', () => {
       gameId.value = data.gameId;
       playerId.value = data.playerId;
       gameStatus.value = 'lobby';
-      router.push(`/lobby/${data.gameId}`);
+      // Only navigate if we're not already on the lobby page
+      if (router.currentRoute.value.params.id !== data.gameId) {
+        router.push(`/lobby/${data.gameId}`);
+      }
     });
 
     socket.on('lobbyStateUpdate', (data) => {

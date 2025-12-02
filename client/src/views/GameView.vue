@@ -101,10 +101,20 @@ const checkRoomStatus = () => {
 
   if (isPlayerInGame.value) {
     socketStore.emit('getLobbyState', { gameId: urlGameId });
+    isLoading.value = false;
   } else {
     gameStore.attemptReconnect(urlGameId);
 
+    const timeoutTimer = setTimeout(() => {
+      if (isLoading.value) {
+        errorMessage.value = t('error_reconnect_failed');
+        isLoading.value = false;
+        socketStore.socket?.off('reconnectFailed', onReconnectFailed);
+      }
+    }, 5000);
+
     const onReconnectFailed = () => {
+      clearTimeout(timeoutTimer);
       errorMessage.value = t('error_reconnect_failed');
       isLoading.value = false;
       socketStore.socket?.off('reconnectFailed', onReconnectFailed);
