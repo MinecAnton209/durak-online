@@ -2334,3 +2334,66 @@ setInterval(() => {
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Сервер запущено на порті ${PORT}`);
 });
+
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal) {
+    if (isShuttingDown) {
+        console.log('⏳ Shutdown already in progress...');
+        return;
+    }
+
+    isShuttingDown = true;
+    console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+
+    try {
+        console.log('📡 Closing HTTP server...');
+        await new Promise((resolve) => {
+            server.close(() => {
+                console.log('✅ HTTP server closed');
+                resolve();
+            });
+        });
+
+        console.log('🔌 Closing Socket.IO connections...');
+        const sockets = await io.fetchSockets();
+        for (const socket of sockets) {
+            socket.disconnect(true);
+        }
+        io.close();
+        console.log('✅ Socket.IO closed');
+
+        await telegramBot.stop();
+
+        console.log('💾 Closing database...');
+        await new Promise((resolve, reject) => {
+            db.close((err) => {
+                if (err) {
+                    console.error('❌ Database close error:', err);
+                    reject(err);
+                } else {
+                    console.log('✅ Database closed');
+                    resolve();
+                }
+            });
+        });
+
+        console.log('✨ Graceful shutdown completed');
+        process.exit(0);
+    } catch (error) {
+        console.error('❌ Error during shutdown:', error);
+        process.exit(1);
+    }
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+process.on('uncaughtException', (error) => {
+    console.error('💥 Uncaught Exception:', error);
+    gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+});

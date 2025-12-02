@@ -486,8 +486,14 @@ function init(token) {
 
     bot.launch({ dropPendingUpdates: true }).then(() => console.log('🤖 Telegram Bot Started!'))
         .catch(err => console.error('Bot launch error:', err));
-    process.once('SIGINT', () => bot.stop('SIGINT'));
-    process.once('SIGTERM', () => bot.stop('SIGTERM'));
 }
 
-module.exports = { init };
+async function stop() {
+    if (bot) {
+        console.log('🤖 Stopping Telegram Bot...');
+        await bot.stop();
+        console.log('✅ Telegram Bot stopped');
+    }
+}
+
+module.exports = { init, stop };
