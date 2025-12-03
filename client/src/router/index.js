@@ -7,6 +7,7 @@ import RouletteView from '../views/RouletteView.vue'
 import ErrorView from '../views/ErrorView.vue'
 import MaintenanceView from '../views/MaintenanceView.vue'
 import LobbyBrowser from "@/views/LobbyBrowser.vue";
+import StatusView from '../views/StatusView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -49,6 +50,11 @@ const router = createRouter({
       path: '/roulette',
       name: 'roulette',
       component: RouletteView
+    },
+    {
+      path: '/status',
+      name: 'status',
+      component: StatusView
     },
     {
       path: '/maintenance',

@@ -3,6 +3,10 @@ const router = express.Router();
 const db = require('../db');
 const path = require('path');
 const fs = require('fs');
+const util = require('util');
+const { performance } = require('perf_hooks');
+
+const dbGet = db.get.constructor.name === 'AsyncFunction' ? db.get : util.promisify(db.get.bind(db));
 
 let appVersion = 'unknown';
 try {
@@ -20,68 +24,89 @@ function formatUptime(uptime) {
     const days = Math.floor(seconds / (3600 * 24));
     const hours = Math.floor((seconds % (3600 * 24)) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-
-    const parts = [];
-    if (days > 0) parts.push(`${days}d`);
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0) parts.push(`${minutes}m`);
-    parts.push(`${secs}s`);
-
+    const parts = [days && `${days}d`, hours && `${hours}h`, minutes && `${minutes}m`, `${seconds % 60}s`].filter(Boolean);
     return parts.join(' ');
 }
 
-router.get('/health', (req, res) => {
-    const onlineUsersMap = req.app.get('onlineUsers');
-    const activeGamesMap = req.app.get('activeGames') || {};
+router.get('/health', async (req, res) => {
+    try {
+        const onlineUsersMap = req.app.get('onlineUsers');
+        const activeGamesMap = req.app.get('activeGames') || {};
 
-    const onlineCount = onlineUsersMap ? onlineUsersMap.size : 0;
-    const totalGamesCount = Object.keys(activeGamesMap).length;
+        const onlineCount = onlineUsersMap ? onlineUsersMap.size : 0;
+        const totalGamesCount = Object.keys(activeGamesMap).length;
 
-    let playingGames = 0;
-    let waitingLobbies = 0;
-    let playersInMatches = 0;
+        let gamesInProgress = 0;
+        let publicLobbies = 0;
+        let privateLobbies = 0;
+        let playersInMatches = 0;
+        let botGames = 0;
 
-    Object.values(activeGamesMap).forEach(game => {
-        if (game.status === 'in_progress') {
-            playingGames++;
-            playersInMatches += (game.playerOrder ? game.playerOrder.length : 0);
-        } else if (game.status === 'waiting') {
-            waitingLobbies++;
+        for (const game of Object.values(activeGamesMap)) {
+            if (game.status === 'in_progress') {
+                gamesInProgress++;
+                playersInMatches += game.playerOrder.length;
+                if (Object.values(game.players).some(p => p.isBot)) {
+                    botGames++;
+                }
+            } else if (game.status === 'waiting') {
+                if (game.settings.lobbyType === 'private') privateLobbies++;
+                else publicLobbies++;
+            }
         }
-    });
 
-    const memory = process.memoryUsage();
+        const dbStartTime = performance.now();
+        await dbGet('SELECT 1');
+        const dbPing = Math.round(performance.now() - dbStartTime);
 
-    const stats = {
-        status: 'OK',
-        timestamp: new Date().toISOString(),
-
-        app: {
-            name: 'Durak Online',
-            version: appVersion,
-            environment: process.env.NODE_ENV || 'development',
-            uptime: formatUptime(process.uptime()),
-        },
-
-        metrics: {
-            users_online: onlineCount,
-            active_sessions: totalGamesCount,
-            games_playing: playingGames,
-            lobbies_waiting: waitingLobbies,
-            players_ingame: playersInMatches
-        },
-
-        system: {
-            memory_rss: `${Math.round(memory.rss / 1024 / 1024)} MB`,
-            memory_heap_used: `${Math.round(memory.heapUsed / 1024 / 1024)} MB`,
-            platform: process.platform,
-            node_version: process.version
+        const today = new Date().toISOString().slice(0, 10);
+        let dailyStats = await dbGet('SELECT * FROM system_stats_daily WHERE date = ?', [today]);
+        if (!dailyStats) {
+            dailyStats = { new_registrations: 0, games_played: 0 };
         }
-    };
 
-    res.header("Content-Type", "application/json");
-    res.send(JSON.stringify(stats, null, 4));
+        const memory = process.memoryUsage();
+
+        const stats = {
+            status: 'OK',
+            timestamp: new Date().toISOString(),
+            app: {
+                version: appVersion,
+                environment: process.env.NODE_ENV || 'development',
+                uptime: formatUptime(process.uptime()),
+            },
+            activity: {
+                users_online: onlineCount,
+                sessions_total: totalGamesCount,
+                games_in_progress: gamesInProgress,
+                lobbies_waiting: publicLobbies + privateLobbies,
+                public_lobbies: publicLobbies,
+                private_lobbies: privateLobbies,
+                players_in_game: playersInMatches,
+                bot_games_active: botGames,
+            },
+            daily_stats: {
+                date: today,
+                registrations_today: dailyStats.new_registrations,
+                games_played_today: dailyStats.games_played,
+            },
+            system: {
+                memory_rss: `${Math.round(memory.rss / 1024 / 1024)} MB`,
+                node_version: process.version,
+                db_ping_ms: dbPing,
+            }
+        };
+
+        res.header("Content-Type", "application/json");
+        res.send(JSON.stringify(stats, null, 4));
+
+    } catch (error) {
+        console.error("[Health Check] Error:", error);
+        res.status(503).json({
+            status: 'Service Unavailable ❌',
+            error: error.message
+        });
+    }
 });
 
 router.get('/leaderboard', (req, res) => {

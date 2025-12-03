@@ -91,6 +91,24 @@ const locales = {
             no_account: "❌ Акаунт не знайдено. Зайдіть у гру через кнопку 'Грати', щоб створити профіль.",
             user_not_found: "❌ Користувача не знайдено.",
             error_private_only: "🔒 Ця дія доступна тільки в особистих повідомленнях з ботом."
+        },
+        status: {
+            title: "📊 *Статус Сервера*",
+            status: "🟢 **Статус:** {status}",
+            uptime: "⏱ **Аптайм:** {uptime}",
+            online: "👥 **Онлайн:** {online}",
+            games: "🎮 **Активні ігри:** {games}",
+            players: "🃏 **Гравців у грі:** {players}",
+            bots: "🤖 **Ігри з ботами:** {bots}",
+            today_title: "📅 **Сьогодні:**",
+            registrations: "🆕 Реєстрацій: {count}",
+            games_played: "🎲 Зіграно ігор: {count}",
+            system_title: "💻 **Система:**",
+            memory: "🧠 Пам'ять: {memory}",
+            ping: "⚡ Пінг БД: {ping}мс",
+            version: "v{version}",
+            error_fetch: "Помилка отримання статистики.",
+            not_available: "Статистика недоступна."
         }
     },
 
@@ -186,6 +204,24 @@ const locales = {
             no_account: "❌ Аккаунт не найден. Зайдите в игру через кнопку 'Играть', чтобы создать профиль.",
             user_not_found: "❌ Пользователь не найден.",
             error_private_only: "🔒 Это действие доступно только в личных сообщениях с ботом."
+        },
+        status: {
+            title: "📊 *Статус Сервера*",
+            status: "🟢 **Статус:** {status}",
+            uptime: "⏱ **Аптайм:** {uptime}",
+            online: "👥 **Онлайн:** {online}",
+            games: "🎮 **Активные игры:** {games}",
+            players: "🃏 **Игроков в игре:** {players}",
+            bots: "🤖 **Игры с ботами:** {bots}",
+            today_title: "📅 **Сегодня:**",
+            registrations: "🆕 Регистраций: {count}",
+            games_played: "🎲 Сыграно игр: {count}",
+            system_title: "💻 **Система:**",
+            memory: "🧠 Память: {memory}",
+            ping: "⚡ Пинг БД: {ping}мс",
+            version: "v{version}",
+            error_fetch: "Ошибка получения статистики.",
+            not_available: "Статистика недоступна."
         }
     },
 
@@ -281,6 +317,24 @@ const locales = {
             no_account: "❌ Account not found. Enter the game via 'Play' button to create a profile.",
             user_not_found: "❌ User not found.",
             error_private_only: "🔒 This action is only available in private messages with the bot."
+        },
+        status: {
+            title: "📊 *Server Status*",
+            status: "🟢 **Status:** {status}",
+            uptime: "⏱ **Uptime:** {uptime}",
+            online: "👥 **Online:** {online}",
+            games: "🎮 **Games Active:** {games}",
+            players: "🃏 **Players in Game:** {players}",
+            bots: "🤖 **Bot Games:** {bots}",
+            today_title: "📅 **Today:**",
+            registrations: "🆕 Registrations: {count}",
+            games_played: "🎲 Games Played: {count}",
+            system_title: "💻 **System:**",
+            memory: "🧠 Memory: {memory}",
+            ping: "⚡ DB Ping: {ping}ms",
+            version: "v{version}",
+            error_fetch: "Error fetching stats.",
+            not_available: "Stats not available."
         }
     }
 };

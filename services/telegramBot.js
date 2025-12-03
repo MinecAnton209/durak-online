@@ -56,9 +56,37 @@ async function showMainMenu(ctx, isEdit = false) {
     } catch (e) { console.error("MainMenu Error:", e); }
 }
 
-function init(token) {
+function init(token, getStatsCallback) {
     if (!token) return console.warn("⚠️ TELEGRAM_BOT_TOKEN не задан.");
     bot = new Telegraf(token);
+
+    bot.command('status', async (ctx) => {
+        const lang = ctx.from.language_code;
+        if (!getStatsCallback) return ctx.reply(t(lang, 'status.not_available'));
+        const stats = await getStatsCallback();
+        if (!stats) return ctx.reply(t(lang, 'status.error_fetch'));
+
+        const msg = `
+${t(lang, 'status.title')}
+
+${t(lang, 'status.status', { status: stats.status })}
+${t(lang, 'status.uptime', { uptime: stats.app.uptime })}
+${t(lang, 'status.online', { online: stats.activity.users_online })}
+${t(lang, 'status.games', { games: stats.activity.games_in_progress })}
+${t(lang, 'status.players', { players: stats.activity.players_in_game })}
+${t(lang, 'status.bots', { bots: stats.activity.bot_games_active })}
+
+${t(lang, 'status.today_title')}
+${t(lang, 'status.registrations', { count: stats.daily_stats.registrations_today })}
+${t(lang, 'status.games_played', { count: stats.daily_stats.games_played_today })}
+
+${t(lang, 'status.system_title')}
+${t(lang, 'status.memory', { memory: stats.system.memory_rss })}
+${t(lang, 'status.ping', { ping: stats.system.db_ping_ms })}
+${t(lang, 'status.version', { version: stats.app.version })}
+        `;
+        ctx.reply(msg, { parse_mode: 'Markdown' });
+    });
 
     bot.start(async (ctx) => showMainMenu(ctx));
     bot.help((ctx) => ctx.reply(t(ctx.from.language_code, 'help', { botname: ctx.botInfo.username })));
@@ -114,7 +142,7 @@ function init(token) {
         userStates[ctx.from.id] = { action: 'awaiting_nick' };
         await ctx.answerCbQuery();
         await ctx.reply(t(lang, 'profile.enter_new_nick'), {
-            reply_markup: { keyboard: [[{ text: t(lang, 'buttons.cancel') }]], resize_keyboard: true, one_time_keyboard: true }
+            reply_markup: { inline_keyboard: [[{ text: t(lang, 'buttons.cancel'), callback_data: 'cancel_input' }]] }
         });
     });
 
@@ -133,13 +161,13 @@ function init(token) {
                 userStates[userId] = { action: 'awaiting_new_pass' };
                 await ctx.reply(t(lang, 'profile.enter_new_pass'), {
                     parse_mode: 'Markdown',
-                    reply_markup: { keyboard: [[{ text: t(lang, 'buttons.cancel') }]], resize_keyboard: true, one_time_keyboard: true }
+                    reply_markup: { inline_keyboard: [[{ text: t(lang, 'buttons.cancel'), callback_data: 'cancel_input' }]] }
                 });
             } else {
                 userStates[userId] = { action: 'awaiting_old_pass' };
                 await ctx.reply(t(lang, 'profile.enter_old_pass'), {
                     parse_mode: 'Markdown',
-                    reply_markup: { keyboard: [[{ text: t(lang, 'buttons.cancel') }]], resize_keyboard: true, one_time_keyboard: true }
+                    reply_markup: { inline_keyboard: [[{ text: t(lang, 'buttons.cancel'), callback_data: 'cancel_input' }]] }
                 });
             }
             await ctx.answerCbQuery();
@@ -301,7 +329,7 @@ function init(token) {
         userStates[ctx.from.id] = { action: 'awaiting_donation_amount' };
         await ctx.reply(t(lang, 'donate.ask_amount'), {
             parse_mode: 'Markdown',
-            reply_markup: { keyboard: [[{ text: t(lang, 'buttons.cancel') }]], resize_keyboard: true, one_time_keyboard: true }
+            reply_markup: { inline_keyboard: [[{ text: t(lang, 'buttons.cancel'), callback_data: 'cancel_input' }]] }
         });
     };
     bot.command('donate', askForDonation);
@@ -352,10 +380,6 @@ function init(token) {
 
         if (!state) return;
 
-        if (text === t(lang, 'buttons.cancel')) {
-            delete userStates[userId];
-            return ctx.reply(t(lang, 'profile.cancel'), { reply_markup: { remove_keyboard: true } });
-        }
 
         if (state.action === 'awaiting_nick') {
             if (text.length < 3 || text.length > 15 || !/^[a-zA-Z0-9_]+$/.test(text)) return ctx.reply(t(lang, 'profile.error_format'));
@@ -465,6 +489,18 @@ function init(token) {
             }
             await ctx.answerInlineQuery(results, { cache_time: 0 });
         } catch (err) { console.error('Inline Query Error:', err); }
+    });
+
+    bot.action('cancel_input', async (ctx) => {
+        const userId = ctx.from.id;
+        if (userStates[userId]) {
+            delete userStates[userId];
+            await ctx.answerCbQuery(t(ctx.from.language_code, 'profile.cancel'));
+            await ctx.editMessageText(t(ctx.from.language_code, 'profile.cancel'));
+        } else {
+            await ctx.answerCbQuery();
+            try { await ctx.deleteMessage(); } catch (e) { }
+        }
     });
 
     bot.action(/create_lobby_inline_(podkidnoy|perevodnoy)_(\d+)/, async (ctx) => {

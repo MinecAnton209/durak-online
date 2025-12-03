@@ -224,7 +224,7 @@ app.get(/.*/, (req, res) => {
 });
 
 if (process.env.TELEGRAM_BOT_TOKEN) {
-    telegramBot.init(process.env.TELEGRAM_BOT_TOKEN);
+    telegramBot.init(process.env.TELEGRAM_BOT_TOKEN, getSystemStats);
 }
 
 io.use(socketAttachUser);
@@ -2303,6 +2303,16 @@ io.on('connection', (socket) => {
             }
         }
     });
+
+    socket.on('health:subscribe', () => {
+        socket.join('health_status');
+        console.log(`[Health] Socket ${socket.id} subscribed to health updates`);
+    });
+
+    socket.on('health:unsubscribe', () => {
+        socket.leave('health_status');
+        console.log(`[Health] Socket ${socket.id} unsubscribed from health updates`);
+    });
 });
 
 rouletteTick();
@@ -2331,69 +2341,198 @@ setInterval(() => {
     }
 }, 30000);
 
+async function getSystemStats() {
+    try {
+        const onlineUsersMap = onlineUsers;
+        const activeGamesMap = games || {};
+
+        const onlineCount = onlineUsersMap ? onlineUsersMap.size : 0;
+        const totalGamesCount = Object.keys(activeGamesMap).length;
+
+        let gamesInProgress = 0;
+        let publicLobbies = 0;
+        let privateLobbies = 0;
+        let playersInMatches = 0;
+        let botGames = 0;
+
+        for (const game of Object.values(activeGamesMap)) {
+            if (game.status === 'in_progress') {
+                gamesInProgress++;
+                playersInMatches += game.playerOrder.length;
+                if (Object.values(game.players).some(p => p.isBot)) {
+                    botGames++;
+                }
+            } else if (game.status === 'waiting') {
+                if (game.settings.lobbyType === 'private') privateLobbies++;
+                else publicLobbies++;
+            }
+        }
+
+        const { performance } = require('perf_hooks');
+        const dbStartTime = performance.now();
+        await dbGet('SELECT 1');
+        const dbPing = Math.round(performance.now() - dbStartTime);
+
+        const today = new Date().toISOString().slice(0, 10);
+        let dailyStats = await dbGet('SELECT * FROM system_stats_daily WHERE date = ?', [today]);
+        if (!dailyStats) {
+            dailyStats = { new_registrations: 0, games_played: 0 };
+        }
+
+        const memory = process.memoryUsage();
+
+        let currentAppVersion = 'unknown';
+        try {
+            const packageJsonPath = path.join(__dirname, 'package.json');
+            if (require('fs').existsSync(packageJsonPath)) {
+                const packageJson = JSON.parse(require('fs').readFileSync(packageJsonPath, 'utf8'));
+                currentAppVersion = packageJson.version;
+            }
+        } catch (e) {
+            console.error("Failed to read package.json version in health broadcast", e);
+        }
+
+        function formatUptime(uptime) {
+            const seconds = Math.floor(uptime);
+            const days = Math.floor(seconds / (3600 * 24));
+            const hours = Math.floor((seconds % (3600 * 24)) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const parts = [days && `${days}d`, hours && `${hours}h`, minutes && `${minutes}m`, `${seconds % 60}s`].filter(Boolean);
+            return parts.join(' ');
+        }
+
+        return {
+            status: 'OK',
+            timestamp: new Date().toISOString(),
+            app: {
+                version: currentAppVersion,
+                environment: process.env.NODE_ENV || 'development',
+                uptime: formatUptime(process.uptime()),
+            },
+            activity: {
+                users_online: onlineCount,
+                sessions_total: totalGamesCount,
+                games_in_progress: gamesInProgress,
+                lobbies_waiting: publicLobbies + privateLobbies,
+                public_lobbies: publicLobbies,
+                private_lobbies: privateLobbies,
+                players_in_game: playersInMatches,
+                bot_games_active: botGames,
+            },
+            daily_stats: {
+                date: today,
+                registrations_today: dailyStats.new_registrations,
+                games_played_today: dailyStats.games_played,
+            },
+            system: {
+                memory_rss: `${Math.round(memory.rss / 1024 / 1024)} MB`,
+                node_version: process.version,
+                db_ping_ms: dbPing,
+            }
+        };
+    } catch (error) {
+        console.error('[Health] Error getting system stats:', error);
+        return null;
+    }
+}
+
+async function broadcastHealthStatus() {
+    const stats = await getSystemStats();
+    if (stats) {
+        io.to('health_status').emit('health:update', stats);
+    }
+}
+
+setInterval(broadcastHealthStatus, 1000);
+
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Сервер запущено на порті ${PORT}`);
 });
 
 let isShuttingDown = false;
 
+const SHUTDOWN_TIMEOUT = 8000;
+
 async function gracefulShutdown(signal) {
     if (isShuttingDown) {
-        console.log('⏳ Shutdown already in progress...');
+        console.log("Shutdown already in progress...");
         return;
     }
 
     isShuttingDown = true;
-    console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+    console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
+
+    const forceExitTimer = setTimeout(() => {
+        console.error("Shutdown timeout exceeded. Force exit.");
+        process.exit(1);
+    }, SHUTDOWN_TIMEOUT);
 
     try {
-        console.log('📡 Closing HTTP server...');
+        console.log("Stopping HTTP server...");
         await new Promise((resolve) => {
             server.close(() => {
-                console.log('✅ HTTP server closed');
+                console.log("HTTP server closed");
                 resolve();
+            });
+
+            server.getConnections((_, count) => {
+                if (count > 0) {
+                    server.closeIdleConnections?.();
+                    server.closeAllConnections?.();
+                }
             });
         });
 
-        console.log('🔌 Closing Socket.IO connections...');
+        console.log("Closing Socket.IO...");
         const sockets = await io.fetchSockets();
         for (const socket of sockets) {
             socket.disconnect(true);
         }
         io.close();
-        console.log('✅ Socket.IO closed');
+        console.log("Socket.IO closed");
 
-        await telegramBot.stop();
+        if (telegramBot && telegramBot.stop) {
+            console.log("Stopping Telegram bot...");
+            try {
+                await telegramBot.stop();
+            } catch (e) {
+                console.error("Telegram stop error:", e);
+            }
+            console.log("Telegram bot stopped");
+        }
 
-        console.log('💾 Closing database...');
-        await new Promise((resolve, reject) => {
+        console.log("Closing SQLite database...");
+        await new Promise((resolve) => {
             db.close((err) => {
                 if (err) {
-                    console.error('❌ Database close error:', err);
-                    reject(err);
+                    console.error("SQLite close error:", err);
                 } else {
-                    console.log('✅ Database closed');
-                    resolve();
+                    console.log("SQLite closed");
                 }
+                resolve();
             });
         });
 
-        console.log('✨ Graceful shutdown completed');
+        clearTimeout(forceExitTimer);
+
+        console.log("Graceful shutdown completed");
         process.exit(0);
-    } catch (error) {
-        console.error('❌ Error during shutdown:', error);
+
+    } catch (err) {
+        clearTimeout(forceExitTimer);
+        console.error("Error during shutdown:", err);
         process.exit(1);
     }
 }
 
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 
-process.on('uncaughtException', (error) => {
-    console.error('💥 Uncaught Exception:', error);
-    gracefulShutdown('uncaughtException');
+process.on("uncaughtException", (err) => {
+    console.error("Uncaught Exception:", err);
+    gracefulShutdown("uncaughtException");
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+process.on("unhandledRejection", (reason, p) => {
+    console.error("Unhandled Rejection:", reason);
 });
