@@ -52,11 +52,6 @@ export const useAuthStore = defineStore('auth', () => {
     const data = await response.json();
 
     if (!response.ok) {
-      const data = await response.json();
-
-      if (response.status === 403 && data.i18nKey === 'error_account_banned_with_reason') {
-      }
-
       const errorMsg = data.i18nKey ? data.i18nKey : (data.message || i18n.global.t('error_generic'));
       throw new Error(errorMsg);
     }
