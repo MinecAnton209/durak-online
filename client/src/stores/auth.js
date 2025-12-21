@@ -49,18 +49,18 @@ export const useAuthStore = defineStore('auth', () => {
       body: JSON.stringify({ username, password, deviceId }),
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      const errorMsg = data.i18nKey ? data.i18nKey : (data.message || i18n.global.t('error_generic'));
-      throw new Error(errorMsg);
+    if (response.ok) {
+        const data = await response.json();
+        if (data.user) {
+          user.value = data.user;
+          isAuthenticated.value = true;
+        }
+        return data;
+    } else {
+        const data = await response.json();
+        const errorMsg = data.i18nKey ? data.i18nKey : (data.message || i18n.global.t('error_generic'));
+        throw new Error(errorMsg);
     }
-
-    if (data.user) {
-      user.value = data.user;
-      isAuthenticated.value = true;
-    }
-    return data;
   }
 
   async function logout() {
