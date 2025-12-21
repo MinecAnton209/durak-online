@@ -32,25 +32,25 @@ router.post('/register', registerLimiter, async (req, res) => {
         );
 
         await statsService.incrementDailyCounter('new_registrations');
-        res.status(201).json({ message: 'Реєстрація успішна! Тепер можете увійти.' });
+        res.status(201).json({ message: 'Registration successful! You can now log in.' });
 
     } catch (error) {
         console.error(error);
         if (error.code === 'SQLITE_CONSTRAINT' || error.code === '23505') {
-            return res.status(409).json({ message: 'Це ім\'я користувача вже зайняте.' });
+            return res.status(409).json({ message: 'This username is already taken.' });
         }
-        res.status(500).json({ message: 'Внутрішня помилка сервера.' });
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
 
 router.post('/login', loginLimiter, (req, res) => {
     try {
         const { username, password, deviceId } = req.body;
-        if (!username || !password) { return res.status(400).json({ message: 'Всі поля обов\'язкові.' }); }
+        if (!username || !password) { return res.status(400).json({ message: 'All fields are required.' }); }
         const sql = `SELECT * FROM users WHERE username = ?`;
         db.get(sql, [username], async (err, user) => {
-            if (err) { console.error(err.message); return res.status(500).json({ message: 'Помилка бази даних.' }); }
-            if (!user) { return res.status(401).json({ message: 'Неправильне ім\'я або пароль.' }); }
+            if (err) { console.error(err.message); return res.status(500).json({ message: 'Database error.' }); }
+            if (!user) { return res.status(401).json({ message: 'Incorrect username or password.' }); }
             const isMatch = await bcrypt.compare(password, user.password);
             if (isMatch) {
                 if (user.is_banned) {
@@ -77,14 +77,14 @@ router.post('/login', loginLimiter, (req, res) => {
                 const token = signToken(payload)
                 setAuthCookie(req, res, token)
                 req.session = { user: payload, save() { }, destroy() { } }
-                res.status(200).json({ message: 'Вхід успішний!', user: payload, token });
+                res.status(200).json({ message: 'Login successful!', user: payload, token });
             } else {
-                res.status(401).json({ message: 'Неправильне ім\'я або пароль.' });
+                res.status(401).json({ message: 'Incorrect username or password.' });
             }
         });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Внутрішня помилка сервера.' });
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
 
@@ -109,8 +109,8 @@ router.get('/check-session', (req, res) => {
                 if (diffDays > 1) {
                     currentStreak = 0;
                     db.run(`UPDATE users SET streak_count = 0 WHERE id = ?`, [user.id], (updateErr) => {
-                        if (updateErr) console.error("Помилка скидання стріку для користувача:", user.id, updateErr.message);
-                        else console.log(`Стрік для користувача ${user.username} (ID: ${user.id}) скинуто через неактивність.`);
+                        if (updateErr) console.error("Error resetting streak for user:", user.id, updateErr.message);
+                        else console.log(`Streak for user ${user.username} (ID: ${user.id}) reset due to inactivity.`);
                     });
                 }
             }
@@ -140,23 +140,23 @@ router.get('/check-session', (req, res) => {
 
 router.post('/logout', (req, res) => {
     clearAuthCookie(req, res);
-    res.status(200).json({ message: 'Ви успішно вийшли' });
+    res.status(200).json({ message: 'Successfully logged out' });
 });
 
 router.post('/update-settings', (req, res) => {
     const currentUser = req.session?.user;
-    if (!currentUser) { return res.status(401).json({ message: 'Не авторизовано' }); }
+    if (!currentUser) { return res.status(401).json({ message: 'Unauthorized' }); }
     const { card_back_style } = req.body;
     const userId = currentUser.id;
     const allowedStyles = ['default', 'red', 'blue', 'green', 'purple', 'gold'];
-    if (!allowedStyles.includes(card_back_style)) { return res.status(400).json({ message: 'Неприпустимий стиль' }); }
+    if (!allowedStyles.includes(card_back_style)) { return res.status(400).json({ message: 'Invalid style' }); }
     const sql = `UPDATE users SET card_back_style = ? WHERE id = ?`;
     db.run(sql, [card_back_style, userId], (err) => {
-        if (err) { console.error(err.message); return res.status(500).json({ message: 'Помилка оновлення налаштувань' }); }
+        if (err) { console.error(err.message); return res.status(500).json({ message: 'Error updating settings' }); }
         if (req.session && req.session.user) {
             req.session.user.card_back_style = card_back_style;
         }
-        res.status(200).json({ message: 'Налаштування збережено!' });
+        res.status(200).json({ message: 'Settings saved!' });
     });
 });
 

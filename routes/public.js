@@ -135,7 +135,7 @@ router.get('/leaderboard', (req, res) => {
 
     db.all(sql, [safeLimit], (err, rows) => {
         if (err) {
-            console.error("Помилка отримання публічного лідерборду:", err.message);
+            console.error("Error fetching public leaderboard:", err.message);
             return res.status(500).json({ error: 'Internal server error' });
         }
         res.json(rows);

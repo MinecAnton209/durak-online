@@ -111,7 +111,7 @@ router.post('/link', authMiddleware, async (req, res) => {
 
         if (existingUser) {
             if (existingUser.id === currentUserId) {
-                return res.json({ success: true, message: "Вже прив'язано" });
+                return res.json({ success: true, message: "Already linked" });
             }
 
             const totalGames = (existingUser.wins || 0) + (existingUser.losses || 0);
@@ -123,7 +123,7 @@ router.post('/link', authMiddleware, async (req, res) => {
                 console.log(`Deleting dummy account ID ${existingUser.id} to free Telegram ID ${telegramId}`);
                 await dbRun('DELETE FROM users WHERE id = ?', [existingUser.id]);
             } else {
-                return res.status(409).json({ message: "Цей Telegram вже прив'язаний до іншого активного акаунта." });
+                return res.status(409).json({ message: "This Telegram is already linked to another active account." });
             }
         }
 
@@ -156,7 +156,7 @@ router.post('/unlink', authMiddleware, async (req, res) => {
 
             clearAuthCookie(req, res);
 
-            return res.json({ success: true, deleted: true, message: "Акаунт видалено (немає пароля)" });
+            return res.json({ success: true, deleted: true, message: "Account deleted (no password)" });
         } else {
             await dbRun('UPDATE users SET telegram_id = NULL WHERE id = ?', [user.id]);
 

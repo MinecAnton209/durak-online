@@ -19,7 +19,7 @@ router.get('/users', ensureAdmin, (req, res) => {
     const sql = `SELECT id, username, wins, losses, streak_count, last_played_date, is_verified, is_admin, is_banned, ban_reason, is_muted, rating, rd, vol FROM users ORDER BY id ASC`;
     db.all(sql, [], (err, users) => {
         if (err) {
-            console.error("Помилка отримання списку користувачів (адмін):", err.message);
+            console.error("Error fetching user list (admin):", err.message);
             return res.status(500).json({ error: 'Internal server error' });
         }
         res.json(users);
@@ -55,7 +55,7 @@ router.get('/users/:userId/details', ensureAdmin, async (req, res) => {
         ]);
         res.json({ details: userDetails, games: userGames, achievements: userAchievements });
     } catch (error) {
-        console.error(`Помилка отримання деталей для користувача ${userId}:`, error.message);
+        console.error(`Error fetching details for user ${userId}:`, error.message);
         if (error.message === 'User not found') {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -76,9 +76,9 @@ function handleUserAction(req, res, actionType, sql, params, successMessage) {
         if (err) return res.status(500).json({ error: 'Database error fetching user' });
         if (!targetUser) return res.status(404).json({ error: 'User not found' });
 
-        db.run(sql, params, function(updateErr) {
+        db.run(sql, params, function (updateErr) {
             if (updateErr) {
-                console.error(`Помилка дії '${actionType}' для користувача ${userId}:`, updateErr.message);
+                console.error(`Error in action '${actionType}' for user ${userId}:`, updateErr.message);
                 return res.status(500).json({ error: 'Database update failed' });
             }
 
@@ -98,7 +98,7 @@ function handleUserAction(req, res, actionType, sql, params, successMessage) {
 
                 io.sockets.sockets.forEach((socket) => {
                     if (socket.request.session?.user?.id === parseInt(userId, 10)) {
-                        if(isBanned) {
+                        if (isBanned) {
                             socket.emit('forceDisconnect', { i18nKey: 'error_account_banned_with_reason', options: { reason } });
                             socket.disconnect(true);
                         } else {
@@ -151,7 +151,7 @@ router.post('/games/:gameId/end', ensureAdmin, (req, res) => {
     const game = games[gameId];
     if (!game) { return res.status(404).json({ error: `Game with ID "${gameId}" not found.` }); }
 
-    const adminUsername = req.session.user?.username || 'Адміністратор';
+    const adminUsername = req.session.user?.username || 'Administrator';
     const terminationReasonText = reason || i18n.t('admin_termination_no_reason');
 
     game.winner = { reason: { i18nKey: 'game_over_terminated_by_admin', options: { reason: terminationReasonText } } };
@@ -161,7 +161,7 @@ router.post('/games/:gameId/end', ensureAdmin, (req, res) => {
     logEvent(game, null, { i18nKey: 'log_game_terminated_by_admin_event', options: { admin: adminUsername, reason: terminationReasonText } });
     broadcastGameState(gameId);
 
-    setTimeout(() => { if (games[gameId]) { delete games[gameId]; console.log(`Гра ${gameId} була примусово завершена і видалена.`); } }, 1000);
+    setTimeout(() => { if (games[gameId]) { delete games[gameId]; console.log(`Game ${gameId} was forcibly terminated and deleted.`); } }, 1000);
     res.json({ message: `Game ${gameId} has been terminated.` });
 });
 
@@ -193,7 +193,7 @@ router.get('/stats/dashboard-overview', ensureAdmin, async (req, res) => {
         if (io) { const sockets = await io.fetchSockets(); const uniqueUserIds = new Set(); sockets.forEach(socket => { if (socket.request.session?.user?.id) { uniqueUserIds.add(socket.request.session.user.id); } }); onlineUsersCount = uniqueUserIds.size; }
         const [totalUsers, todayStats] = await Promise.all([usersCountPromise, todayStatsPromise]);
         res.json({ totalUsers, activeGames: games ? Object.keys(games).length : 0, onlineUsers: onlineUsersCount, gamesPlayedToday: todayStats.games_played, newRegistrationsToday: todayStats.new_registrations });
-    } catch (error) { console.error("Помилка отримання статистики для дашборду:", error); res.status(500).json({ error: 'Internal server error' }); }
+    } catch (error) { console.error("Error fetching dashboard statistics:", error); res.status(500).json({ error: 'Internal server error' }); }
 });
 
 router.get('/stats/registrations-by-day', ensureAdmin, (req, res) => { const dbClient = process.env.DB_CLIENT || 'sqlite'; let sql; if (dbClient === 'postgres') { sql = `SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as count FROM users WHERE created_at >= current_date - interval '7 days' GROUP BY date ORDER BY date ASC;`; } else { sql = `SELECT STRFTIME('%Y-%m-%d', created_at) as date, COUNT(*) as count FROM users WHERE created_at >= DATE('now', '-7 days') GROUP BY date ORDER BY date ASC;`; } db.all(sql, [], (err, rows) => { if (err) { return res.status(500).json({ error: 'Internal server error' }); } const dataMap = new Map(rows.map(row => [row.date, row.count])); const last7Days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return d.toISOString().slice(0, 10); }).reverse(); const result = last7Days.map(date => ({ date: date, count: dataMap.get(date) || 0 })); res.json(result); }); });
@@ -209,7 +209,7 @@ router.get('/audit-log', ensureAdmin, (req, res) => {
 
     db.get(countSql, [], (countErr, countRow) => {
         if (countErr) {
-            console.error("Помилка отримання кількості записів в аудиті:", countErr.message);
+            console.error("Error fetching audit log record count:", countErr.message);
             return res.status(500).json({ error: 'Internal server error' });
         }
 
@@ -227,7 +227,7 @@ router.get('/audit-log', ensureAdmin, (req, res) => {
 
         db.all(dataSql, [pageSize, offset], (dataErr, rows) => {
             if (dataErr) {
-                console.error("Помилка отримання логу аудиту:", dataErr.message);
+                console.error("Error fetching audit log:", dataErr.message);
                 return res.status(500).json({ error: 'Internal server error' });
             }
 
@@ -255,7 +255,7 @@ router.post('/maintenance/enable', ensureAdmin, (req, res) => {
 
     const startTime = Date.now() + minutesUntilStart * 60 * 1000;
     maintenanceMode.startTime = startTime;
-    maintenanceMode.warningMessage = message || "Незабаром розпочнуться планові технічні роботи.";
+    maintenanceMode.warningMessage = message || "Scheduled maintenance will begin soon.";
 
     if (minutesUntilStart > 0) {
         io.emit('maintenanceWarning', {
@@ -267,15 +267,15 @@ router.post('/maintenance/enable', ensureAdmin, (req, res) => {
         maintenanceMode.timer = setTimeout(() => {
             maintenanceMode.enabled = true;
             maintenanceMode.message = maintenanceMode.warningMessage;
-            console.log("РЕЖИМ ТЕХНІЧНИХ РОБІТ УВІМКНЕНО.");
+            console.log("MAINTENANCE MODE ENABLED.");
         }, minutesUntilStart * 60 * 1000);
 
-        res.json({ status: 'warning_scheduled', message: `Технічні роботи заплановано через ${minutesUntilStart} хв.` });
+        res.json({ status: 'warning_scheduled', message: `Maintenance scheduled in ${minutesUntilStart} minutes.` });
     } else {
         maintenanceMode.enabled = true;
-        maintenanceMode.message = message || "На сайті проводяться технічні роботи. Будь ласка, зайдіть пізніше.";
-        console.log("РЕЖИМ ТЕХНІЧНИХ РОБІТ УВІМКНЕНО НЕГАЙНО.");
-        res.json({ status: 'enabled', message: 'Режим технічних робіт увімкнено.' });
+        maintenanceMode.message = message || "The site is undergoing maintenance. Please come back later.";
+        console.log("MAINTENANCE MODE ENABLED IMMEDIATELY.");
+        res.json({ status: 'enabled', message: 'Maintenance mode enabled.' });
     }
 });
 
@@ -293,8 +293,8 @@ router.post('/maintenance/disable', ensureAdmin, (req, res) => {
 
     io.emit('maintenanceCancelled');
 
-    console.log("Режим технічних робіт вимкнено.");
-    res.json({ status: 'disabled', message: 'Режим технічних робіт вимкнено.' });
+    console.log("Maintenance mode disabled.");
+    res.json({ status: 'disabled', message: 'Maintenance mode disabled.' });
 });
 
 router.post('/users/:id/send-push', async (req, res) => {

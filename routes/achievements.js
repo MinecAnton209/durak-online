@@ -11,7 +11,7 @@ router.get('/all', (req, res) => {
 
     db.all(sql, [], (err, rows) => {
         if (err) {
-            console.error("Помилка отримання всіх ачівок:", err.message);
+            console.error("Error fetching all achievements:", err.message);
             return res.status(500).json({ error: 'Internal server error' });
         }
         res.json(rows);
@@ -33,7 +33,7 @@ router.get('/my', (req, res) => {
 
     db.all(sql, [userId], (err, rows) => {
         if (err) {
-            console.error(`Помилка отримання ачівок для юзера ${userId}:`, err.message);
+            console.error(`Error fetching achievements for user ${userId}:`, err.message);
             return res.status(500).json({ error: 'Internal server error' });
         }
         res.json(rows);
