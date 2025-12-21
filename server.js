@@ -2501,17 +2501,22 @@ async function gracefulShutdown(signal) {
             console.log("Telegram bot stopped");
         }
 
-        console.log("Closing SQLite database...");
-        await new Promise((resolve) => {
-            db.close((err) => {
-                if (err) {
-                    console.error("SQLite close error:", err);
-                } else {
-                    console.log("SQLite closed");
-                }
-                resolve();
+        console.log("Closing database connection...");
+        if (db.pool) {
+            await db.pool.end();
+            console.log("PostgreSQL pool has been closed.");
+        } else {
+            await new Promise((resolve) => {
+                db.close((err) => {
+                    if (err) {
+                        console.error("SQLite close error:", err);
+                    } else {
+                        console.log("SQLite closed");
+                    }
+                    resolve();
+                });
             });
-        });
+        }
 
         clearTimeout(forceExitTimer);
 
