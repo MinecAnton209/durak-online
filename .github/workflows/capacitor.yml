@@ -4,6 +4,7 @@ on:
   workflow_dispatch
 
 jobs:
+  # 1. Сборка тестовой версии (Debug)
   build_debug:
     name: Build Debug APK
     runs-on: ubuntu-latest
@@ -24,7 +25,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           npm install
           cd client && npm install
@@ -49,6 +50,7 @@ jobs:
           name: android-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
+  # 2. Сборка подписанной релизной версии (Release)
   build_release:
     name: Build Release APK
     runs-on: ubuntu-latest
@@ -69,7 +71,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           npm install
           cd client && npm install
@@ -81,6 +83,12 @@ jobs:
         run: |
           npx cap add android || true
           npx cap sync android
+
+      - name: Build Release APK (Unsigned)
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
 
       - name: Sign APK
         uses: r0adkll/sign-android-release@v1
