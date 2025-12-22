@@ -4,7 +4,6 @@ on:
   workflow_dispatch
 
 jobs:
-  # 1. Сборка тестовой версии (Debug)
   build_debug:
     name: Build Debug APK
     runs-on: ubuntu-latest
@@ -50,7 +49,6 @@ jobs:
           name: android-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-  # 2. Сборка подписанной релизной версии (Release)
   build_release:
     name: Build Release APK
     runs-on: ubuntu-latest
