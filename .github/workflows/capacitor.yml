@@ -82,14 +82,18 @@ jobs:
           npx cap add android || true
           npx cap sync android
 
-      - name: Build Release APK (Unsigned)
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease
+      - name: Sign APK
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: android/app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_CONTENT }}
+          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
-      - name: Upload Release APK
+      - name: Upload Signed Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-release-apk
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          name: android-release-signed
+          path: ${{ steps.sign_app.outputs.signedReleaseFile }}
