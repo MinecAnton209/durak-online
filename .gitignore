@@ -140,3 +140,8 @@ data/database.sqlite
 .vscode/
 .idea/
 /public/
+
+# Capacitor
+android/
+ios/
+
