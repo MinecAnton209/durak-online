@@ -1,6 +1,6 @@
 {
   "name": "durak",
-  "version": "3.0.10",
+  "version": "3.1.0-pre-RC.1",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -8,7 +8,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "description": "",
   "dependencies": {
     "@capacitor/android": "^8.0.0",

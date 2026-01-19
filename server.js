@@ -72,10 +72,72 @@ const io = socketIo(server, {
 const onlineUsers = new Map();
 app.set('onlineUsers', onlineUsers);
 
-const globalChatHistory = [];
+// Rate Limiter for Chat
 const chatSpamTracker = new Map();
-const CHAT_HISTORY_LIMIT = 500;
-const CHAT_PAGE_SIZE = 50;
+const CHAT_HISTORY_LIMIT = 50;
+const globalChatHistory = [];
+
+global.globalChatSettings = {
+    slowModeInterval: 0 // in seconds
+};
+
+global.chatFilters = {
+    badWords: [],
+    linkRegex: null
+};
+
+async function loadChatFilters() {
+    try {
+        const filters = await new Promise((resolve, reject) => {
+            db.all('SELECT type, content FROM chat_filters WHERE is_enabled = 1', [], (err, rows) => {
+                if (err) return reject(err);
+                resolve(rows || []);
+            });
+        });
+
+        // Auto-seed default link regex if missing
+        const defaultLinkRegex = '(http:\\/\\/|https:\\/\\/|www\\.)';
+        const hasLinkRegex = filters.some(f => f.type === 'regex' && f.content === defaultLinkRegex);
+
+        if (!hasLinkRegex) {
+            console.log('Autoseeding default link regex...');
+            try {
+                await dbRun("INSERT INTO chat_filters (type, content) VALUES ('regex', ?)", [defaultLinkRegex]);
+                filters.push({ type: 'regex', content: defaultLinkRegex });
+            } catch (seedErr) {
+                console.error('Error autoseeding link regex:', seedErr);
+            }
+        }
+
+        const words = [];
+        const regexes = [];
+
+        filters.forEach(f => {
+            if (f.type === 'word') words.push(f.content.toLowerCase());
+            if (f.type === 'regex') {
+                try {
+                    regexes.push(new RegExp(f.content, 'i'));
+                } catch (e) {
+                    console.error(`Invalid regex in DB: ${f.content}`, e);
+                }
+            }
+        });
+
+        global.chatFilters.badWords = words;
+        global.chatFilters.regexes = regexes;
+
+        console.log(`✅ Loaded ${words.length} bad words and ${regexes.length} regex filters.`);
+
+    } catch (error) {
+        console.error('❌ Failed to load chat filters:', error);
+    }
+}
+
+global.loadChatFilters = loadChatFilters;
+
+// Initial load
+setTimeout(loadChatFilters, 3000); // Wait for DB connection
+
 
 let games = {};
 
@@ -109,6 +171,7 @@ app.set('onlineUsers', onlineUsers);
 app.set('logEvent', logEvent);
 app.set('broadcastGameState', broadcastGameState);
 app.set('i18next', i18next);
+app.set('globalChatHistory', globalChatHistory);
 
 i18next
     .use(Backend)
@@ -230,8 +293,12 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
 io.use(socketAttachUser);
 
 async function checkBanStatus(userId) {
-    const user = await dbGet('SELECT is_banned, ban_reason FROM users WHERE id = ?', [userId]);
+    const user = await dbGet('SELECT is_banned, ban_reason, ban_until FROM users WHERE id = ?', [userId]);
     if (user && user.is_banned) {
+        if (user.ban_until && new Date(user.ban_until) < new Date()) {
+            await dbRun('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [userId]);
+            return null;
+        }
         return user.ban_reason || 'Account banned';
     }
     return null;
@@ -1063,18 +1130,26 @@ io.on('connection', (socket) => {
         const userId = parseInt(sessionUser.id, 10);
         economyService.checkAndAwardDailyBonus(userId, io, socket.id);
         console.log(`[Online Status] User connected: ${sessionUser.username} (ID: ${sessionUser.id}). Total online: ${onlineUsers.size}`);
-        db.get('SELECT is_banned, ban_reason FROM users WHERE id = ?', [sessionUser.id], (err, dbUser) => {
+        db.get('SELECT is_banned, ban_reason, ban_until FROM users WHERE id = ?', [sessionUser.id], (err, dbUser) => {
             if (err) {
                 socket.disconnect(true);
                 return;
             }
             if (dbUser && dbUser.is_banned) {
-                const reasonText = dbUser.ban_reason || i18next.t('ban_reason_not_specified');
-                socket.emit('forceDisconnect', {
-                    i18nKey: 'error_account_banned_with_reason',
-                    options: { reason: reasonText }
-                });
-                socket.disconnect(true);
+                if (dbUser.ban_until && new Date(dbUser.ban_until) < new Date()) {
+                    db.run('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [sessionUser.id]);
+                } else {
+                    const reasonText = dbUser.ban_reason || i18next.t('ban_reason_not_specified');
+                    const options = { reason: reasonText };
+                    if (dbUser.ban_until) {
+                        options.until = new Date(dbUser.ban_until).toLocaleString();
+                    }
+                    socket.emit('forceDisconnect', {
+                        i18nKey: dbUser.ban_until ? 'error_account_temp_banned_with_reason' : 'error_account_banned_with_reason',
+                        options: options
+                    });
+                    socket.disconnect(true);
+                }
             }
         });
     } else {
@@ -1357,8 +1432,20 @@ io.on('connection', (socket) => {
         const game = games[gameId];
         const player = game ? game.players[socket.id] : null;
         if (!game || !player || !message) return;
+
         if (player.is_muted) {
-            return socket.emit('systemMessage', { i18nKey: 'error_chat_muted', type: 'error' });
+            const sessionUser = socket.request.session?.user;
+            if (sessionUser && sessionUser.mute_until && new Date(sessionUser.mute_until) < new Date()) {
+                // Mute expired
+                player.is_muted = false;
+                if (sessionUser) {
+                    sessionUser.is_muted = false;
+                    sessionUser.mute_until = null;
+                }
+                db.run('UPDATE users SET is_muted = 0, mute_until = NULL WHERE id = ?', [player.dbId || sessionUser?.id]);
+            } else {
+                return socket.emit('systemMessage', { i18nKey: 'error_chat_muted', type: 'error' });
+            }
         }
         const trimmedMessage = message.trim();
         if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) {
@@ -1993,8 +2080,9 @@ io.on('connection', (socket) => {
     });
     socket.on('joinLobbyBrowser', () => {
         socket.join('lobby_browser');
+        // Initial lobby list update when joining the browser
         const list = Object.values(games)
-            .filter(game => game.status === 'waiting' && game.settings.lobbyType === 'public' && game.playerOrder.length > 0)
+            .filter(game => game.status === 'waiting' && game.settings.lobbyType === 'public' && game.playerOrder.length > 0 && !game.host?.is_shadow_banned)
             .map(game => ({
                 gameId: game.id,
                 hostName: game.players[game.hostId]?.name || 'Unknown',
@@ -2004,6 +2092,22 @@ io.on('connection', (socket) => {
                 deckSize: game.settings.deckSize || 36
             }));
         socket.emit('lobbyListUpdate', list);
+    });
+
+    socket.on('getLobbyList', () => {
+        const publicGames = Object.values(games)
+            .filter(g => g.status === 'waiting' && g.settings.lobbyType === 'public' && !g.host?.is_shadow_banned)
+            .map(g => ({
+                gameId: g.id,
+                hostName: g.players[g.hostId]?.name || 'Unknown',
+                playerCount: Object.keys(g.players).length,
+                maxPlayers: g.settings.maxPlayers,
+                full: Object.keys(g.players).length >= g.settings.maxPlayers,
+                betAmount: g.settings.betAmount,
+                gameMode: g.settings.gameMode,
+                turnDuration: g.settings.turnDuration
+            }));
+        socket.emit('lobbyList', publicGames);
     });
 
     socket.on('leaveLobbyBrowser', () => {
@@ -2170,9 +2274,18 @@ io.on('connection', (socket) => {
 
     socket.on('chat:sendGlobal', (message) => {
         const sessionUser = socket.request.session?.user;
-
         if (!sessionUser) return socket.emit('systemMessage', { i18nKey: 'error_chat_auth_required', type: 'error' });
-        if (sessionUser.is_muted) return socket.emit('systemMessage', { i18nKey: 'error_chat_muted', type: 'error' });
+
+        if (sessionUser.is_muted) {
+            if (sessionUser.mute_until && new Date(sessionUser.mute_until) < new Date()) {
+                // Mute expired
+                sessionUser.is_muted = false;
+                sessionUser.mute_until = null;
+                db.run('UPDATE users SET is_muted = 0, mute_until = NULL WHERE id = ?', [sessionUser.id]);
+            } else {
+                return socket.emit('systemMessage', { i18nKey: 'error_chat_muted', type: 'error' });
+            }
+        }
 
         const now = Date.now();
         const userData = chatSpamTracker.get(sessionUser.id) || { lastTime: 0, violations: 0 };
@@ -2202,9 +2315,50 @@ io.on('connection', (socket) => {
         userData.lastTime = now;
         chatSpamTracker.set(sessionUser.id, userData);
 
+        // Global Chat Settings (Simple in-memory for now, could move to DB)
+        const slowModeInterval = global.globalChatSettings?.slowModeInterval || 0;
+
+        // Slow Mode Check
+        if (slowModeInterval > 0 && !sessionUser.is_admin) {
+            const lastTime = userData.lastTime || 0;
+            if (now - lastTime < slowModeInterval * 1000) {
+                return socket.emit('chat:error', {
+                    i18nKey: 'error_chat_slow_mode',
+                    options: { seconds: Math.ceil((slowModeInterval * 1000 - (now - lastTime)) / 1000) }
+                });
+            }
+        }
+
         const trimmedMessage = message.trim();
         if (trimmedMessage.length === 0 || trimmedMessage.length > 255) {
             return;
+        }
+
+        // Content Filtering (Blacklist & Links from DB)
+        const filters = global.chatFilters || { badWords: [], regexes: [] };
+        // Default link regex if none in DB, or combine?
+        // User asked to load linkRegex from DB too. 
+        // If DB has regexes, use them. If we want a fallback hardcoded link regex, we can keep it or add it to DB.
+        // Assuming we rely on DB or updated global variable.
+
+        let isSpam = false;
+
+        // Check Regexes (including links if added to DB)
+        if (filters.regexes && filters.regexes.length > 0) {
+            isSpam = filters.regexes.some(r => r.test(trimmedMessage));
+        }
+
+        // Fallback hardcoded link check if requested, OR assume it's in DB.
+        // Let's keep a hardcoded fallback for links ONLY if not in DB? 
+        // User said "linkRegex too from db", implying we should NOT hardcode it if possible, 
+        // or the DB should contain it. 
+        // But for safety, I will keep a basic link check if `global.chatFilters.linkRegex` is not set?
+        // Wait, I defined `linkRegex: null` in the global object init.
+        // The previous code had `const linkRegex = /(http:\/\/|https:\/\/|www\.)/i;`
+
+        if (!isSpam && filters.badWords && filters.badWords.length > 0) {
+            const lowerMsg = trimmedMessage.toLowerCase();
+            isSpam = filters.badWords.some(w => lowerMsg.includes(w));
         }
 
         const messageObject = {
@@ -2213,11 +2367,29 @@ io.on('connection', (socket) => {
                 id: sessionUser.id,
                 username: sessionUser.username,
                 isAdmin: sessionUser.is_admin,
-                isVerified: sessionUser.isVerified
+                isVerified: sessionUser.isVerified,
+                isMuted: sessionUser.is_muted,
+                muteUntil: sessionUser.mute_until
             },
             text: trimmedMessage,
             timestamp: now
         };
+
+        // Shadowban Logic
+        if (sessionUser.is_shadow_banned || isSpam) {
+            // Only emit to sender, do not add to global history
+            socket.emit('chat:newMessage', messageObject);
+            return;
+        }
+
+        // Update spam tracker only if message actually sent
+        userData.lastTime = now;
+        chatSpamTracker.set(sessionUser.id, userData);
+
+        // Save to Persistent History (Async, don't block)
+        dbRun('INSERT INTO chat_messages (user_id, username, content, created_at) VALUES (?, ?, ?, ?)',
+            [sessionUser.id, sessionUser.username, trimmedMessage, new Date(now).toISOString()])
+            .catch(err => console.error('Failed to save chat message:', err));
 
         globalChatHistory.push(messageObject);
         if (globalChatHistory.length > CHAT_HISTORY_LIMIT) {
@@ -2225,6 +2397,79 @@ io.on('connection', (socket) => {
         }
 
         io.to('global_chat').emit('chat:newMessage', messageObject);
+    });
+
+    socket.on('chat:muteUser', async ({ userId, durationMinutes, permanent }) => {
+        const sessionUser = socket.request.session?.user;
+        if (!sessionUser || !sessionUser.is_admin) return;
+
+        let muteUntil = null;
+        if (!permanent) {
+            const duration = parseInt(durationMinutes, 10) || 60;
+            muteUntil = new Date(Date.now() + duration * 60000).toISOString();
+        }
+
+        await dbRun('UPDATE users SET is_muted = 1, mute_until = ? WHERE id = ?', [muteUntil, userId]);
+
+        // Update existing messages in history to reflect mute status immediately
+        globalChatHistory.forEach(msg => {
+            if (msg.author.id === userId) {
+                msg.author.isMuted = true;
+                msg.author.muteUntil = muteUntil;
+                io.to('global_chat').emit('chat:updateMessage', msg);
+            }
+        });
+
+        // Log admin action
+        const targetUser = await dbGet('SELECT username FROM users WHERE id = ?', [userId]);
+        logAdminAction({
+            adminId: sessionUser.id,
+            adminUsername: sessionUser.username,
+            actionType: permanent ? 'MUTE_USER_PERMANENT' : 'MUTE_USER_TEMPORARY',
+            targetUserId: userId,
+            targetUsername: targetUser ? targetUser.username : 'Unknown',
+            reason: permanent ? 'Permanent mute from global chat quick actions' : `Temporary mute (${durationMinutes}min) from global chat quick actions`
+        });
+    });
+
+    socket.on('chat:banUser', async ({ userId, durationMinutes, permanent }) => {
+        const sessionUser = socket.request.session?.user;
+        if (!sessionUser || !sessionUser.is_admin) return;
+
+        let banUntil = null;
+        if (!permanent) {
+            const duration = parseInt(durationMinutes, 10) || 60;
+            banUntil = new Date(Date.now() + duration * 60000).toISOString();
+        }
+
+        await dbRun('UPDATE users SET is_banned = 1, ban_until = ?, ban_reason = ? WHERE id = ?',
+            [banUntil, permanent ? 'Permanent ban from global chat' : 'Temporary ban from global chat', userId]);
+
+        // Log admin action
+        const targetUser = await dbGet('SELECT username FROM users WHERE id = ?', [userId]);
+        logAdminAction({
+            adminId: sessionUser.id,
+            adminUsername: sessionUser.username,
+            actionType: permanent ? 'BAN_USER_PERMANENT' : 'BAN_USER_TEMPORARY',
+            targetUserId: userId,
+            targetUsername: targetUser ? targetUser.username : 'Unknown',
+            reason: permanent ? 'Permanent ban from global chat quick actions' : `Temporary ban (${durationMinutes}min) from global chat quick actions`
+        });
+
+        // Force disconnect the banned user if they are online
+        io.sockets.sockets.forEach((s) => {
+            if (s.request.session?.user?.id === parseInt(userId, 10)) {
+                const options = { reason: permanent ? 'Permanent ban from global chat' : 'Temporary ban from global chat' };
+                if (banUntil) {
+                    options.until = new Date(banUntil).toLocaleString();
+                }
+                s.emit('forceDisconnect', {
+                    i18nKey: banUntil ? 'error_account_temp_banned_with_reason' : 'error_account_banned_with_reason',
+                    options: options
+                });
+                s.disconnect(true);
+            }
+        });
     });
 
     socket.on('chat:deleteMessage', async ({ messageId }) => {

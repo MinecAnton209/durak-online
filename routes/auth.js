@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const db = require('../db');
 const util = require('util');
 const dbRun = util.promisify(db.run.bind(db));
+const dbGet = util.promisify(db.get.bind(db));
 const router = express.Router();
 const { signToken, setAuthCookie, clearAuthCookie } = require('../middlewares/jwtAuth');
 const { validateUsername, validatePassword } = require('../utils/validation');
@@ -10,9 +11,36 @@ const { loginLimiter, registerLimiter, passwordChangeLimiter } = require('../mid
 const saltRounds = 10;
 const statsService = require('../services/statsService');
 
+async function checkDeviceBan(deviceId) {
+    if (!deviceId) return null;
+    try {
+        const ban = await dbGet('SELECT reason, ban_until FROM banned_devices WHERE device_id = ?', [deviceId]);
+        if (ban) {
+            if (ban.ban_until && new Date(ban.ban_until) < new Date()) {
+                // Ban expired
+                await dbRun('DELETE FROM banned_devices WHERE device_id = ?', [deviceId]);
+                return null;
+            }
+            return ban.reason || 'Device suspended';
+        }
+    } catch (e) {
+        console.error('Device ban check error:', e);
+    }
+    return null;
+}
+
 router.post('/register', registerLimiter, async (req, res) => {
     try {
         const { username, password, deviceId } = req.body;
+
+        const deviceBanReason = await checkDeviceBan(deviceId);
+        if (deviceBanReason) {
+            return res.status(403).json({
+                message: 'Your device is banned.',
+                i18nKey: 'error_device_banned',
+                options: { reason: deviceBanReason }
+            });
+        }
 
         const usernameValidation = validateUsername(username);
         if (!usernameValidation.valid) {
@@ -43,10 +71,20 @@ router.post('/register', registerLimiter, async (req, res) => {
     }
 });
 
-router.post('/login', loginLimiter, (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
     try {
         const { username, password, deviceId } = req.body;
         if (!username || !password) { return res.status(400).json({ message: 'All fields are required.' }); }
+
+        const deviceBanReason = await checkDeviceBan(deviceId);
+        if (deviceBanReason) {
+            return res.status(403).json({
+                message: 'Your device is banned.',
+                i18nKey: 'error_device_banned',
+                options: { reason: deviceBanReason }
+            });
+        }
+
         const sql = `SELECT * FROM users WHERE username = ?`;
         db.get(sql, [username], async (err, user) => {
             if (err) { console.error(err.message); return res.status(500).json({ message: 'Database error.' }); }
@@ -54,7 +92,20 @@ router.post('/login', loginLimiter, (req, res) => {
             const isMatch = await bcrypt.compare(password, user.password);
             if (isMatch) {
                 if (user.is_banned) {
-                    return res.status(403).json({ i18nKey: 'error_account_banned_with_reason', options: { reason: user.ban_reason || 'Не вказано' } });
+                    if (user.ban_until && new Date(user.ban_until) < new Date()) {
+                        await dbRun('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
+                        user.is_banned = 0;
+                        user.ban_until = null;
+                        user.ban_reason = null;
+                    } else {
+                        return res.status(403).json({
+                            i18nKey: user.ban_until ? 'error_account_temp_banned_with_reason' : 'error_account_banned_with_reason',
+                            options: {
+                                reason: user.ban_reason || 'Не вказано',
+                                until: user.ban_until ? new Date(user.ban_until).toLocaleString() : null
+                            }
+                        });
+                    }
                 }
                 const payload = {
                     id: user.id,
@@ -66,7 +117,9 @@ router.post('/login', loginLimiter, (req, res) => {
                     is_admin: user.is_admin,
                     is_banned: user.is_banned,
                     ban_reason: user.ban_reason,
+                    ban_until: user.ban_until,
                     is_muted: user.is_muted,
+                    mute_until: user.mute_until,
                     rating: user.rating,
                     card_back_style: user.card_back_style,
                     isVerified: user.is_verified,
@@ -115,6 +168,26 @@ router.get('/check-session', (req, res) => {
                 }
             }
 
+            let isMuted = user.is_muted;
+            let muteUntil = user.mute_until;
+
+            if (isMuted && muteUntil && new Date(muteUntil) < new Date()) {
+                isMuted = false;
+                muteUntil = null;
+                db.run('UPDATE users SET is_muted = 0, mute_until = NULL WHERE id = ?', [user.id]);
+            }
+
+            let isBanned = user.is_banned;
+            let banUntil = user.ban_until;
+            let banReason = user.ban_reason;
+
+            if (isBanned && banUntil && new Date(banUntil) < new Date()) {
+                isBanned = false;
+                banUntil = null;
+                banReason = null;
+                db.run('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
+            }
+
             const sessionUser = {
                 id: user.id,
                 username: user.username,
@@ -125,9 +198,11 @@ router.get('/check-session', (req, res) => {
                 card_back_style: user.card_back_style,
                 isVerified: user.is_verified,
                 is_admin: user.is_admin,
-                is_banned: user.is_banned,
-                ban_reason: user.ban_reason,
-                is_muted: user.is_muted,
+                is_banned: isBanned,
+                ban_reason: banReason,
+                ban_until: banUntil,
+                is_muted: isMuted,
+                mute_until: muteUntil,
                 rating: user.rating
             };
             req.session = { user: sessionUser, save() { }, destroy() { } };

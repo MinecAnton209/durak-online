@@ -278,5 +278,18 @@
   "status_node_version": "Node.js версія",
   "status_db_ping": "Пінг БД",
   "status_card_timestamp": "Часова Мітка",
-  "status_server_time": "Час сервера"
+  "status_server_time": "Час сервера",
+  "admin_mute_permanent": "Мут (Назавжди)",
+  "admin_mute_1h": "Мут (1 год)",
+  "admin_mute_24h": "Мут (24 год)",
+  "muted_until": "Заблоковано до: {date}",
+  "permanently_muted": "Замучено назавжди",
+  "error_account_banned_with_reason": "Ваш акаунт заблоковано назавжди. Причина: {reason}",
+  "error_account_temp_banned_with_reason": "Ваш акаунт тимчасово заблоковано до {until}. Причина: {reason}",
+  "admin_ban_1h": "Бан (1г)",
+  "admin_ban_24h": "Бан (24г)",
+  "admin_ban_permanent": "Бан (Назавжди)",
+  "admin_ban_custom": "Бан (свій час)",
+  "admin_mute_custom": "Мут (свій час)",
+  "prompt_minutes": "Введіть кількість хвилин:"
 }

@@ -278,5 +278,18 @@
   "status_node_version": "Node.js версия",
   "status_db_ping": "Пинг БД",
   "status_card_timestamp": "Временная Метка",
-  "status_server_time": "Время сервера"
+  "status_server_time": "Время сервера",
+  "admin_mute_permanent": "Мут (Навсегда)",
+  "admin_mute_1h": "Мут (1 час)",
+  "admin_mute_24h": "Мут (24 часа)",
+  "muted_until": "Заблокирован до: {date}",
+  "permanently_muted": "Замучен навсегда",
+  "error_account_banned_with_reason": "Ваш аккаунт заблокирован навсегда. Причина: {reason}",
+  "error_account_temp_banned_with_reason": "Ваш аккаунт временно заблокирован до {until}. Причина: {reason}",
+  "admin_ban_1h": "Бан (1ч)",
+  "admin_ban_24h": "Бан (24ч)",
+  "admin_ban_permanent": "Бан (Навсегда)",
+  "admin_ban_custom": "Бан (свое время)",
+  "admin_mute_custom": "Мут (свое время)",
+  "prompt_minutes": "Введите количество минут:"
 }

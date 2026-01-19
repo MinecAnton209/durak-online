@@ -1,6 +1,6 @@
 {
   "name": "client",
-  "version": "3.0.10",
+  "version": "3.1.0-pre-RC.1",
   "private": true,
   "type": "module",
   "engines": {

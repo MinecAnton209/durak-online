@@ -279,5 +279,18 @@
   "status_node_version": "Node.js version",
   "status_db_ping": "DB ping",
   "status_card_timestamp": "Timestamp",
-  "status_server_time": "Server time"
+  "status_server_time": "Server time",
+  "admin_mute_permanent": "Mute (Forever)",
+  "admin_mute_1h": "Mute (1h)",
+  "admin_mute_24h": "Mute (24h)",
+  "muted_until": "Muted until: {date}",
+  "permanently_muted": "Permanently muted",
+  "error_account_banned_with_reason": "Your account has been permanently banned. Reason: {reason}",
+  "error_account_temp_banned_with_reason": "Your account has been temporarily banned until {until}. Reason: {reason}",
+  "admin_ban_1h": "Ban (1h)",
+  "admin_ban_24h": "Ban (24h)",
+  "admin_ban_permanent": "Ban (Forever)",
+  "admin_ban_custom": "Ban (Custom)",
+  "admin_mute_custom": "Mute (Custom)",
+  "prompt_minutes": "Enter duration in minutes:"
 }

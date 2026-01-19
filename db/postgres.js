@@ -25,16 +25,55 @@ pool.query(`
         is_admin BOOLEAN DEFAULT FALSE,
         is_banned BOOLEAN DEFAULT FALSE,
         ban_reason text,
+        ban_until TIMESTAMPTZ,
         is_muted BOOLEAN DEFAULT FALSE,
+        mute_until TIMESTAMPTZ,
         rating DOUBLE PRECISION DEFAULT 1500.0,
         rd DOUBLE PRECISION DEFAULT 350.0,
         vol DOUBLE PRECISION DEFAULT 0.06,
         last_game_timestamp TIMESTAMPTZ,
         telegram_id text UNIQUE,
+        is_shadow_banned BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMPTZ DEFAULT NOW()
         );
 `).then(() => console.log('Таблиця "users" в PostgreSQL готова до роботи з повною структурою.'))
     .catch(err => console.error('Помилка створення/оновлення таблиці "users" в PostgreSQL:', err.stack));
+
+pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_filters (
+        id SERIAL PRIMARY KEY,
+        type text NOT NULL, -- 'word' or 'regex'
+        content text NOT NULL,
+        is_enabled BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+`).then(() => console.log('Таблиця "chat_filters" створена.'))
+    .catch(err => console.error('Помилка створ. "chat_filters":', err.stack));
+
+pool.query(`
+    CREATE TABLE IF NOT EXISTS banned_devices (
+        id SERIAL PRIMARY KEY,
+        device_id text UNIQUE NOT NULL,
+        reason text,
+        admin_id INTEGER,
+        ban_until TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+`).then(() => console.log('Таблиця "banned_devices" створена.'))
+    .catch(err => console.error('Помилка створ. "banned_devices":', err.stack));
+
+pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        username text,
+        content text,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+`).then(() => console.log('Таблиця "chat_messages" створена.'))
+    .catch(err => console.error('Помилка створ. "chat_messages":', err.stack));
+
 pool.query(`
     CREATE TABLE IF NOT EXISTS "user_sessions" (
                                                    "sid" varchar NOT NULL COLLATE "default",
@@ -137,6 +176,10 @@ pool.query(`
             THEN
                 ALTER TABLE "users" ADD COLUMN ban_reason text;
             END IF;
+            IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='ban_until')
+            THEN
+                ALTER TABLE "users" ADD COLUMN ban_until TIMESTAMPTZ;
+            END IF;
         END;
         $$;
     `).then(() => console.log('Перевірено наявність колонок is_banned та ban_reason в PostgreSQL.'))
@@ -152,6 +195,18 @@ pool.query(`
         $$;
     `).then(() => console.log('Перевірено наявність колонки is_muted в PostgreSQL.'))
     .catch(err => console.error('Помилка при перевірці/додаванні колонки is_muted в PostgreSQL:', err.stack));
+
+pool.query(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='mute_until')
+            THEN
+                ALTER TABLE "users" ADD COLUMN mute_until TIMESTAMPTZ;
+            END IF;
+        END;
+        $$;
+    `).then(() => console.log('Перевірено наявність колонки mute_until в PostgreSQL.'))
+    .catch(err => console.error('Помилка при перевірці/додаванні колонки mute_until в PostgreSQL:', err.stack));
 
 pool.query(`
         CREATE TABLE IF NOT EXISTS games_history (
@@ -369,6 +424,18 @@ pool.query(`
     $$;
 `).then(() => console.log('Перевірено наявність колонки device_id.'))
     .catch(err => console.error('Помилка при перевірці/додаванні колонки device_id:', err));
+
+pool.query(`
+    DO $$
+    BEGIN
+        IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='is_shadow_banned')
+        THEN
+            ALTER TABLE "users" ADD COLUMN is_shadow_banned BOOLEAN DEFAULT FALSE;
+        END IF;
+    END;
+    $$;
+`).then(() => console.log('Перевірено наявність колонки is_shadow_banned.'))
+    .catch(err => console.error('Помилка при перевірці/додаванні колонки is_shadow_banned:', err));
 
 function formatSql(sql) {
     let i = 0;

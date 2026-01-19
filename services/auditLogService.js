@@ -11,7 +11,7 @@ function logAdminAction(logData) {
     } = logData;
 
     if (!adminId || !adminUsername || !actionType) {
-        console.error("[AuditLog] Недостатньо даних для запису в лог:", logData);
+        console.error("[AuditLog] Insufficient data for logging:", logData);
         return;
     }
 
@@ -25,11 +25,12 @@ function logAdminAction(logData) {
 
     db.run(sql, params, (err) => {
         if (err) {
-            console.error(`[AuditLog] Помилка запису дії '${actionType}' в лог аудиту:`, err.message);
+            console.error(`[AuditLog] Error recording action '${actionType}' in audit log:`, err.message);
         } else {
-            console.log(`[AuditLog] Дія '${actionType}' від адміна '${adminUsername}' успішно записана.`);
+            console.log(`[AuditLog] Action '${actionType}' by admin '${adminUsername}' successfully recorded.`);
         }
     });
+
 }
 
 module.exports = {

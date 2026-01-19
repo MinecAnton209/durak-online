@@ -27,12 +27,15 @@ const db = new sqlite3.Database(dbPath, (err) => {
                                                  is_admin BOOLEAN DEFAULT FALSE,
                                                  is_banned BOOLEAN DEFAULT FALSE,
                                                  ban_reason TEXT,
+                                                 ban_until TIMESTAMP,
                                                  is_muted BOOLEAN DEFAULT FALSE,
+                                                 mute_until TIMESTAMP,
                                                  rating REAL DEFAULT 1500.0,
                                                  rd REAL DEFAULT 350.0,
                                                  vol REAL DEFAULT 0.06,
                                                  last_game_timestamp TEXT,
                                                  telegram_id TEXT UNIQUE,
+                                                 is_shadow_banned BOOLEAN DEFAULT FALSE,
                                                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `, (err) => {
@@ -43,17 +46,58 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 runUsersMigrations();
             }
         });
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS chat_filters (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL, -- 'word' or 'regex'
+                content TEXT NOT NULL,
+                is_enabled BOOLEAN DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        `, (err) => {
+            if (err) console.error('Помилка створення таблиці "chat_filters":', err.message);
+            else console.log('Таблиця "chat_filters" готова.');
+        });
         db.run(`
             CREATE TABLE IF NOT EXISTS achievements (
                                                         code TEXT PRIMARY KEY,
                                                         name_key TEXT NOT NULL,
                                                         description_key TEXT NOT NULL,
-                                                        rarity TEXT NOT NULL
-            )
+                                                        rarity TEXT DEFAULT 'common',
+                                                        icon_url TEXT
+            );
         `, (err) => {
             if (err) console.error('Помилка створення таблиці "achievements":', err.message);
             else console.log('Таблиця "achievements" готова.');
         });
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS banned_devices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id TEXT UNIQUE NOT NULL,
+                reason TEXT,
+                admin_id INTEGER,
+                ban_until DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        `, (err) => {
+            if (err) console.error('Помилка створ. "banned_devices":', err.message);
+        });
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                username TEXT,
+                content TEXT,
+                is_deleted BOOLEAN DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        `, (err) => {
+            if (err) console.error('Помилка створ. "chat_messages":', err.message);
+        });
+
         db.run(`
             CREATE TABLE IF NOT EXISTS user_achievements (
                                                              user_id INTEGER NOT NULL,
@@ -207,7 +251,9 @@ function runUsersMigrations() {
         { column: 'coins', type: 'INTEGER', options: 'DEFAULT 1000 NOT NULL' },
         { column: 'last_daily_bonus_claim', type: 'DATE', options: '' },
         { column: 'telegram_id', type: 'TEXT', options: '' },
-        { column: 'device_id', type: 'TEXT', options: '' }
+        { column: 'device_id', type: 'TEXT', options: '' },
+        { column: 'mute_until', type: 'TIMESTAMP', options: '' },
+        { column: 'ban_until', type: 'TIMESTAMP', options: '' }
     ];
     db.all(`PRAGMA table_info(users);`, [], (err, columns) => {
         if (err) {
@@ -227,7 +273,7 @@ function runUsersMigrations() {
                             db.run(
                                 'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_telegram_id ON users (telegram_id) WHERE telegram_id IS NOT NULL;',
                                 (indexErr) => {
-                                    if(indexErr) console.error("Помилка створення UNIQUE індексу для telegram_id:", indexErr.message);
+                                    if (indexErr) console.error("Помилка створення UNIQUE індексу для telegram_id:", indexErr.message);
                                     else console.log("UNIQUE індекс для telegram_id створено.");
                                 }
                             );
@@ -270,7 +316,7 @@ function runGamesMigrations() {
                             db.run(
                                 'CREATE UNIQUE INDEX IF NOT EXISTS idx_games_invite_code ON games (invite_code);',
                                 (indexErr) => {
-                                    if(indexErr) console.error("Помилка створення UNIQUE індексу для invite_code:", indexErr.message);
+                                    if (indexErr) console.error("Помилка створення UNIQUE індексу для invite_code:", indexErr.message);
                                     else console.log("UNIQUE індекс для invite_code створено.");
                                 }
                             );
@@ -281,7 +327,7 @@ function runGamesMigrations() {
                 if (migration.column === 'invite_code') {
                     db.run(
                         'CREATE UNIQUE INDEX IF NOT EXISTS idx_games_invite_code ON games (invite_code);',
-                        (indexErr) => { if(!indexErr) console.log("Перевірка/створення індексу invite_code виконана."); }
+                        (indexErr) => { if (!indexErr) console.log("Перевірка/створення індексу invite_code виконана."); }
                     );
                 }
             }

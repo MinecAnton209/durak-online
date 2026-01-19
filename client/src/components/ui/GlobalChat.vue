@@ -147,6 +147,37 @@ function submitEdit() {
   }
   cancelEditing();
 }
+
+const adminMute = (userId, duration = null) => {
+  if (duration === 'permanent') {
+    socketStore.emit('chat:muteUser', { userId, permanent: true });
+  } else if (duration === 'custom') {
+    const mins = prompt(t('prompt_minutes'));
+    if (mins && !isNaN(parseInt(mins))) {
+      socketStore.emit('chat:muteUser', { userId, durationMinutes: parseInt(mins) });
+    }
+  } else {
+    socketStore.emit('chat:muteUser', { userId, durationMinutes: duration });
+  }
+};
+
+const adminBan = (userId, duration = null) => {
+  if (duration === 'permanent') {
+    socketStore.emit('chat:banUser', { userId, permanent: true });
+  } else if (duration === 'custom') {
+    const mins = prompt(t('prompt_minutes'));
+    if (mins && !isNaN(parseInt(mins))) {
+      socketStore.emit('chat:banUser', { userId, durationMinutes: parseInt(mins) });
+    }
+  } else {
+    socketStore.emit('chat:banUser', { userId, durationMinutes: duration });
+  }
+};
+
+const formatMuteDate = (date) => {
+  if (!date) return '';
+  return new Date(date).toLocaleString();
+};
 </script>
 
 <template>
@@ -158,28 +189,40 @@ function submitEdit() {
     <div ref="chatBody" @scroll="handleScroll" class="flex-1 p-3 space-y-3 overflow-y-auto">
 
       <div v-if="hasMore" class="text-center">
-        <button @click="loadMoreMessages" :disabled="isLoadingMore" class="text-primary text-xs hover:underline disabled:text-on-surface-variant disabled:no-underline">
+        <button @click="loadMoreMessages" :disabled="isLoadingMore"
+          class="text-primary text-xs hover:underline disabled:text-on-surface-variant disabled:no-underline">
           <span v-if="isLoadingMore">{{ $t('loading_more') }}...</span>
           <span v-else>{{ $t('load_more') }}</span>
         </button>
       </div>
 
       <div v-for="msg in messages" :key="msg.id" class="flex items-start gap-2 text-sm group animate-fade-in">
-        <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary shrink-0 text-xs">
+        <div
+          class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary shrink-0 text-xs">
           {{ msg.author.username[0] }}
         </div>
 
         <div class="flex-1 flex flex-col">
           <div class="flex items-center gap-1.5">
-            <span class="font-bold" :class="{ 'text-yellow-400': msg.author.isAdmin, 'text-primary': !msg.author.isAdmin }">
-                {{ msg.author.username }}
+            <span class="font-bold"
+              :class="{ 'text-yellow-400': msg.author.isAdmin, 'text-primary': !msg.author.isAdmin }">
+              {{ msg.author.username }}
             </span>
-            <svg v-if="msg.author.isVerified" class="w-3 h-3 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <svg v-if="msg.author.isVerified" class="w-3 h-3 text-blue-400 shrink-0" viewBox="0 0 24 24"
+              fill="currentColor">
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+
+            <span v-if="msg.author.isMuted"
+              class="text-[10px] px-1 bg-error/20 text-error rounded border border-error/30"
+              :title="msg.author.muteUntil ? $t('muted_until', { date: formatMuteDate(msg.author.muteUntil) }) : $t('permanently_muted')">
+              🔇 {{ msg.author.muteUntil ? 'TEMP' : 'PERM' }}
+            </span>
           </div>
 
           <div v-if="editingMessageId === msg.id" class="flex gap-1 mt-1">
             <input v-model="editingText" @keyup.esc="cancelEditing" @keyup.enter="submitEdit" type="text"
-                   class="flex-1 bg-black/50 border border-primary rounded px-2 py-1 text-on-surface text-sm focus:outline-none">
+              class="flex-1 bg-black/50 border border-primary rounded px-2 py-1 text-on-surface text-sm focus:outline-none">
             <button @click="submitEdit" class="text-xs text-primary font-bold">{{ $t('save_button') }}</button>
             <button @click="cancelEditing" class="text-xs text-gray-400">{{ $t('cancel_button') }}</button>
           </div>
@@ -191,9 +234,34 @@ function submitEdit() {
         </div>
 
         <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button v-if="msg.author.id === authStore.user?.id && !msg.deleted" @click="startEditing(msg)" class="text-gray-400 hover:text-white" :title="$t('edit_message')">✏️</button>
-          <button v-if="authStore.user?.is_admin && !msg.deleted" @click="openDeleteConfirm(msg, true)" class="text-gray-400 hover:text-error" :title="$t('delete_message_admin')">🗑️</button>
-          <button v-else-if="msg.author.id === authStore.user?.id && !msg.deleted" @click="openDeleteConfirm(msg, false)" class="text-gray-400 hover:text-error" :title="$t('delete_message')">🗑️</button>
+          <!-- Admin Quick Actions -->
+          <template v-if="authStore.user?.is_admin">
+            <button @click="adminMute(msg.author.id, 60)" class="text-xs grayscale hover:grayscale-0"
+              :title="$t('admin_mute_1h')">⏳</button>
+            <button @click="adminMute(msg.author.id, 1440)" class="text-xs grayscale hover:grayscale-0"
+              :title="$t('admin_mute_24h')">📅</button>
+            <button @click="adminMute(msg.author.id, 'permanent')" class="text-xs grayscale hover:grayscale-0"
+              :title="$t('admin_mute_permanent')">🔒</button>
+            <button @click="adminMute(msg.author.id, 'custom')" class="text-xs grayscale hover:grayscale-0"
+              :title="$t('admin_mute_custom')">⚙️</button>
+            <button @click="adminBan(msg.author.id, 60)" class="text-xs grayscale hover:grayscale-0"
+              :title="$t('admin_ban_1h')">⏳🚫</button>
+            <button @click="adminBan(msg.author.id, 1440)" class="text-xs grayscale hover:grayscale-0"
+              :title="$t('admin_ban_24h')">📅🚫</button>
+            <button @click="adminBan(msg.author.id, 'permanent')" class="text-xs grayscale hover:grayscale-0"
+              :title="$t('admin_ban_permanent')">🔒🚫</button>
+            <button @click="adminBan(msg.author.id, 'custom')" class="text-xs grayscale hover:grayscale-0"
+              :title="$t('admin_ban_custom')">⚙️🚫</button>
+            <button v-if="!msg.deleted" @click="openDeleteConfirm(msg, true)"
+              class="text-xs grayscale hover:grayscale-0" :title="$t('delete_message_admin')">🗑️</button>
+          </template>
+
+          <template v-else>
+            <button v-if="msg.author.id === authStore.user?.id && !msg.deleted" @click="startEditing(msg)"
+              class="text-gray-400 hover:text-white" :title="$t('edit_message')">✏️</button>
+            <button v-if="msg.author.id === authStore.user?.id && !msg.deleted" @click="openDeleteConfirm(msg, false)"
+              class="text-gray-400 hover:text-error" :title="$t('delete_message')">🗑️</button>
+          </template>
         </div>
       </div>
     </div>
@@ -201,8 +269,9 @@ function submitEdit() {
     <div v-if="authStore.isAuthenticated" class="p-3 border-t border-white/5">
       <div class="flex gap-2">
         <input v-model="newMessage" @keyup.enter="sendMessage" type="text" :placeholder="$t('chat_placeholder')"
-               class="flex-1 bg-black/30 border border-outline/50 rounded-lg px-3 py-2 text-on-surface focus:outline-none focus:border-primary transition-all">
-        <button @click="sendMessage" class="bg-primary text-on-primary font-bold px-4 rounded-lg active:scale-95 transition-transform">
+          class="flex-1 bg-black/30 border border-outline/50 rounded-lg px-3 py-2 text-on-surface focus:outline-none focus:border-primary transition-all">
+        <button @click="sendMessage"
+          class="bg-primary text-on-primary font-bold px-4 rounded-lg active:scale-95 transition-transform">
           ➤
         </button>
       </div>
@@ -212,23 +281,25 @@ function submitEdit() {
     </div>
   </div>
 
-  <ConfirmModal
-    :is-open="isConfirmModalOpen"
-    :title="$t('delete_confirm_title')"
-    :message="$t('delete_confirm_message')"
-    :confirm-text="$t('delete_button')"
-    :cancel-text="$t('cancel_button')"
-    @confirm="confirmDelete"
-    @cancel="closeConfirmModal"
-  />
+  <ConfirmModal :is-open="isConfirmModalOpen" :title="$t('delete_confirm_title')"
+    :message="$t('delete_confirm_message')" :confirm-text="$t('delete_button')" :cancel-text="$t('cancel_button')"
+    @confirm="confirmDelete" @cancel="closeConfirmModal" />
 </template>
 
 <style scoped>
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out;
 }
+
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

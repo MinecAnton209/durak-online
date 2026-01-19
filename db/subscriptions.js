@@ -47,8 +47,31 @@ async function findSubscriptionByUserId(userId) {
     });
 }
 
+async function getAllSubscriptions() {
+    return new Promise((resolve, reject) => {
+        const query = `SELECT user_id, subscription_data FROM push_subscriptions;`;
+        db.all(query, [], (err, rows) => {
+            if (err) return reject(err);
+            const results = rows.map(row => {
+                try {
+                    return {
+                        userId: row.user_id,
+                        subscription: typeof row.subscription_data === 'string'
+                            ? JSON.parse(row.subscription_data)
+                            : row.subscription_data
+                    };
+                } catch (e) {
+                    return null;
+                }
+            }).filter(sub => sub !== null);
+            resolve(results);
+        });
+    });
+}
+
 module.exports = {
     saveSubscription,
     deleteSubscription,
-    findSubscriptionByUserId
+    findSubscriptionByUserId,
+    getAllSubscriptions
 };
