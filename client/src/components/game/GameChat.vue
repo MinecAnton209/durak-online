@@ -70,11 +70,12 @@ const formatEntry = (entry) => {
 </script>
 
 <template>
-  <div class="fixed bottom-4 right-4 z-50 flex flex-col items-end pointer-events-none">
+  <div
+    class="fixed bottom-[calc(1rem+var(--safe-area-bottom))] right-[calc(1rem+var(--safe-area-right))] z-50 flex flex-col items-end pointer-events-none">
 
     <transition name="slide-fade">
       <div v-if="isOpen"
-           class="pointer-events-auto w-80 h-96 bg-surface/95 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden mb-4 relative">
+        class="pointer-events-auto w-80 h-96 bg-surface/95 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden mb-4 relative">
         <div class="bg-black/20 p-3 flex justify-between items-center border-b border-white/5 shrink-0">
           <h3 class="text-white font-bold text-sm">{{ $t('chat_title') }}</h3>
           <button @click="toggleChat" class="text-on-surface-variant hover:text-white transition-colors">
@@ -85,7 +86,7 @@ const formatEntry = (entry) => {
         </div>
 
         <div ref="logContainer" @scroll="handleScroll"
-             class="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin scroll-smooth">
+          class="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin scroll-smooth">
           <div v-if="gameStore.chatLog.length === 0" class="text-center text-white/30 text-xs mt-4">
             {{ $t('chat_empty') }}
           </div>
@@ -98,7 +99,7 @@ const formatEntry = (entry) => {
 
         <transition name="fade">
           <button v-if="!isUserAtBottom" @click="scrollToBottom(true)"
-                  class="absolute bottom-16 right-4 bg-primary text-on-primary rounded-full p-2 shadow-lg hover:bg-[#00A891] transition-all z-10 flex items-center gap-2 text-xs font-bold px-3 animate-bounce-small">
+            class="absolute bottom-16 right-4 bg-primary text-on-primary rounded-full p-2 shadow-lg hover:bg-[#00A891] transition-all z-10 flex items-center gap-2 text-xs font-bold px-3 animate-bounce-small">
             <span v-if="hasNewMessages">{{ $t('chat_new_messages') }}</span>
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3">
@@ -109,12 +110,12 @@ const formatEntry = (entry) => {
 
         <form @submit.prevent="handleSend" class="p-2 border-t border-white/5 bg-black/10 flex gap-2 shrink-0">
           <input v-model="messageInput" type="text"
-                 class="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary transition-colors"
-                 :placeholder="$t('chat_placeholder')">
+            class="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary transition-colors"
+            :placeholder="$t('chat_placeholder')">
           <button type="submit" class="bg-primary hover:bg-[#00A891] text-on-primary p-2 rounded-lg transition-colors">
             <svg class="w-4 h-4 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
             </svg>
           </button>
         </form>
@@ -122,16 +123,16 @@ const formatEntry = (entry) => {
     </transition>
 
     <button @click="toggleChat"
-            class="pointer-events-auto bg-surface border border-white/10 w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all relative group">
+      class="pointer-events-auto bg-surface border border-white/10 w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all relative group">
       <svg class="w-6 h-6 text-primary group-hover:text-white transition-colors" fill="none" stroke="currentColor"
-           viewBox="0 0 24 24">
+        viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z">
+          d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z">
         </path>
       </svg>
 
       <div v-if="gameStore.unreadMessages > 0 && !isOpen"
-           class="absolute -top-1 -right-1 bg-error text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full animate-bounce">
+        class="absolute -top-1 -right-1 bg-error text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full animate-bounce">
         {{ gameStore.unreadMessages }}
       </div>
     </button>

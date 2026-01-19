@@ -5,6 +5,7 @@ import { useSocketStore } from './socket';
 import { useToastStore } from './toast';
 import { useAuthStore } from './auth';
 import i18n from '@/i18n';
+import { getApiUrl } from '@/utils/api';
 
 export const useGameStore = defineStore('game', () => {
   const socketStore = useSocketStore();
@@ -259,7 +260,7 @@ export const useGameStore = defineStore('game', () => {
     try {
       initListeners();
       toast.addToast(i18n.global.t('searching_for_game'), 'info');
-      const response = await fetch('/api/public/lobbies');
+      const response = await fetch(getApiUrl('/api/public/lobbies'));
       if (!response.ok) throw new Error('Network error');
 
       const lobbies = await response.json();
@@ -290,7 +291,7 @@ export const useGameStore = defineStore('game', () => {
 
   async function refreshLobbyList() {
     try {
-      const response = await fetch('/api/public/lobbies');
+      const response = await fetch(getApiUrl('/api/public/lobbies'));
       if (response.ok) publicLobbies.value = await response.json();
     } catch (error) { console.error("Auto-sync error:", error); }
   }

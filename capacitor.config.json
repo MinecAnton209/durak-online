@@ -1,5 +1,17 @@
 {
-  "appId": "com.minecanton209.game",
+  "appId": "com.minecanton209.durak",
   "appName": "Durak Online",
-  "webDir": "public"
+  "webDir": "public",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0f4a1e"
+    },
+    "Keyboard": {
+      "resize": "body",
+      "style": "dark",
+      "resizeOnFullScreen": true
+    }
+  }
 }

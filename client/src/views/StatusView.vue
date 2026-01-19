@@ -1,5 +1,5 @@
 <template>
-  <div v-if="authStore.isAuthenticated" class="status-page">
+  <div v-if="authStore.isAuthenticated" class="status-page safe-p">
     <div class="container">
       <header>
         <h1>🎮 {{ $t('status_page_title') }}</h1>
@@ -153,10 +153,12 @@
     </div>
   </div>
   <div v-else class="min-h-screen flex items-center justify-center p-4 bg-background">
-    <div class="w-full max-w-md bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 p-6 md:p-8 text-center">
+    <div
+      class="w-full max-w-md bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 p-6 md:p-8 text-center">
       <h2 class="text-2xl font-bold text-white mb-2">{{ $t('status_label') }}</h2>
       <p class="text-on-surface-variant">{{ $t('settings_login_required') }}</p>
-      <button @click="router.push('/')" class="w-full mt-4 py-4 rounded-xl border border-outline/30 text-on-surface hover:bg-white/5 transition-colors font-bold">
+      <button @click="router.push('/')"
+        class="w-full mt-4 py-4 rounded-xl border border-outline/30 text-on-surface hover:bg-white/5 transition-colors font-bold">
         {{ $t('go_home') }}
       </button>
     </div>
@@ -185,7 +187,7 @@ const setupSocketListeners = () => {
   if (!socket) return
 
   socket.off('health:update')
-  
+
   socket.on('health:update', (stats) => {
     healthData.value = stats
     const locale = localStorage.getItem('language') || 'uk'
@@ -210,7 +212,7 @@ const cleanupSocketListeners = () => {
 const reconnectSocket = async () => {
   loading.value = true
   error.value = null
-  
+
   try {
     await socketStore.connect()
     setupSocketListeners()
@@ -235,10 +237,10 @@ onMounted(async () => {
     router.push('/')
     return
   }
-  
+
   if (authStore.isAuthenticated) {
     loading.value = true
-    
+
     try {
       await socketStore.connect()
       setupSocketListeners()
@@ -285,8 +287,13 @@ watch(() => authStore.isAuthenticated, (val) => {
 }
 
 @keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .container {
@@ -307,6 +314,7 @@ header {
     opacity: 0;
     transform: translateY(-20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -353,8 +361,15 @@ h1 {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.8; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
 }
 
 .status-dot {
@@ -370,8 +385,15 @@ h1 {
 }
 
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
 }
 
 .grid {
@@ -403,18 +425,36 @@ h1 {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-.card:nth-child(1) { animation-delay: 0.1s; }
-.card:nth-child(2) { animation-delay: 0.2s; }
-.card:nth-child(3) { animation-delay: 0.3s; }
-.card:nth-child(4) { animation-delay: 0.4s; }
-.card:nth-child(5) { animation-delay: 0.5s; }
-.card:nth-child(6) { animation-delay: 0.6s; }
+.card:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+.card:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.card:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.card:nth-child(4) {
+  animation-delay: 0.4s;
+}
+
+.card:nth-child(5) {
+  animation-delay: 0.5s;
+}
+
+.card:nth-child(6) {
+  animation-delay: 0.6s;
+}
 
 .card-header {
   display: flex;
@@ -489,7 +529,9 @@ h1 {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .error-card {
