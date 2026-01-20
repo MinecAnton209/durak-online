@@ -50,16 +50,22 @@ export const useAuthStore = defineStore('auth', () => {
     });
 
     if (response.ok) {
-        const data = await response.json();
-        if (data.user) {
-          user.value = data.user;
-          isAuthenticated.value = true;
-        }
-        return data;
+      const data = await response.json();
+      if (data.user) {
+        user.value = data.user;
+        isAuthenticated.value = true;
+      }
+      return data;
     } else {
-        const data = await response.json();
-        const errorMsg = data.i18nKey ? data.i18nKey : (data.message || i18n.global.t('error_generic'));
-        throw new Error(errorMsg);
+      const data = await response.json();
+      const options = { ...(data.options || {}) };
+      if (options.reason === null) {
+        options.reason = i18n.global.t('ban_reason_not_specified');
+      }
+      const errorMsg = data.i18nKey
+        ? i18n.global.t(data.i18nKey, options)
+        : (data.message || i18n.global.t('error_generic'));
+      throw new Error(errorMsg);
     }
   }
 
@@ -151,12 +157,20 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = data.user;
         isAuthenticated.value = true;
         return true;
+      } else {
+        const options = { ...(data.options || {}) };
+        if (options.reason === null) {
+          options.reason = i18n.global.t('ban_reason_not_specified');
+        }
+        const errorMsg = data.i18nKey
+          ? i18n.global.t(data.i18nKey, options)
+          : (data.message || i18n.global.t('error_generic'));
+        throw new Error(errorMsg);
       }
     } catch (e) {
       console.error(e);
-      return false;
+      throw e;
     }
-    return false;
   }
 
   async function unlinkTelegram() {

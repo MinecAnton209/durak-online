@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { io } from 'socket.io-client';
 import { getDeviceId } from "@/utils/deviceId.js";
-import {useGameStore} from "@/stores/game.js";
+import { useGameStore } from "@/stores/game.js";
 
 export const useSocketStore = defineStore('socket', {
   state: () => ({
@@ -23,8 +23,6 @@ export const useSocketStore = defineStore('socket', {
 
         const serverUrl = import.meta.env.VITE_API_URL || window.location.origin;
         const deviceId = await getDeviceId();
-
-        console.log('Connecting to socket...');
 
         this.socket = io(serverUrl, {
           withCredentials: true,

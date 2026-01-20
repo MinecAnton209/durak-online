@@ -69,12 +69,15 @@ const io = socketIo(server, {
     transports: ['websocket', 'polling'],
     allowEIO3: true
 });
+
+io.use(socketAttachUser);
 const onlineUsers = new Map();
 app.set('onlineUsers', onlineUsers);
 
 // Rate Limiter for Chat
 const chatSpamTracker = new Map();
 const CHAT_HISTORY_LIMIT = 50;
+const CHAT_PAGE_SIZE = 50;
 const globalChatHistory = [];
 
 global.globalChatSettings = {
@@ -1372,26 +1375,50 @@ io.on('connection', (socket) => {
             broadcastGameState(targetGameId);
 
         } else {
-            console.log(`[Reconnect] User not in game. Sending lobby state.`);
+            console.log(`[Reconnect] User not in game. Checking if can join...`);
+
+            // If game is not in waiting status, user cannot join
+            if (game.status !== 'waiting') {
+                console.log(`[Reconnect] Game ${targetGameId} is not in waiting status (${game.status})`);
+                return socket.emit('reconnectFailed', { i18nKey: 'error_lobby_not_found' });
+            }
+
+            // If game is full, user cannot join
+            if (Object.keys(game.players).length >= game.settings.maxPlayers) {
+                console.log(`[Reconnect] Game ${targetGameId} is full`);
+                return socket.emit('reconnectFailed', { i18nKey: 'error_room_full' });
+            }
+
+            // Check bet requirements
+            const betAmount = game.settings.betAmount || 0;
+            if (betAmount > 0) {
+                if (!sessionUser) {
+                    console.log(`[Reconnect] Guest cannot join game with bet`);
+                    return socket.emit('reconnectFailed', { i18nKey: 'error_guests_cannot_bet' });
+                }
+                if (sessionUser.coins < betAmount) {
+                    console.log(`[Reconnect] User doesn't have enough coins for bet`);
+                    return socket.emit('reconnectFailed', { i18nKey: 'error_not_enough_coins_join' });
+                }
+            }
+
+            // Add player to game
+            const playerName = sessionUser ? sessionUser.username : `Guest ${Math.floor(Math.random() * 1000)}`;
             socket.join(targetGameId);
+            addPlayerToGame(socket, game, playerName);
 
-            const playersForLobby = Object.values(game.players).map(p => ({
-                id: p.id,
-                name: p.name,
-                isVerified: p.isVerified,
-                streak: p.streak || 0,
-                rating: p.rating,
-                isHost: p.id === game.hostId,
-            }));
+            console.log(`[Reconnect] ${playerName} joined lobby ${targetGameId} via URL`);
 
-            socket.emit('lobbyStateUpdate', {
-                players: playersForLobby,
-                maxPlayers: game.settings.maxPlayers,
+            socket.emit('joinSuccess', { gameId: targetGameId, playerId: socket.id });
+
+            io.to(targetGameId).emit('lobbyStateUpdate', {
+                players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified })),
                 hostId: game.hostId,
+                maxPlayers: game.settings.maxPlayers,
                 settings: game.settings
             });
 
-            socket.emit('joinSuccess', { gameId: targetGameId, playerId: socket.id });
+            broadcastPublicLobbies();
         }
     });
     socket.on('getLobbyState', ({ gameId }) => {
@@ -2311,9 +2338,6 @@ io.on('connection', (socket) => {
 
             return socket.emit('systemMessage', { i18nKey: 'error_chat_spam_wait', options: { seconds: timeLeft }, type: 'warning' });
         }
-
-        userData.lastTime = now;
-        chatSpamTracker.set(sessionUser.id, userData);
 
         // Global Chat Settings (Simple in-memory for now, could move to DB)
         const slowModeInterval = global.globalChatSettings?.slowModeInterval || 0;

@@ -70,6 +70,23 @@ router.post('/auth', async (req, res) => {
             }
         }
 
+        if (user.is_banned) {
+            if (user.ban_until && new Date(user.ban_until) < new Date()) {
+                await dbRun('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
+                user.is_banned = 0;
+                user.ban_until = null;
+                user.ban_reason = null;
+            } else {
+                return res.status(403).json({
+                    i18nKey: user.ban_until ? 'error_account_temp_banned_with_reason' : 'error_account_banned_with_reason',
+                    options: {
+                        reason: user.ban_reason || null,
+                        until: user.ban_until ? new Date(user.ban_until).toLocaleString() : null
+                    }
+                });
+            }
+        }
+
         delete user.password;
         const jwtToken = signToken({
             id: user.id,
@@ -179,8 +196,10 @@ router.post('/widget-auth', async (req, res) => {
 
     if (!token) return res.status(500).json({ message: "Server config error" });
 
+    const { deviceId } = authData;
+
     const dataCheckString = Object.keys(authData)
-        .filter(key => key !== 'hash')
+        .filter(key => key !== 'hash' && key !== 'deviceId')
         .sort()
         .map(key => `${key}=${authData[key]}`)
         .join('\n');
@@ -217,10 +236,28 @@ router.post('/widget-auth', async (req, res) => {
             }
         }
 
+        if (user.is_banned) {
+            if (user.ban_until && new Date(user.ban_until) < new Date()) {
+                await dbRun('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
+                user.is_banned = 0;
+                user.ban_until = null;
+                user.ban_reason = null;
+            } else {
+                return res.status(403).json({
+                    i18nKey: user.ban_until ? 'error_account_temp_banned_with_reason' : 'error_account_banned_with_reason',
+                    options: {
+                        reason: user.ban_reason || null,
+                        until: user.ban_until ? new Date(user.ban_until).toLocaleString() : null
+                    }
+                });
+            }
+        }
+
         delete user.password;
         const jwtToken = signToken({
             id: user.id,
-            username: user.username
+            username: user.username,
+            isAdmin: !!user.is_admin
         });
         setAuthCookie(req, res, jwtToken);
 

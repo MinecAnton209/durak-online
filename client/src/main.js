@@ -15,12 +15,11 @@ window.onTelegramAuth = async (user) => {
   console.log("Telegram Auth Data (Widget):", user);
 
   const authStore = useAuthStore(pinia);
-  const success = await authStore.loginWithTelegramWidget(user);
-
-  if (success) {
+  try {
+    await authStore.loginWithTelegramWidget(user);
     window.location.reload();
-  } else {
-    alert('Error logging in via Telegram. Please try again.');
+  } catch (e) {
+    alert(e.message || 'Error logging in via Telegram. Please try again.');
   }
 };
 

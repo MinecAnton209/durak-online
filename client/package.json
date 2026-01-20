@@ -1,6 +1,6 @@
 {
   "name": "client",
-  "version": "3.1.0-pre-RC.1",
+  "version": "4.0.0-pre-RC.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -16,6 +16,7 @@
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^5.0.1",
     "@twa-dev/sdk": "^8.0.2",
+    "axios": "^1.13.2",
     "pinia": "^3.0.4",
     "socket.io-client": "^4.8.1",
     "uuid": "^13.0.0",

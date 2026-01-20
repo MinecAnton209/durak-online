@@ -103,10 +103,16 @@ export const useGameStore = defineStore('game', () => {
     });
 
     socket.on('joinSuccess', (data) => {
-      resetState();
+      // Only reset state if we're joining a different game
+      if (gameId.value && gameId.value !== data.gameId) {
+        resetState();
+      }
+
       gameId.value = data.gameId;
       playerId.value = data.playerId;
       gameStatus.value = 'lobby';
+      isDealing.value = false; // Ensure animation can trigger
+
       // Only navigate if we're not already on the lobby page
       if (router.currentRoute.value.params.id !== data.gameId) {
         router.push(`/lobby/${data.gameId}`);

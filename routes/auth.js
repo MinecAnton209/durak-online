@@ -101,7 +101,7 @@ router.post('/login', loginLimiter, async (req, res) => {
                         return res.status(403).json({
                             i18nKey: user.ban_until ? 'error_account_temp_banned_with_reason' : 'error_account_banned_with_reason',
                             options: {
-                                reason: user.ban_reason || 'Не вказано',
+                                reason: user.ban_reason || null,
                                 until: user.ban_until ? new Date(user.ban_until).toLocaleString() : null
                             }
                         });
@@ -159,7 +159,7 @@ router.get('/check-session', (req, res) => {
                 const diffTime = today - lastPlayed;
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-                if (diffDays > 1) {
+                if (diffDays > 1 && user.streak_count > 0) {
                     currentStreak = 0;
                     db.run(`UPDATE users SET streak_count = 0 WHERE id = ?`, [user.id], (updateErr) => {
                         if (updateErr) console.error("Error resetting streak for user:", user.id, updateErr.message);

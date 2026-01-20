@@ -1,6 +1,6 @@
 {
   "name": "durak",
-  "version": "3.1.0-pre-RC.1",
+  "version": "4.0.0-pre-RC.2",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -19,7 +19,7 @@
     "connect-sqlite3": "^0.9.15",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "dotenv": "^16.5.0",
+    "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
     "express-session": "^1.18.1",
@@ -30,12 +30,18 @@
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.2",
     "socket.io": "^4.8.1",
-    "sqlite3": "^5.1.7",
+    "sqlite3": "^5.0.2",
     "telegraf": "^4.16.3",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.0.0",
-    "@capacitor/core": "^8.0.0"
-  }
+    "@capacitor/cli": "^8.0.1",
+    "@capacitor/core": "^8.0.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "tar": "^7.5.3"
+    }
+  },
+  "packageManager": "pnpm@10.28.1+sha512.7d7dbbca9e99447b7c3bf7a73286afaaf6be99251eb9498baefa7d406892f67b879adb3a1d7e687fc4ccc1a388c7175fbaae567a26ab44d1067b54fcb0d6a316"
 }

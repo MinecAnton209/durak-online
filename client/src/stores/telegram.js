@@ -4,7 +4,7 @@ import WebApp from '@twa-dev/sdk';
 import { useToastStore } from './toast';
 import { useAuthStore } from './auth';
 import i18n from '@/i18n';
-import {getDeviceId} from "@/utils/deviceId.js";
+import { getDeviceId } from "@/utils/deviceId.js";
 
 export const useTelegramStore = defineStore('telegram', () => {
   const toast = useToastStore();
@@ -45,7 +45,10 @@ export const useTelegramStore = defineStore('telegram', () => {
         authStore.isAuthenticated = true;
         toast.addToast(i18n.global.t('hello_username', { username: data.user.username }), 'success');
       } else {
-        toast.addToast(data.message || i18n.global.t('error_generic'), 'error');
+        const errorMsg = data.i18nKey
+          ? i18n.global.t(data.i18nKey, data.options || {})
+          : (data.message || i18n.global.t('error_generic'));
+        toast.addToast(errorMsg, 'error');
       }
     } catch (e) {
       console.error("Telegram auto-login failed:", e);

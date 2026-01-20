@@ -109,7 +109,6 @@ function attachUserFromToken(req, _res, next) {
 
 function socketAttachUser(socket, next) {
     const deviceId = socket.handshake.auth?.deviceId;
-
     socket.deviceId = deviceId || 'unknown_device';
 
     const cookies = parseCookieHeader(socket.request.headers.cookie);
