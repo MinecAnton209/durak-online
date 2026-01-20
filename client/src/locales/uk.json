@@ -418,5 +418,12 @@
   "admin_unban_user": "Розбанити",
   "admin_temp_mute_user": "Тимчасовий мут",
   "admin_perm_mute_user": "Перманентний мут",
-  "admin_unmute_user": "Розблокувати чат"
+  "admin_unmute_user": "Розблокувати чат",
+  "settings_quick_game_title": "Налаштування швидкої гри",
+  "settings_quick_deck_size": "Розмір колоди",
+  "settings_quick_max_players": "Гравців",
+  "settings_quick_game_mode": "Режим гри",
+  "settings_quick_is_betting": "Гра на монети",
+  "settings_quick_bet_amount": "Ставка",
+  "settings_saved_success": "Налаштування успішно збережено!"
 }

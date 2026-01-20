@@ -123,6 +123,11 @@ router.post('/login', loginLimiter, async (req, res) => {
                     rating: user.rating,
                     card_back_style: user.card_back_style,
                     isVerified: user.is_verified,
+                    pref_quick_deck_size: user.pref_quick_deck_size,
+                    pref_quick_max_players: user.pref_quick_max_players,
+                    pref_quick_game_mode: user.pref_quick_game_mode,
+                    pref_quick_is_betting: user.pref_quick_is_betting,
+                    pref_quick_bet_amount: user.pref_quick_bet_amount
                 }
                 if (deviceId) {
                     await dbRun('UPDATE users SET device_id = ? WHERE id = ?', [deviceId, user.id]);
@@ -203,7 +208,12 @@ router.get('/check-session', (req, res) => {
                 ban_until: banUntil,
                 is_muted: isMuted,
                 mute_until: muteUntil,
-                rating: user.rating
+                rating: user.rating,
+                pref_quick_deck_size: user.pref_quick_deck_size,
+                pref_quick_max_players: user.pref_quick_max_players,
+                pref_quick_game_mode: user.pref_quick_game_mode,
+                pref_quick_is_betting: user.pref_quick_is_betting,
+                pref_quick_bet_amount: user.pref_quick_bet_amount
             };
             req.session = { user: sessionUser, save() { }, destroy() { } };
             res.status(200).json({ isLoggedIn: true, user: sessionUser });
@@ -221,15 +231,49 @@ router.post('/logout', (req, res) => {
 router.post('/update-settings', (req, res) => {
     const currentUser = req.session?.user;
     if (!currentUser) { return res.status(401).json({ message: 'Unauthorized' }); }
-    const { card_back_style } = req.body;
+
+    const {
+        card_back_style,
+        pref_quick_deck_size,
+        pref_quick_max_players,
+        pref_quick_game_mode,
+        pref_quick_is_betting,
+        pref_quick_bet_amount
+    } = req.body;
+
     const userId = currentUser.id;
-    const allowedStyles = ['default', 'red', 'blue', 'green', 'purple', 'gold'];
-    if (!allowedStyles.includes(card_back_style)) { return res.status(400).json({ message: 'Invalid style' }); }
-    const sql = `UPDATE users SET card_back_style = ? WHERE id = ?`;
-    db.run(sql, [card_back_style, userId], (err) => {
+
+    if (card_back_style) {
+        const allowedStyles = ['default', 'red', 'blue', 'green', 'purple', 'gold'];
+        if (!allowedStyles.includes(card_back_style)) { return res.status(400).json({ message: 'Invalid style' }); }
+    }
+
+    const sql = `UPDATE users SET 
+        card_back_style = COALESCE(?, card_back_style),
+        pref_quick_deck_size = COALESCE(?, pref_quick_deck_size),
+        pref_quick_max_players = COALESCE(?, pref_quick_max_players),
+        pref_quick_game_mode = COALESCE(?, pref_quick_game_mode),
+        pref_quick_is_betting = COALESCE(?, pref_quick_is_betting),
+        pref_quick_bet_amount = COALESCE(?, pref_quick_bet_amount)
+    WHERE id = ?`;
+
+    db.run(sql, [
+        card_back_style,
+        pref_quick_deck_size,
+        pref_quick_max_players,
+        pref_quick_game_mode,
+        pref_quick_is_betting,
+        pref_quick_bet_amount,
+        userId
+    ], (err) => {
         if (err) { console.error(err.message); return res.status(500).json({ message: 'Error updating settings' }); }
         if (req.session && req.session.user) {
-            req.session.user.card_back_style = card_back_style;
+            if (card_back_style) req.session.user.card_back_style = card_back_style;
+            if (pref_quick_deck_size !== undefined) req.session.user.pref_quick_deck_size = pref_quick_deck_size;
+            if (pref_quick_max_players !== undefined) req.session.user.pref_quick_max_players = pref_quick_max_players;
+            if (pref_quick_game_mode !== undefined) req.session.user.pref_quick_game_mode = pref_quick_game_mode;
+            if (pref_quick_is_betting !== undefined) req.session.user.pref_quick_is_betting = pref_quick_is_betting;
+            if (pref_quick_bet_amount !== undefined) req.session.user.pref_quick_bet_amount = pref_quick_bet_amount;
         }
         res.status(200).json({ message: 'Settings saved!' });
     });

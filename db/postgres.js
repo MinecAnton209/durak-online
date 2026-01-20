@@ -34,6 +34,11 @@ pool.query(`
         last_game_timestamp TIMESTAMPTZ,
         telegram_id text UNIQUE,
         is_shadow_banned BOOLEAN DEFAULT FALSE,
+        pref_quick_deck_size INTEGER DEFAULT 36,
+        pref_quick_max_players INTEGER DEFAULT 2,
+        pref_quick_game_mode text DEFAULT 'podkidnoy',
+        pref_quick_is_betting BOOLEAN DEFAULT FALSE,
+        pref_quick_bet_amount INTEGER DEFAULT 10,
         created_at TIMESTAMPTZ DEFAULT NOW()
         );
 `).then(() => console.log('Таблиця "users" в PostgreSQL готова до роботи з повною структурою.'))
@@ -353,10 +358,27 @@ pool.query(`
         THEN
             ALTER TABLE "users" ADD COLUMN last_daily_bonus_claim DATE;
         END IF;
+
+        -- Quick Game Preferences
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='pref_quick_deck_size') THEN
+            ALTER TABLE "users" ADD COLUMN pref_quick_deck_size INTEGER DEFAULT 36;
+        END IF;
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='pref_quick_max_players') THEN
+            ALTER TABLE "users" ADD COLUMN pref_quick_max_players INTEGER DEFAULT 2;
+        END IF;
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='pref_quick_game_mode') THEN
+            ALTER TABLE "users" ADD COLUMN pref_quick_game_mode TEXT DEFAULT 'podkidnoy';
+        END IF;
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='pref_quick_is_betting') THEN
+            ALTER TABLE "users" ADD COLUMN pref_quick_is_betting BOOLEAN DEFAULT FALSE;
+        END IF;
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='pref_quick_bet_amount') THEN
+            ALTER TABLE "users" ADD COLUMN pref_quick_bet_amount INTEGER DEFAULT 10;
+        END IF;
     END;
     $$;
-`).then(() => console.log('Перевірено наявність колонок coins та last_daily_bonus_claim в PostgreSQL.'))
-    .catch(err => console.error('Помилка при перевірці/додаванні колонок coins/last_daily_bonus_claim:', err.stack));
+`).then(() => console.log('Перевірено наявність колонок coins, last_daily_bonus_claim та налаштувань Quick Game в PostgreSQL.'))
+    .catch(err => console.error('Помилка при перевірці/додаванні колонок coins/last_daily_bonus_claim/quick_prefs:', err.stack));
 pool.query(`
     CREATE TABLE IF NOT EXISTS push_subscriptions (
         id SERIAL PRIMARY KEY,

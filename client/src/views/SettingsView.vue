@@ -21,6 +21,12 @@ const { t } = useI18n();
 const styles = ['default', 'red', 'blue', 'green', 'purple', 'gold'];
 const currentStyle = ref(authStore.user?.card_back_style || 'default');
 
+const quickDeckSize = ref(authStore.user?.pref_quick_deck_size || 36);
+const quickMaxPlayers = ref(authStore.user?.pref_quick_max_players || 2);
+const quickGameMode = ref(authStore.user?.pref_quick_game_mode || 'podkidnoy');
+const quickIsBetting = ref(authStore.user?.pref_quick_is_betting || false);
+const quickBetAmount = ref(authStore.user?.pref_quick_bet_amount || 10);
+
 const isAuthModalOpen = ref(false);
 const isUnlinkConfirmOpen = ref(false);
 
@@ -30,24 +36,38 @@ const confirmPassword = ref('');
 const isChangingPassword = ref(false);
 const isPasswordModalOpen = ref(false);
 
+const isSaving = ref(false);
+
 watch(() => authStore.user, (newUser) => {
-  if (newUser && newUser.card_back_style) {
-    currentStyle.value = newUser.card_back_style;
+  if (newUser) {
+    if (newUser.card_back_style) currentStyle.value = newUser.card_back_style;
+    if (newUser.pref_quick_deck_size) quickDeckSize.value = newUser.pref_quick_deck_size;
+    if (newUser.pref_quick_max_players) quickMaxPlayers.value = newUser.pref_quick_max_players;
+    if (newUser.pref_quick_game_mode) quickGameMode.value = newUser.pref_quick_game_mode;
+    if (newUser.pref_quick_is_betting !== undefined) quickIsBetting.value = newUser.pref_quick_is_betting;
+    if (newUser.pref_quick_bet_amount) quickBetAmount.value = newUser.pref_quick_bet_amount;
   }
 }, { immediate: true });
 
-const saveCardStyle = async (style) => {
+const saveSettings = async (updates) => {
   if (!authStore.isAuthenticated) {
     return toast.addToast(t('settings_login_required'), 'warning');
   }
 
-  currentStyle.value = style;
+  isSaving.value = true;
   try {
-    await authStore.updateSettings({ card_back_style: style })
-    toast.addToast(t('settings_style_saved'), 'success');
+    await authStore.updateSettings(updates)
+    toast.addToast(t('settings_saved_success'), 'success');
   } catch {
     toast.addToast(t('settings_connection_error'), 'error');
+  } finally {
+    isSaving.value = false;
   }
+};
+
+const saveCardStyle = (style) => {
+  currentStyle.value = style;
+  saveSettings({ card_back_style: style });
 };
 
 const toggleNotifications = () => {
@@ -170,6 +190,85 @@ watch(() => authStore.isAuthenticated, (val) => {
 
         <div v-else class="text-center text-sm text-on-surface-variant bg-white/5 p-3 rounded-xl max-w-sm mx-auto">
           {{ $t('open_via_telegram_hint') }}
+        </div>
+      </div>
+
+      <!-- Quick Game Defaults -->
+      <div class="mb-8 w-full border-t border-white/10 pt-6">
+        <h3 class="text-on-surface-variant mb-6 font-bold uppercase text-xs tracking-wider text-center">{{
+          $t('settings_quick_game_title') }}</h3>
+
+        <div class="space-y-6 max-w-md mx-auto">
+          <!-- Deck Size -->
+          <div class="space-y-2">
+            <label class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant ml-1">{{
+              $t('settings_quick_deck_size') }}</label>
+            <div class="flex bg-black/20 p-1 rounded-2xl border border-white/5">
+              <button v-for="size in [24, 36, 52]" :key="size"
+                @click="quickDeckSize = size; saveSettings({ pref_quick_deck_size: size })"
+                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all"
+                :class="quickDeckSize === size ? 'bg-primary text-on-primary shadow-lg' : 'text-on-surface-variant hover:text-white'">
+                {{ size }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Max Players -->
+          <div class="space-y-2">
+            <label class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant ml-1">{{
+              $t('settings_quick_max_players') }}</label>
+            <div class="flex bg-black/20 p-1 rounded-2xl border border-white/5">
+              <button v-for="count in [2, 3, 4]" :key="count"
+                @click="quickMaxPlayers = count; saveSettings({ pref_quick_max_players: count })"
+                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all"
+                :class="quickMaxPlayers === count ? 'bg-primary text-on-primary shadow-lg' : 'text-on-surface-variant hover:text-white'">
+                {{ count }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Game Mode -->
+          <div class="space-y-2">
+            <label class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant ml-1">{{
+              $t('settings_quick_game_mode') }}</label>
+            <div class="flex bg-black/20 p-1 rounded-2xl border border-white/5">
+              <button @click="quickGameMode = 'podkidnoy'; saveSettings({ pref_quick_game_mode: 'podkidnoy' })"
+                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all"
+                :class="quickGameMode === 'podkidnoy' ? 'bg-primary text-on-primary shadow-lg' : 'text-on-surface-variant hover:text-white'">
+                {{ $t('game_mode_podkidnoy') }}
+              </button>
+              <button @click="quickGameMode = 'perevodnoy'; saveSettings({ pref_quick_game_mode: 'perevodnoy' })"
+                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all"
+                :class="quickGameMode === 'perevodnoy' ? 'bg-primary text-on-primary shadow-lg' : 'text-on-surface-variant hover:text-white'">
+                {{ $t('game_mode_perevodnoy') }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Betting -->
+          <div class="flex items-center justify-between bg-black/20 p-4 rounded-2xl border border-white/5">
+            <div>
+              <p class="font-bold text-white text-sm">{{ $t('settings_quick_is_betting') }}</p>
+              <p class="text-[10px] text-on-surface-variant uppercase font-bold tracking-tighter">{{
+                $t('bet_toggle_sublabel') }}</p>
+            </div>
+            <button @click="quickIsBetting = !quickIsBetting; saveSettings({ pref_quick_is_betting: quickIsBetting })"
+              class="w-14 h-7 rounded-full transition-all relative p-1"
+              :class="quickIsBetting ? 'bg-primary' : 'bg-white/10'">
+              <div class="w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300"
+                :class="quickIsBetting ? 'translate-x-7' : 'translate-x-0'"></div>
+            </button>
+          </div>
+
+          <!-- Bet Amount -->
+          <div v-if="quickIsBetting" class="space-y-2 animate-fade-in">
+            <label
+              class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant ml-1 text-center block w-full">{{
+                $t('settings_quick_bet_amount') }}: {{ quickBetAmount }} 💰</label>
+            <input type="range" v-model.number="quickBetAmount" min="10" max="1000" step="10"
+              @change="saveSettings({ pref_quick_bet_amount: quickBetAmount })"
+              class="w-full accent-primary bg-white/10 rounded-lg h-2" />
+          </div>
         </div>
       </div>
 

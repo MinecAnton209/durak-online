@@ -27,12 +27,12 @@ const isJoiningCode = ref(false);
 let syncInterval = null;
 
 const lobbyType = ref('public');
-const maxPlayers = ref(2);
-const deckSize = ref(36);
-const gameMode = ref('podkidnoy');
+const maxPlayers = ref(authStore.user?.pref_quick_max_players || 2);
+const deckSize = ref(authStore.user?.pref_quick_deck_size || 36);
+const gameMode = ref(authStore.user?.pref_quick_game_mode || 'podkidnoy');
 const turnDuration = ref(60);
-const isBetting = ref(false);
-const betAmount = ref(10);
+const isBetting = ref(authStore.user?.pref_quick_is_betting || false);
+const betAmount = ref(authStore.user?.pref_quick_bet_amount || 10);
 
 const isAuthModalOpen = ref(false);
 const authMode = ref('login');
@@ -206,33 +206,33 @@ function createLobby() {
           <div v-if="activeTab === 'create'" class="flex flex-col gap-5 animate-fade-in">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('lobby_type')
-              }}</label><select v-model="lobbyType"
+                  }}</label><select v-model="lobbyType"
                   class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
                   <option value="public" class="bg-surface text-black">{{ $t('lobby_public') }}</option>
                   <option value="private" class="bg-surface text-black">{{ $t('lobby_private') }}</option>
                 </select></div>
               <div><label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('players_count_label')
-              }}</label><select v-model="maxPlayers"
+                  }}</label><select v-model="maxPlayers"
                   class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
                   <option value="2" class="bg-surface text-black">2</option>
                   <option value="3" class="bg-surface text-black">3</option>
                   <option value="4" class="bg-surface text-black">4</option>
                 </select></div>
               <div><label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('deck_size_label')
-              }}</label><select v-model="deckSize"
+                  }}</label><select v-model="deckSize"
                   class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
                   <option value="24" class="bg-surface text-black">24</option>
                   <option value="36" class="bg-surface text-black">36</option>
                   <option value="52" class="bg-surface text-black">52</option>
                 </select></div>
               <div><label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('game_mode_label')
-              }}</label><select v-model="gameMode"
+                  }}</label><select v-model="gameMode"
                   class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
                   <option value="podkidnoy" class="bg-surface text-black">{{ $t('game_mode_podkidnoy') }}</option>
                   <option value="perevodnoy" class="bg-surface text-black">{{ $t('game_mode_perevodnoy') }}</option>
                 </select></div>
               <div><label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('time_limit_label')
-              }}</label><select v-model="turnDuration"
+                  }}</label><select v-model="turnDuration"
                   class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
                   <option :value="15" class="bg-surface text-black">{{ $t('time_15s') }}</option>
                   <option :value="30" class="bg-surface text-black">{{ $t('time_30s') }}</option>
@@ -358,33 +358,33 @@ function createLobby() {
           <div v-if="activeTab === 'create'" class="flex flex-col gap-5 animate-fade-in">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('lobby_type')
-              }}</label><select v-model="lobbyType"
+                  }}</label><select v-model="lobbyType"
                   class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
                   <option value="public" class="bg-surface text-black">{{ $t('lobby_public') }}</option>
                   <option value="private" class="bg-surface text-black">{{ $t('lobby_private') }}</option>
                 </select></div>
               <div><label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('players_count_label')
-              }}</label><select v-model="maxPlayers"
+                  }}</label><select v-model="maxPlayers"
                   class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
                   <option value="2" class="bg-surface text-black">2</option>
                   <option value="3" class="bg-surface text-black">3</option>
                   <option value="4" class="bg-surface text-black">4</option>
                 </select></div>
               <div><label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('deck_size_label')
-              }}</label><select v-model="deckSize"
+                  }}</label><select v-model="deckSize"
                   class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
                   <option value="24" class="bg-surface text-black">24</option>
                   <option value="36" class="bg-surface text-black">36</option>
                   <option value="52" class="bg-surface text-black">52</option>
                 </select></div>
               <div><label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('game_mode_label')
-              }}</label><select v-model="gameMode"
+                  }}</label><select v-model="gameMode"
                   class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
                   <option value="podkidnoy" class="bg-surface text-black">{{ $t('game_mode_podkidnoy') }}</option>
                   <option value="perevodnoy" class="bg-surface text-black">{{ $t('game_mode_perevodnoy') }}</option>
                 </select></div>
               <div><label class="text-xs font-bold text-on-surface-variant uppercase ml-1">{{ $t('time_limit_label')
-              }}</label><select v-model="turnDuration"
+                  }}</label><select v-model="turnDuration"
                   class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 mt-1 text-on-surface focus:outline-none focus:border-primary cursor-pointer appearance-none">
                   <option :value="15" class="bg-surface text-black">{{ $t('time_15s') }}</option>
                   <option :value="30" class="bg-surface text-black">{{ $t('time_30s') }}</option>

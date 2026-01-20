@@ -418,5 +418,12 @@
   "admin_unban_user": "Разбанить",
   "admin_temp_mute_user": "Временный мут",
   "admin_perm_mute_user": "Перманентный мут",
-  "admin_unmute_user": "Размутить"
+  "admin_unmute_user": "Размутить",
+  "settings_quick_game_title": "Настройки быстрой игры",
+  "settings_quick_deck_size": "Размер колоды",
+  "settings_quick_max_players": "Игроков",
+  "settings_quick_game_mode": "Режим игры",
+  "settings_quick_is_betting": "Игра на монеты",
+  "settings_quick_bet_amount": "Ставка",
+  "settings_saved_success": "Настройки успешно сохранены!"
 }

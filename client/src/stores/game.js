@@ -269,11 +269,53 @@ export const useGameStore = defineStore('game', () => {
       if (!response.ok) throw new Error('Network error');
 
       const lobbies = await response.json();
-      const suitableLobby = lobbies.find(lobby => lobby.playerCount < lobby.maxPlayers && lobby.maxPlayers >= 2 && lobby.maxPlayers <= 4);
 
-      if (suitableLobby) joinLobby({ gameId: suitableLobby.gameId, playerName: guestName });
-      else createLobby({ lobbyType: 'public', maxPlayers: 2, deckSize: 36, betAmount: 0, gameMode: 'podkidnoy', turnDuration: 60, playerName: guestName });
-    } catch (error) { toast.addToast(i18n.global.t('error_finding_game'), 'error'); }
+      // Get user preferences (Guest uses standard defaults)
+      const prefs = authStore.user || {};
+      const targetDeck = prefs.pref_quick_deck_size || 36;
+      const targetPlayers = prefs.pref_quick_max_players || 2;
+      const targetMode = prefs.pref_quick_game_mode || 'podkidnoy';
+      const targetBet = prefs.pref_quick_is_betting ? (prefs.pref_quick_bet_amount || 10) : 0;
+
+      // 1. Try to find an EXACT match (mode, settings, and betting status)
+      const exactMatch = lobbies.find(lobby =>
+        lobby.playerCount < lobby.maxPlayers &&
+        lobby.deckSize === targetDeck &&
+        lobby.maxPlayers === targetPlayers &&
+        lobby.gameMode === targetMode &&
+        (targetBet > 0 ? (lobby.betAmount > 0) : (lobby.betAmount === 0))
+      );
+
+      if (exactMatch) {
+        joinLobby({ gameId: exactMatch.gameId, playerName: guestName });
+        return;
+      }
+
+      // 2. Try to find ANY suitable lobby if no exact match is found
+      const anySuitable = lobbies.find(lobby =>
+        lobby.playerCount < lobby.maxPlayers &&
+        (targetBet > 0 ? (lobby.betAmount > 0) : (lobby.betAmount === 0))
+      );
+
+      if (anySuitable) {
+        joinLobby({ gameId: anySuitable.gameId, playerName: guestName });
+        return;
+      }
+
+      // 3. Create a new lobby with user's settings if no existing one matches
+      createLobby({
+        lobbyType: 'public',
+        maxPlayers: targetPlayers,
+        deckSize: targetDeck,
+        betAmount: targetBet,
+        gameMode: targetMode,
+        turnDuration: 60,
+        playerName: guestName
+      });
+    } catch (error) {
+      console.error('Quick Play Error:', error);
+      toast.addToast(i18n.global.t('error_finding_game'), 'error');
+    }
   }
 
   function attemptReconnect(targetGameId = null) {

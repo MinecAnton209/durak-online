@@ -419,5 +419,12 @@
   "admin_unban_user": "Unban User",
   "admin_temp_mute_user": "Temp Mute User",
   "admin_perm_mute_user": "Permanent Mute User",
-  "admin_unmute_user": "Unmute User"
+  "admin_unmute_user": "Unmute User",
+  "settings_quick_game_title": "Quick Game Defaults",
+  "settings_quick_deck_size": "Deck Size",
+  "settings_quick_max_players": "Players",
+  "settings_quick_game_mode": "Game Mode",
+  "settings_quick_is_betting": "Betting Game",
+  "settings_quick_bet_amount": "Bet Amount",
+  "settings_saved_success": "Settings saved successfully!"
 }

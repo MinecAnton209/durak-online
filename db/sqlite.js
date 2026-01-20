@@ -36,6 +36,11 @@ const db = new sqlite3.Database(dbPath, (err) => {
                                                  last_game_timestamp TEXT,
                                                  telegram_id TEXT UNIQUE,
                                                  is_shadow_banned BOOLEAN DEFAULT FALSE,
+                                                 pref_quick_deck_size INTEGER DEFAULT 36,
+                                                 pref_quick_max_players INTEGER DEFAULT 2,
+                                                 pref_quick_game_mode TEXT DEFAULT 'podkidnoy',
+                                                 pref_quick_is_betting BOOLEAN DEFAULT FALSE,
+                                                 pref_quick_bet_amount INTEGER DEFAULT 10,
                                                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `, (err) => {
@@ -253,7 +258,12 @@ function runUsersMigrations() {
         { column: 'telegram_id', type: 'TEXT', options: '' },
         { column: 'device_id', type: 'TEXT', options: '' },
         { column: 'mute_until', type: 'TIMESTAMP', options: '' },
-        { column: 'ban_until', type: 'TIMESTAMP', options: '' }
+        { column: 'ban_until', type: 'TIMESTAMP', options: '' },
+        { column: 'pref_quick_deck_size', type: 'INTEGER', options: 'DEFAULT 36' },
+        { column: 'pref_quick_max_players', type: 'INTEGER', options: 'DEFAULT 2' },
+        { column: 'pref_quick_game_mode', type: 'TEXT', options: "DEFAULT 'podkidnoy'" },
+        { column: 'pref_quick_is_betting', type: 'BOOLEAN', options: 'DEFAULT FALSE' },
+        { column: 'pref_quick_bet_amount', type: 'INTEGER', options: 'DEFAULT 10' }
     ];
     db.all(`PRAGMA table_info(users);`, [], (err, columns) => {
         if (err) {
