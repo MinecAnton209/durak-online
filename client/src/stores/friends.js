@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { useSocketStore } from './socket';
 import { useToastStore } from './toast';
 import i18n from '@/i18n';
+import { getApiUrl } from '@/utils/api';
 import { useRouter } from 'vue-router';
 
 export const useFriendsStore = defineStore('friends', () => {
@@ -21,7 +22,7 @@ export const useFriendsStore = defineStore('friends', () => {
 
   async function fetchFriends() {
     try {
-      const res = await fetch('/api/friends/');
+      const res = await fetch(getApiUrl('/api/friends/'));
       if (res.ok) {
         const data = await res.json();
         friends.value = data.accepted || [];
@@ -42,7 +43,7 @@ export const useFriendsStore = defineStore('friends', () => {
     if (!query || query.length < 2) return;
 
     try {
-      const res = await fetch(`/api/friends/search?nickname=${encodeURIComponent(query)}`);
+      const res = await fetch(getApiUrl(`/api/friends/search?nickname=${encodeURIComponent(query)}`));
       if (res.ok) {
         searchResults.value = await res.json();
       }
@@ -53,7 +54,7 @@ export const useFriendsStore = defineStore('friends', () => {
 
   async function sendRequest(userId) {
     try {
-      const res = await fetch('/api/friends/request', {
+      const res = await fetch(getApiUrl('/api/friends/request'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ toUserId: userId })
@@ -75,7 +76,7 @@ export const useFriendsStore = defineStore('friends', () => {
 
   async function acceptRequest(userId) {
     try {
-      const res = await fetch('/api/friends/accept', {
+      const res = await fetch(getApiUrl('/api/friends/accept'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fromUserId: userId })
@@ -90,7 +91,7 @@ export const useFriendsStore = defineStore('friends', () => {
 
   async function removeFriend(userId) {
     try {
-      const res = await fetch('/api/friends/remove', {
+      const res = await fetch(getApiUrl('/api/friends/remove'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ otherUserId: userId })

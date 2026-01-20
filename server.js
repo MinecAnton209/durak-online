@@ -43,6 +43,8 @@ dbRun("UPDATE games SET status = 'cancelled' WHERE status = 'waiting'")
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
+    'http://localhost',
+    'capacitor://localhost',
     'https://durak.minecanton209.pp.ua',
     'https://durak.crushtalm.pp.ua'
 ];
@@ -62,7 +64,13 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: {
-        origin: allowedOrigins,
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin) || /^http:\/\/(192\.168|10|172\.(1[6-9]|2[0-9]|3[0-1]))\.\d+\.\d+/.test(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         methods: ["GET", "POST"],
         credentials: true
     },
@@ -182,11 +190,17 @@ app.use(cors({
     origin: function (origin, callback) {
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.indexOf(origin) === -1) {
-            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+        const isLocalIp = /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin) ||
+            /^http:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/.test(origin) ||
+            /^http:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+(:\d+)?$/.test(origin);
+
+        if (allowedOrigins.indexOf(origin) !== -1 || isLocalIp) {
+            return callback(null, true);
+        } else {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin: ' + origin;
+            console.warn(msg);
             return callback(new Error(msg), false);
         }
-        return callback(null, true);
     },
     credentials: true
 }));

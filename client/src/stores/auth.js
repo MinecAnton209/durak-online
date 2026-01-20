@@ -4,6 +4,7 @@ import WebApp from '@twa-dev/sdk';
 import { useToastStore } from './toast';
 import i18n from '@/i18n';
 import { getDeviceId } from '@/utils/deviceId';
+import { getApiUrl } from '@/utils/api';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null);
@@ -20,7 +21,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthChecking.value = true;
     try {
       const token = getTokenFromCookies()
-      const response = await fetch('/check-session', {
+      const response = await fetch(getApiUrl('/check-session'), {
         credentials: 'include',
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
@@ -42,7 +43,7 @@ export const useAuthStore = defineStore('auth', () => {
     const endpoint = mode === 'login' ? '/login' : '/register';
     const deviceId = await getDeviceId();
 
-    const response = await fetch(endpoint, {
+    const response = await fetch(getApiUrl(endpoint), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -50,23 +51,23 @@ export const useAuthStore = defineStore('auth', () => {
     });
 
     if (response.ok) {
-        const data = await response.json();
-        if (data.user) {
-          user.value = data.user;
-          isAuthenticated.value = true;
-        }
-        return data;
+      const data = await response.json();
+      if (data.user) {
+        user.value = data.user;
+        isAuthenticated.value = true;
+      }
+      return data;
     } else {
-        const data = await response.json();
-        const errorMsg = data.i18nKey ? data.i18nKey : (data.message || i18n.global.t('error_generic'));
-        throw new Error(errorMsg);
+      const data = await response.json();
+      const errorMsg = data.i18nKey ? data.i18nKey : (data.message || i18n.global.t('error_generic'));
+      throw new Error(errorMsg);
     }
   }
 
   async function logout() {
     try {
       const token = getTokenFromCookies()
-      await fetch('/logout', {
+      await fetch(getApiUrl('/logout'), {
         method: 'POST',
         credentials: 'include',
         headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -82,7 +83,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function changePassword({ currentPassword, newPassword }) {
     try {
       const token = getTokenFromCookies()
-      const response = await fetch('/change-password', {
+      const response = await fetch(getApiUrl('/change-password'), {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -113,7 +114,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function updateSettings(settings) {
     try {
       const token = getTokenFromCookies()
-      const response = await fetch('/update-settings', {
+      const response = await fetch(getApiUrl('/update-settings'), {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -135,7 +136,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const token = getTokenFromCookies()
       const deviceId = await getDeviceId();
-      const response = await fetch('/api/telegram/widget-auth', {
+      const response = await fetch(getApiUrl('/api/telegram/widget-auth'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -162,7 +163,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function unlinkTelegram() {
     try {
       const token = getTokenFromCookies()
-      const res = await fetch('/api/telegram/unlink', {
+      const res = await fetch(getApiUrl('/api/telegram/unlink'), {
         method: 'POST',
         credentials: 'include',
         headers: {

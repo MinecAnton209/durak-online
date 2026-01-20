@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { useToastStore } from './toast';
 import i18n from '@/i18n';
+import { getApiUrl } from '@/utils/api';
 
 export const useNotificationStore = defineStore('notifications', () => {
   const toast = useToastStore();
@@ -38,7 +39,7 @@ export const useNotificationStore = defineStore('notifications', () => {
     isLoading.value = true;
 
     try {
-      const response = await fetch('/api/notifications/vapid-public-key');
+      const response = await fetch(getApiUrl('/api/notifications/vapid-public-key'));
       if (!response.ok) throw new Error(i18n.global.t('notifications_vapid_error'));
       const vapidPublicKey = await response.text();
 
@@ -48,7 +49,7 @@ export const useNotificationStore = defineStore('notifications', () => {
         applicationServerKey: convertedKey
       });
 
-      const saveRes = await fetch('/api/notifications/subscribe', {
+      const saveRes = await fetch(getApiUrl('/api/notifications/subscribe'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(subscription)
@@ -81,7 +82,7 @@ export const useNotificationStore = defineStore('notifications', () => {
       const subscription = await swRegistration.pushManager.getSubscription();
       if (subscription) {
         await subscription.unsubscribe();
-        await fetch('/api/notifications/unsubscribe', { method: 'POST' });
+        await fetch(getApiUrl('/api/notifications/unsubscribe'), { method: 'POST' });
 
         isSubscribed.value = false;
         toast.addToast(i18n.global.t('notifications_disabled'), 'info');

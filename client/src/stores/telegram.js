@@ -4,7 +4,8 @@ import WebApp from '@twa-dev/sdk';
 import { useToastStore } from './toast';
 import { useAuthStore } from './auth';
 import i18n from '@/i18n';
-import {getDeviceId} from "@/utils/deviceId.js";
+import { getDeviceId } from "@/utils/deviceId.js";
+import { getApiUrl } from '@/utils/api';
 
 export const useTelegramStore = defineStore('telegram', () => {
   const toast = useToastStore();
@@ -33,7 +34,7 @@ export const useTelegramStore = defineStore('telegram', () => {
     authStore.isAuthChecking = true;
     try {
       const devId = await getDeviceId();
-      const res = await fetch('/api/telegram/auth', {
+      const res = await fetch(getApiUrl('/api/telegram/auth'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -68,7 +69,7 @@ export const useTelegramStore = defineStore('telegram', () => {
     }
 
     try {
-      const res = await fetch('/api/telegram/link', {
+      const res = await fetch(getApiUrl('/api/telegram/link'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -111,7 +112,7 @@ export const useTelegramStore = defineStore('telegram', () => {
     }
 
     try {
-      const res = await fetch('/api/telegram/unlink', {
+      const res = await fetch(getApiUrl('/api/telegram/unlink'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'
