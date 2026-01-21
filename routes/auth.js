@@ -2,8 +2,10 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const db = require('../db');
 const util = require('util');
+const crypto = require('crypto');
 const dbRun = util.promisify(db.run.bind(db));
 const dbGet = util.promisify(db.get.bind(db));
+const dbAll = util.promisify(db.all.bind(db));
 const router = express.Router();
 const { signToken, setAuthCookie, clearAuthCookie } = require('../middlewares/jwtAuth');
 const { validateUsername, validatePassword } = require('../utils/validation');
@@ -27,6 +29,54 @@ async function checkDeviceBan(deviceId) {
         console.error('Device ban check error:', e);
     }
     return null;
+}
+
+async function recordDeviceActivity(userId, deviceId, req, isLogin = false) {
+    if (!deviceId) return;
+
+    try {
+        const ua = req.headers['user-agent'] || 'Unknown';
+        const chModel = req.get('Sec-CH-UA-Model') ? req.get('Sec-CH-UA-Model').replace(/"/g, '') : null;
+        const chPlatformVersion = req.get('Sec-CH-UA-Platform-Version') ? req.get('Sec-CH-UA-Platform-Version').replace(/"/g, '') : null;
+        const chMobile = req.get('Sec-CH-UA-Mobile') ? (req.get('Sec-CH-UA-Mobile') === '?1') : false;
+        const now = new Date().toISOString();
+
+        // 1. Update/Insert known_devices
+        const existingDevice = await dbGet('SELECT * FROM known_devices WHERE id = ?', [deviceId]);
+        if (existingDevice) {
+            await dbRun(
+                `UPDATE known_devices SET 
+                    last_seen = ?, 
+                    login_count = login_count + ?, 
+                    user_agent = ?, 
+                    device_model = COALESCE(?, device_model), 
+                    platform_version = COALESCE(?, platform_version), 
+                    is_mobile = ? 
+                WHERE id = ?`,
+                [now, isLogin ? 1 : 0, ua, chModel, chPlatformVersion, chMobile, deviceId]
+            );
+        } else {
+            await dbRun(
+                'INSERT INTO known_devices (id, user_agent, first_seen, last_seen, login_count, device_model, platform_version, is_mobile) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [deviceId, ua, now, now, isLogin ? 1 : 1, chModel, chPlatformVersion, chMobile]
+            );
+        }
+
+        // 2. Link User to Device
+        if (userId) {
+            const existingLink = await dbGet('SELECT * FROM user_devices WHERE user_id = ? AND device_id = ?', [userId, deviceId]);
+            if (existingLink) {
+                await dbRun('UPDATE user_devices SET last_used = ? WHERE user_id = ? AND device_id = ?', [now, userId, deviceId]);
+            } else {
+                await dbRun('INSERT INTO user_devices (user_id, device_id, last_used) VALUES (?, ?, ?)', [userId, deviceId, now]);
+            }
+
+            // Sync user's device_id in the main users table if needed
+            await dbRun('UPDATE users SET device_id = ? WHERE id = ?', [deviceId, userId]);
+        }
+    } catch (e) {
+        console.error('Error tracking device activity:', e);
+    }
 }
 
 router.post('/register', registerLimiter, async (req, res) => {
@@ -107,6 +157,28 @@ router.post('/login', loginLimiter, async (req, res) => {
                         });
                     }
                 }
+
+                // Session Management
+                const sessionId = crypto.randomUUID();
+                const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+                const ua = req.headers['user-agent'] || 'Unknown';
+                let location = 'Unknown';
+
+                try {
+                    // Try fetch location (fire and forget logic or swift await)
+                    // Simple free service
+                    const locRes = await fetch(`http://ip-api.com/json/${ip.split(',')[0].trim()}?fields=status,country,city`).then(r => r.json()).catch(() => null);
+                    if (locRes && locRes.status === 'success') {
+                        location = `${locRes.city}, ${locRes.country}`;
+                    }
+                } catch (e) { }
+
+                await dbRun('INSERT INTO active_sessions (id, user_id, device_info, ip_address, location) VALUES (?, ?, ?, ?, ?)',
+                    [sessionId, user.id, ua, ip, location]);
+
+                // Track Device Activity
+                await recordDeviceActivity(user.id, deviceId, req, true);
+
                 const payload = {
                     id: user.id,
                     username: user.username,
@@ -127,7 +199,8 @@ router.post('/login', loginLimiter, async (req, res) => {
                     pref_quick_max_players: user.pref_quick_max_players,
                     pref_quick_game_mode: user.pref_quick_game_mode,
                     pref_quick_is_betting: user.pref_quick_is_betting,
-                    pref_quick_bet_amount: user.pref_quick_bet_amount
+                    pref_quick_bet_amount: user.pref_quick_bet_amount,
+                    sessionId: sessionId // Add Session ID
                 }
                 if (deviceId) {
                     await dbRun('UPDATE users SET device_id = ? WHERE id = ?', [deviceId, user.id]);
@@ -146,11 +219,90 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 });
 
-router.get('/check-session', (req, res) => {
+router.get('/sessions', async (req, res) => {
+    const currentUser = req.session?.user;
+    if (!currentUser) return res.status(401).json({ message: 'Unauthorized' });
+
+    try {
+        const sessions = await dbAll('SELECT * FROM active_sessions WHERE user_id = ? ORDER BY last_active DESC', [currentUser.id]);
+
+        const result = sessions.map(s => ({
+            id: s.id,
+            device: s.device_info,
+            ip: s.ip_address,
+            location: s.location,
+            last_active: s.last_active,
+            created_at: s.created_at,
+            is_current: s.id === currentUser.sessionId
+        }));
+        res.json(result);
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ message: 'Error fetching sessions' });
+    }
+});
+
+router.delete('/sessions/:id', async (req, res) => {
+    const currentUser = req.session?.user;
+    if (!currentUser) return res.status(401).json({ message: 'Unauthorized' });
+
+    const targetId = req.params.id;
+
+    // Self-termination is allowed (Logout).
+
+    try {
+        const targetSession = await dbGet('SELECT * FROM active_sessions WHERE id = ?', [targetId]);
+        const currentSession = await dbGet('SELECT * FROM active_sessions WHERE id = ?', [currentUser.sessionId]);
+
+        if (!targetSession) return res.status(404).json({ message: 'Session not found' });
+        if (targetSession.user_id !== currentUser.id) return res.status(403).json({ message: 'Forbidden' });
+
+        if (targetId !== currentUser.sessionId) {
+            // Check ages
+            const targetCreated = new Date(targetSession.created_at);
+            const currentCreated = new Date(currentSession ? currentSession.created_at : 0); // If current missing, assume very old or broken
+
+            // If current is NEWER than target (created AFTER target), BLOCK
+            // "Cannot terminate older sessions" -> if I am newer, I cannot kill older.
+            // If currentCreated > targetCreated -> I am newer.
+            if (currentCreated > targetCreated) {
+                return res.status(403).json({
+                    message: 'New sessions cannot terminate older sessions.',
+                    i18nKey: 'error_session_terminate_too_new'
+                });
+            }
+        }
+
+        await dbRun('DELETE FROM active_sessions WHERE id = ?', [targetId]);
+        res.json({ message: 'Session terminated' });
+
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ message: 'Error terminating session' });
+    }
+});
+
+router.get('/check-session', async (req, res) => {
     const currentUser = req.session?.user || null;
+    const deviceId = req.query.deviceId;
+
     if (currentUser && currentUser.id) {
+        // Update device stats on session check to ensure we always have up-to-date data
+        if (deviceId) {
+            const deviceBanReason = await checkDeviceBan(deviceId);
+            if (deviceBanReason) {
+                return res.status(403).json({
+                    isLoggedIn: false,
+                    message: 'Your device is banned.',
+                    i18nKey: 'error_device_banned',
+                    options: { reason: deviceBanReason }
+                });
+            }
+            await recordDeviceActivity(currentUser.id, deviceId, req, false);
+        }
+
         const sql = `SELECT * FROM users WHERE id = ?`;
-        db.get(sql, [currentUser.id], (err, user) => {
+        db.get(sql, [currentUser.id], async (err, user) => {
             if (err || !user) { return res.status(200).json({ isLoggedIn: false }); }
 
             const today = new Date();
@@ -166,10 +318,7 @@ router.get('/check-session', (req, res) => {
 
                 if (diffDays > 1 && user.streak_count > 0) {
                     currentStreak = 0;
-                    db.run(`UPDATE users SET streak_count = 0 WHERE id = ?`, [user.id], (updateErr) => {
-                        if (updateErr) console.error("Error resetting streak for user:", user.id, updateErr.message);
-                        else console.log(`Streak for user ${user.username} (ID: ${user.id}) reset due to inactivity.`);
-                    });
+                    await dbRun(`UPDATE users SET streak_count = 0 WHERE id = ?`, [user.id]).catch(e => console.error(e));
                 }
             }
 
@@ -179,7 +328,7 @@ router.get('/check-session', (req, res) => {
             if (isMuted && muteUntil && new Date(muteUntil) < new Date()) {
                 isMuted = false;
                 muteUntil = null;
-                db.run('UPDATE users SET is_muted = 0, mute_until = NULL WHERE id = ?', [user.id]);
+                await dbRun('UPDATE users SET is_muted = 0, mute_until = NULL WHERE id = ?', [user.id]).catch(e => console.error(e));
             }
 
             let isBanned = user.is_banned;
@@ -190,7 +339,7 @@ router.get('/check-session', (req, res) => {
                 isBanned = false;
                 banUntil = null;
                 banReason = null;
-                db.run('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
+                await dbRun('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]).catch(e => console.error(e));
             }
 
             const sessionUser = {

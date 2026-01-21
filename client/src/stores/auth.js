@@ -20,7 +20,8 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthChecking.value = true;
     try {
       const token = getTokenFromCookies()
-      const response = await fetch('/check-session', {
+      const deviceId = await getDeviceId();
+      const response = await fetch(`/check-session?deviceId=${deviceId}`, {
         credentials: 'include',
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });

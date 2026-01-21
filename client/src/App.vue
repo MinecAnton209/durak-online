@@ -103,6 +103,13 @@ onMounted(async () => {
         toastStore.addToast(content, type, 5000);
       }
     });
+
+    socketStore.socket.on('sessionTerminated', () => {
+      const toastStore = useToastStore();
+      toastStore.addToast(t('error_session_terminated_admin'), 'error', 10000);
+      authStore.logout();
+      router.push('/');
+    });
   } catch (error) {
     console.error("Socket connection failed in App.vue:", error);
   }
@@ -132,7 +139,7 @@ const handleBanClose = () => {
   <BanModal :is-open="isBanned" :reason="banReason" @close="handleBanClose" />
 
   <div v-if="maintenanceMsg"
-    class="fixed top-0 left-0 w-full bg-orange-500 text-black font-bold text-center py-2 px-4 z-[10000] animate-slide-down shadow-lg">
+    class="fixed top-0 left-0 w-full bg-orange-500 text-black font-bold text-center py-2 px-8 z-[10000] animate-slide-down shadow-lg break-words">
     ⚠️ {{ maintenanceMsg }}
   </div>
 </template>

@@ -195,6 +195,9 @@ achievementService.init(io);
 app.set('trust proxy', 1);
 
 app.use((req, res, next) => {
+    res.set('Accept-CH', 'Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version, Sec-CH-UA-Model');
+    res.set('Critical-CH', 'Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version, Sec-CH-UA-Model');
+
     const maintenanceMode = req.app.get('maintenanceMode');
 
     if (maintenanceMode.enabled) {
@@ -1129,8 +1132,10 @@ io.on('connection', (socket) => {
     const session = socket.request.session;
     const sessionUser = session?.user;
     if (sessionUser && sessionUser.id) {
-        onlineUsers.set(parseInt(sessionUser.id, 10), socket.id);
         const userId = parseInt(sessionUser.id, 10);
+        onlineUsers.set(userId, socket.id);
+        socket.join(`user_${userId}`); // Join user-specific room
+
         economyService.checkAndAwardDailyBonus(userId, io, socket.id);
         console.log(`[Online Status] User connected: ${sessionUser.username} (ID: ${sessionUser.id}). Total online: ${onlineUsers.size}`);
         db.get('SELECT is_banned, ban_reason, ban_until FROM users WHERE id = ?', [sessionUser.id], (err, dbUser) => {
@@ -2720,7 +2725,7 @@ server.listen(PORT, '0.0.0.0', () => {
 
 let isShuttingDown = false;
 
-const SHUTDOWN_TIMEOUT = 8000;
+const SHUTDOWN_TIMEOUT = 5000;
 
 async function gracefulShutdown(signal) {
     if (isShuttingDown) {

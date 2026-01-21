@@ -249,6 +249,47 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 runGamesMigrations();
             }
         });
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS active_sessions (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                device_info TEXT,
+                ip_address TEXT,
+                location TEXT,
+                last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        `, (err) => {
+            if (err) console.error('Помилка створення таблиці "active_sessions":', err.message);
+            else console.log('Таблиця "active_sessions" готова.');
+        });
+        db.run(`
+            CREATE TABLE IF NOT EXISTS known_devices (
+                id TEXT PRIMARY KEY,
+                user_agent TEXT,
+                parsed_os TEXT,
+                parsed_browser TEXT,
+                device_model TEXT,
+                platform_version TEXT,
+                is_mobile BOOLEAN DEFAULT FALSE,
+                first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+                login_count INTEGER DEFAULT 1
+            )
+        `);
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS user_devices (
+                user_id INTEGER,
+                device_id TEXT,
+                last_used DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, device_id),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(device_id) REFERENCES known_devices(id) ON DELETE CASCADE
+            )
+        `);
     });
 });
 function runUsersMigrations() {

@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useAdminStore } from '@/stores/admin';
 import { useI18n } from 'vue-i18n';
 
-const { t } = useI18n();
+const { t, d } = useI18n();
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -47,6 +47,7 @@ const navItems = [
     { id: 'system', label: t('admin_nav_system'), icon: '⚙️' },
     { id: 'audit', label: t('admin_nav_audit'), icon: '📜' },
     { id: 'maintenance', label: t('admin_nav_maintenance'), icon: '🛠️' },
+    { id: 'devices', label: t('admin_nav_devices'), icon: '📱' },
 ];
 
 const statCards = computed(() => {
@@ -323,6 +324,74 @@ const openUserEdit = (user) => {
     isUserModalOpen.value = true;
 };
 
+const userSessions = ref([]);
+const isSessionsModalOpen = ref(false);
+
+const openUserSessions = async (userId) => {
+    userSessions.value = await adminStore.fetchUserSessions(userId);
+    isSessionsModalOpen.value = true;
+};
+
+const terminateSession = async (sessionId) => {
+    if (!await askConfirm(t('admin_modal_title'), t('admin_terminate_session_confirm'))) return;
+    try {
+        await adminStore.terminateSession(sessionId);
+        showToast(t('admin_toast_session_terminated'));
+        userSessions.value = userSessions.value.filter(s => s.id !== sessionId);
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+};
+
+const selectedDevice = ref(null);
+const deviceBanInfo = ref({ banned: false, info: null });
+const isDeviceModalOpen = ref(false);
+
+const openDeviceDetails = async (deviceId) => {
+    if (!deviceId) {
+        showToast('Device ID is missing', 'error');
+        return;
+    }
+    try {
+        const [deviceData, banInfo] = await Promise.all([
+            adminStore.fetchDeviceDetails(deviceId),
+            adminStore.fetchDeviceBanInfo(deviceId)
+        ]);
+
+        if (!deviceData || !deviceData.device) {
+            showToast('Device not found or data is incomplete', 'error');
+            return;
+        }
+        selectedDevice.value = deviceData;
+        deviceBanInfo.value = banInfo;
+        isDeviceModalOpen.value = true;
+    } catch (e) {
+        console.error('Error loading device details:', e);
+        showToast('Failed to load device details', 'error');
+    }
+};
+
+const handleDeviceBanToggle = async () => {
+    const deviceId = selectedDevice.value.device.id;
+    try {
+        if (deviceBanInfo.value.banned) {
+            await adminStore.unbanDevice(deviceBanInfo.value.info.id);
+            showToast(t('admin_unban_device_success'), 'success');
+        } else {
+            const confirmed = confirm(t('admin_ban_device_confirm'));
+            if (!confirmed) return;
+            const reason = prompt(t('admin_modal_action_reason'), 'Hardware ban');
+            if (reason === null) return;
+            await adminStore.banDevice(deviceId, reason);
+            showToast(t('admin_ban_device_success'), 'success');
+        }
+        // Refresh ban info
+        deviceBanInfo.value = await adminStore.fetchDeviceBanInfo(deviceId);
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+};
+
 const saveUserChanges = async () => {
     try {
         await adminStore.updateUser(selectedUser.value.id, editUserData.value);
@@ -333,6 +402,25 @@ const saveUserChanges = async () => {
         showToast(`${t('error_generic')}: ${err.message}`, 'error');
     }
 };
+
+const clones = ref([]);
+const loadClones = async () => {
+    try {
+        const response = await fetch('/api/admin/users/clones');
+        if (response.ok) clones.value = await response.json();
+    } catch (e) {
+        console.error(e);
+    }
+};
+
+watch(currentTab, (tab) => {
+    if (tab === 'users') loadUsers();
+    if (tab === 'games') loadGames();
+    if (tab === 'donations') loadDonations();
+    if (tab === 'audit') loadAuditLog();
+    if (tab === 'dashboard') loadActivityData();
+    if (tab === 'devices') loadClones();
+});
 
 onMounted(async () => {
     await adminStore.fetchDashboardOverview();
@@ -416,7 +504,7 @@ onMounted(async () => {
                             <span class="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
                             <span class="text-on-surface-variant">{{ t('admin_system_status') }}</span>
                             <span class="text-green-500 font-bold uppercase tracking-wider">{{ t('admin_operational')
-                                }}</span>
+                            }}</span>
                         </div>
                     </header>
 
@@ -519,13 +607,13 @@ onMounted(async () => {
                                         class="aspect-square bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center justify-center gap-3 hover:bg-primary/10 hover:border-primary/30 transition-all group">
                                         <span class="text-3xl group-hover:scale-110 transition-transform">🔍</span>
                                         <span class="text-xs font-bold opacity-60">{{ t('admin_quick_find_user')
-                                        }}</span>
+                                            }}</span>
                                     </button>
                                     <button @click="currentTab = 'maintenance'"
                                         class="aspect-square bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center justify-center gap-3 hover:bg-primary/10 hover:border-primary/30 transition-all group">
                                         <span class="text-3xl group-hover:scale-110 transition-transform">📢</span>
                                         <span class="text-xs font-bold opacity-60">{{ t('admin_quick_broadcast')
-                                        }}</span>
+                                            }}</span>
                                     </button>
                                 </div>
                             </div>
@@ -582,7 +670,7 @@ onMounted(async () => {
                                                 <div>
                                                     <div class="flex items-center gap-1.5">
                                                         <p class="font-bold text-white tracking-wide">{{ user.username
-                                                            }}</p>
+                                                        }}</p>
                                                         <span v-if="user.is_verified" class="text-blue-400"
                                                             :title="t('admin_status_verified')">✅</span>
                                                         <span v-if="user.is_admin"
@@ -591,7 +679,8 @@ onMounted(async () => {
                                                     </div>
                                                     <p
                                                         class="text-[10px] text-on-surface-variant font-mono uppercase tracking-tighter mt-0.5">
-                                                        ID: {{ user.id }} • Rating: {{ user.rating }}</p>
+                                                        ID: {{ user.id }} • {{ t('admin_user_rating') }}: {{ user.rating
+                                                        }}</p>
                                                 </div>
                                             </div>
                                         </td>
@@ -669,8 +758,14 @@ onMounted(async () => {
 
                                                 <button @click="openUserEdit(user)"
                                                     class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-all">
-                                                    {{ t('admin_table_actions') }}
+                                                    {{ t('admin_btn_edit') }}
                                                 </button>
+                                                <button @click="openUserSessions(user.id)"
+                                                    class="p-2.5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all"
+                                                    :title="t('admin_view_sessions')">🛡️</button>
+                                                <button @click="openDeviceDetails(user.device_id)"
+                                                    class="p-2.5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all"
+                                                    :title="t('admin_view_device')">📱</button>
                                             </div>
                                         </td>
                                     </tr>
@@ -914,14 +1009,14 @@ onMounted(async () => {
                                 <div class="flex gap-2">
                                     <button @click="gamePage--; loadGames()" :disabled="gamePage === 0"
                                         class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase transition-all hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none">{{
-                                        t('btn_prev') }}</button>
+                                            t('btn_prev') }}</button>
                                     <div
                                         class="px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-bold flex items-center">
                                         {{ gamePage + 1 }}</div>
                                     <button @click="gamePage++; loadGames()"
                                         :disabled="(gamePage + 1) * 25 >= gameHistory.rowCount"
                                         class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase transition-all hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none">{{
-                                        t('btn_next') }}</button>
+                                            t('btn_next') }}</button>
                                 </div>
                             </div>
                         </div>
@@ -1079,12 +1174,12 @@ onMounted(async () => {
                                             <div class="flex items-center gap-2">
                                                 <p class="text-sm font-bold text-white">{{ donate.username }}</p>
                                                 <span class="text-[10px] opacity-20 font-mono">#{{ donate.user_id
-                                                    }}</span>
+                                                }}</span>
                                             </div>
                                         </td>
                                         <td class="px-8 py-6">
                                             <p class="text-lg font-black text-yellow-500">⭐️ {{ donate.amount.toFixed(0)
-                                                }}</p>
+                                            }}</p>
                                         </td>
                                         <td class="px-8 py-6">
                                             <p class="text-[10px] font-mono text-on-surface-variant opacity-60">{{
@@ -1112,14 +1207,14 @@ onMounted(async () => {
                             <div class="flex gap-2">
                                 <button @click="donationPage--; loadDonations()" :disabled="donationPage === 0"
                                     class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase transition-all hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none">{{
-                                    t('btn_prev') }}</button>
+                                        t('btn_prev') }}</button>
                                 <div
                                     class="px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-bold flex items-center">
                                     {{ donationPage + 1 }}</div>
                                 <button @click="donationPage++; loadDonations()"
                                     :disabled="(donationPage + 1) * 25 >= donations.rowCount"
                                     class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase transition-all hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none">{{
-                                    t('btn_next') }}</button>
+                                        t('btn_next') }}</button>
                             </div>
                         </div>
                     </div>
@@ -1208,7 +1303,7 @@ onMounted(async () => {
                                         @click="broadcastType = type"
                                         :class="broadcastType === type ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-white/5 text-on-surface-variant border border-white/5'"
                                         class="py-3 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all hover:bg-white/10">
-                                        {{ type }}
+                                        {{ t('admin_broadcast_type_' + type) }}
                                     </button>
                                 </div>
                                 <button @click="handleBroadcast"
@@ -1223,11 +1318,68 @@ onMounted(async () => {
                     </div>
                 </div>
 
+                <!-- Tab: Devices (Multi-accounts) -->
+                <div v-else-if="currentTab === 'devices'" class="space-y-10 animate-fade-in">
+                    <header>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="w-8 h-[2px] bg-primary"></span>
+                            <span class="text-primary text-xs font-bold uppercase tracking-[0.2em]">{{
+                                t('admin_nav_devices') }}</span>
+                        </div>
+                        <h1 class="text-4xl md:text-5xl font-extrabold text-white tracking-tight">{{
+                            t('admin_clones_title') }}</h1>
+                        <p class="text-on-surface-variant mt-2">{{ t('admin_clones_subtitle') }}</p>
+                    </header>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div v-for="device in clones" :key="device.deviceId"
+                            class="bg-surface/30 backdrop-blur-xl border border-white/5 p-6 rounded-3xl hover:border-primary/30 transition-all group relative overflow-hidden">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="flex items-center gap-4">
+                                    <div
+                                        class="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                                        📱
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-black text-primary uppercase tracking-widest">{{
+                                            device.deviceId ? device.deviceId.slice(0, 12) : '???' }}...</p>
+                                        <h4 class="text-xl font-bold text-white">{{ t('admin_clones_count', {
+                                            count:
+                                                device.count
+                                        }) }}</h4>
+                                    </div>
+                                </div>
+                                <button @click="openDeviceDetails(device.deviceId)"
+                                    class="px-4 py-2 bg-primary/10 text-primary border border-primary/20 rounded-xl text-xs font-bold hover:bg-primary hover:text-white transition-all">
+                                    {{ t('admin_btn_details') }}
+                                </button>
+                            </div>
+
+                            <div class="space-y-2">
+                                <div v-for="(username, index) in device.usernames" :key="index"
+                                    class="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-white/5">
+                                    <span class="text-sm font-medium text-white">{{ username }}</span>
+                                    <button @click="currentTab = 'users'; userSearchQuery = username"
+                                        class="text-[10px] text-on-surface-variant hover:text-primary transition-colors">{{
+                                            t('admin_btn_go_to_user') }}
+                                        🔍</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="clones.length === 0" class="col-span-full py-20 text-center">
+                            <div class="text-6xl mb-4 opacity-10">🕵️‍♂️</div>
+                            <p class="text-on-surface-variant font-bold uppercase tracking-widest">{{
+                                t('admin_clones_not_found') }}</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Placeholder for other tabs -->
                 <div v-else class="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in">
                     <div class="text-[120px] mb-8 animate-bounce opacity-20">🪄</div>
                     <h2 class="text-2xl font-black text-white mb-2">{{ t('admin_mismatch_title') || "Wait, what's this?"
-                        }}</h2>
+                    }}</h2>
                     <p class="text-on-surface-variant max-w-sm mx-auto leading-relaxed">
                         {{ t('admin_mismatch_desc', { tab: currentTab }) }}
                     </p>
@@ -1292,28 +1444,28 @@ onMounted(async () => {
                             class="flex flex-col items-center justify-center p-6 border rounded-3xl transition-all gap-2">
                             <span class="text-2xl">{{ editUserData.is_verified ? '✅' : '⚪' }}</span>
                             <span class="text-[10px] font-black uppercase tracking-widest">{{ t('admin_status_verified')
-                            }}</span>
+                                }}</span>
                         </button>
                         <button @click="editUserData.is_admin = !editUserData.is_admin"
                             :class="editUserData.is_admin ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' : 'bg-white/5 text-on-surface-variant border-white/5'"
                             class="flex flex-col items-center justify-center p-6 border rounded-3xl transition-all gap-2">
                             <span class="text-2xl">{{ editUserData.is_admin ? '👑' : '⚪' }}</span>
                             <span class="text-[10px] font-black uppercase tracking-widest">{{ t('admin_status_admin')
-                            }}</span>
+                                }}</span>
                         </button>
                         <button @click="editUserData.is_muted = !editUserData.is_muted"
                             :class="editUserData.is_muted ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' : 'bg-white/5 text-on-surface-variant border-white/5'"
                             class="flex flex-col items-center justify-center p-6 border rounded-3xl transition-all gap-2">
                             <span class="text-2xl">{{ editUserData.is_muted ? '🔇' : '⚪' }}</span>
                             <span class="text-[10px] font-black uppercase tracking-widest">{{ t('admin_status_muted')
-                            }}</span>
+                                }}</span>
                         </button>
                         <button @click="editUserData.is_banned = !editUserData.is_banned"
                             :class="editUserData.is_banned ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-white/5 text-on-surface-variant border-white/5'"
                             class="flex flex-col items-center justify-center p-6 border rounded-3xl transition-all gap-2">
                             <span class="text-2xl">{{ editUserData.is_banned ? '🚫' : '⚪' }}</span>
                             <span class="text-[10px] font-black uppercase tracking-widest">{{ t('admin_status_banned')
-                            }}</span>
+                                }}</span>
                         </button>
                     </div>
 
@@ -1382,6 +1534,115 @@ onMounted(async () => {
             </div>
         </div>
 
+        <!-- Sessions Modal -->
+        <div v-if="isSessionsModalOpen" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-black/80 backdrop-blur-md" @click="isSessionsModalOpen = false"></div>
+            <div
+                class="relative w-full max-w-2xl bg-[#1A1C1B] border border-white/5 shadow-2xl rounded-[3rem] overflow-hidden animate-pop-in">
+                <header class="p-8 border-b border-white/5 flex items-center justify-between">
+                    <h2 class="text-2xl font-extrabold text-white">{{ t('admin_user_sessions') }}</h2>
+                    <button @click="isSessionsModalOpen = false"
+                        class="p-3 hover:bg-white/5 rounded-2xl transition-all">✕</button>
+                </header>
+                <div class="p-8 max-h-[60vh] overflow-y-auto space-y-4 no-scrollbar">
+                    <div v-for="session in userSessions" :key="session.id"
+                        class="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between">
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-white">{{ session.device_info }}</p>
+                            <p class="text-[10px] text-on-surface-variant uppercase font-mono">{{ session.ip_address }}
+                                • {{ session.location }}</p>
+                            <p class="text-[10px] text-primary uppercase font-black">{{ t('admin_last_seen') }}: {{
+                                d(new Date(session.last_active), 'long') }}</p>
+                        </div>
+                        <button @click="terminateSession(session.id)"
+                            class="px-4 py-2 bg-red-500/20 text-red-500 text-xs font-black rounded-xl hover:bg-red-500 hover:text-white transition-all">
+                            {{ t('session_terminate').toUpperCase() }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Device Details Modal -->
+        <div v-if="isDeviceModalOpen" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-black/80 backdrop-blur-md" @click="isDeviceModalOpen = false"></div>
+            <div
+                class="relative w-full max-w-3xl bg-[#1A1C1B] border border-white/5 shadow-2xl rounded-[3rem] overflow-hidden animate-pop-in">
+                <header class="p-8 border-b border-white/5 flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <h2 class="text-2xl font-extrabold text-white">{{ t('admin_device_details') }}</h2>
+                        <span v-if="deviceBanInfo.banned"
+                            class="px-3 py-1 bg-red-500/20 text-red-500 text-[10px] font-black rounded-full border border-red-500/20">
+                            {{ t('admin_device_banned_badge') }}
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button @click="handleDeviceBanToggle"
+                            :class="deviceBanInfo.banned ? 'bg-primary text-black' : 'bg-red-500 text-white'"
+                            class="px-4 py-2 rounded-xl text-xs font-black transition-all hover:scale-105 active:scale-95">
+                            {{ deviceBanInfo.banned ? t('admin_unban_device') : t('admin_ban_device') }}
+                        </button>
+                        <button @click="isDeviceModalOpen = false"
+                            class="p-3 hover:bg-white/5 rounded-2xl transition-all">✕</button>
+                    </div>
+                </header>
+                <div v-if="selectedDevice && selectedDevice.device"
+                    class="p-8 max-h-[70vh] overflow-y-auto space-y-8 no-scrollbar">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
+                            <p class="text-[10px] font-black uppercase text-on-surface-variant mb-1">{{
+                                t('admin_device_model') }}</p>
+                            <p class="text-sm font-bold text-white">{{ selectedDevice.device?.device_model || 'Unknown'
+                            }}</p>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
+                            <p class="text-[10px] font-black uppercase text-on-surface-variant mb-1">{{
+                                t('admin_platform_version') }}</p>
+                            <p class="text-sm font-bold text-white">{{ selectedDevice.device?.platform_version ||
+                                'Unknown' }}</p>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
+                            <p class="text-[10px] font-black uppercase text-on-surface-variant mb-1">{{
+                                t('admin_login_count') }}</p>
+                            <p class="text-sm font-bold text-white">{{ selectedDevice.device?.login_count || 0 }}</p>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
+                            <p class="text-[10px] font-black uppercase text-on-surface-variant mb-1">{{
+                                t('admin_is_mobile') }}</p>
+                            <p class="text-sm font-bold text-white">{{ selectedDevice.device?.is_mobile ? '✅' : '❌' }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <h3 class="text-xs font-black uppercase text-primary tracking-widest">{{
+                            t('admin_associated_users') }}</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div v-for="user in selectedDevice.users" :key="user.id"
+                                class="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between">
+                                <div>
+                                    <p class="font-bold text-white">{{ user.username }}</p>
+                                    <p class="text-[10px] text-on-surface-variant uppercase">{{ t('admin_last_seen') }}:
+                                        {{ d(new Date(user.last_used), 'short') }}</p>
+                                </div>
+                                <button
+                                    @click="isDeviceModalOpen = false; currentTab = 'users'; userSearchQuery = user.username"
+                                    class="p-2 bg-primary/10 text-primary rounded-lg">🔍</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-6 rounded-3xl bg-black/40 border border-white/5">
+                        <p class="text-[10px] font-black uppercase text-on-surface-variant mb-2">{{
+                            t('admin_raw_user_agent') }}</p>
+                        <p class="text-[11px] font-mono text-white/40 break-all">{{ selectedDevice.device?.user_agent ||
+                            'N/A' }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Toasts -->
         <div class="fixed bottom-8 right-8 z-[400] flex flex-col gap-3 pointer-events-none">
             <TransitionGroup name="toast">
@@ -1389,7 +1650,7 @@ onMounted(async () => {
                     :class="toast.type === 'success' ? 'bg-primary/20 border-primary/40 text-primary' : 'bg-red-500/20 border-red-500/40 text-red-400'"
                     class="min-w-[300px] p-5 rounded-2xl border backdrop-blur-xl shadow-2xl flex items-center gap-3 pointer-events-auto">
                     <span class="text-xl">{{ toast.type === 'success' ? '✅' : '❌' }}</span>
-                    <p class="text-sm font-bold tracking-wide">{{ toast.message }}</p>
+                    <p class="text-sm font-bold tracking-wide break-words overflow-hidden">{{ toast.message }}</p>
                 </div>
             </TransitionGroup>
         </div>

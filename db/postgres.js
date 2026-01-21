@@ -401,6 +401,45 @@ pool.query(`
     .catch(err => console.error('Помилка створення таблиці "donations" в PostgreSQL:', err.stack));
 
 pool.query(`
+    CREATE TABLE IF NOT EXISTS active_sessions (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        device_info TEXT,
+        ip_address TEXT,
+        location TEXT,
+        last_active TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+`).then(() => console.log('Таблиця "active_sessions" в PostgreSQL готова.'))
+    .catch(err => console.error('Помилка створення таблиці "active_sessions" в PostgreSQL:', err.stack));
+
+pool.query(`
+    CREATE TABLE IF NOT EXISTS known_devices (
+        id TEXT PRIMARY KEY,
+        user_agent TEXT,
+        parsed_os TEXT,
+        parsed_browser TEXT,
+        device_model TEXT,
+        platform_version TEXT,
+        is_mobile BOOLEAN DEFAULT FALSE,
+        first_seen TIMESTAMPTZ DEFAULT NOW(),
+        last_seen TIMESTAMPTZ DEFAULT NOW(),
+        login_count INTEGER DEFAULT 1
+    );
+`).then(() => console.log('Таблиця "known_devices" в PostgreSQL готова.'))
+    .catch(err => console.error('Помилка створення таблиці "known_devices" в PostgreSQL:', err.stack));
+
+pool.query(`
+    CREATE TABLE IF NOT EXISTS user_devices (
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        device_id TEXT REFERENCES known_devices(id) ON DELETE CASCADE,
+        last_used TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (user_id, device_id)
+    );
+`).then(() => console.log('Таблиця "user_devices" в PostgreSQL готова.'))
+    .catch(err => console.error('Помилка створення таблиці "user_devices" в PostgreSQL:', err.stack));
+
+pool.query(`
     DO $$
     BEGIN
         IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='telegram_id')

@@ -10,6 +10,7 @@ import { useI18n } from 'vue-i18n';
 import Card from '@/components/game/Card.vue';
 import AuthModal from '@/components/ui/AuthModal.vue';
 import ConfirmModal from '@/components/ui/ConfirmModal.vue';
+import SessionsModal from '@/components/ui/SessionsModal.vue';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -29,6 +30,7 @@ const quickBetAmount = ref(authStore.user?.pref_quick_bet_amount || 10);
 
 const isAuthModalOpen = ref(false);
 const isUnlinkConfirmOpen = ref(false);
+const isSessionsModalOpen = ref(false);
 
 const currentPassword = ref('');
 const newPassword = ref('');
@@ -272,6 +274,18 @@ watch(() => authStore.isAuthenticated, (val) => {
         </div>
       </div>
 
+      <!-- Sessions Manage Button -->
+      <div class="mb-8 w-full border-t border-white/10 pt-6">
+        <h3 class="text-on-surface-variant mb-4 font-bold uppercase text-xs tracking-wider text-center">{{
+          $t('settings_active_sessions') }}</h3>
+        <div class="max-w-sm mx-auto text-center">
+          <button @click="isSessionsModalOpen = true"
+            class="w-full py-3 px-6 rounded-xl font-bold transition-all bg-surface-variant/20 hover:bg-surface-variant/40 text-on-surface border border-white/10">
+            🛡️ {{ $t('settings_active_sessions') }}
+          </button>
+        </div>
+      </div>
+
       <div class="mb-8 w-full border-t border-white/10 pt-6">
         <h3 class="text-on-surface-variant mb-4 font-bold uppercase text-xs tracking-wider text-center">{{
           $t('password_change_title') }}</h3>
@@ -321,6 +335,8 @@ watch(() => authStore.isAuthenticated, (val) => {
     <ConfirmModal :is-open="isUnlinkConfirmOpen" :title="$t('confirm_unlink_title')"
       :message="$t('confirm_unlink_message')" :confirm-text="$t('confirm_unlink')" @confirm="onConfirmUnlink"
       @cancel="isUnlinkConfirmOpen = false" />
+
+    <SessionsModal :is-open="isSessionsModalOpen" @close="isSessionsModalOpen = false" />
 
     <transition name="fade">
       <div v-if="isPasswordModalOpen"

@@ -22,7 +22,7 @@ router.get('/users/search', ensureAdmin, (req, res) => {
     }
 
     const sql = `
-        SELECT id, username, wins, losses, streak_count, last_played_date, is_verified, is_admin, is_banned, ban_reason, is_muted, rating, coins
+        SELECT id, username, wins, losses, streak_count, last_played_date, is_verified, is_admin, is_banned, ban_reason, is_muted, rating, coins, device_id
         FROM users 
         WHERE username LIKE ? OR id = ?
         LIMIT 50
@@ -110,7 +110,7 @@ router.post('/system/sockets/:socketId/disconnect', ensureAdmin, async (req, res
 });
 
 router.get('/users', ensureAdmin, (req, res) => {
-    const sql = `SELECT id, username, wins, losses, streak_count, last_played_date, is_verified, is_admin, is_banned, ban_reason, is_muted, rating, rd, vol FROM users ORDER BY id ASC`;
+    const sql = `SELECT id, username, wins, losses, streak_count, last_played_date, is_verified, is_admin, is_banned, ban_reason, is_muted, rating, coins, device_id FROM users ORDER BY id ASC`;
     db.all(sql, [], (err, users) => {
         if (err) {
             console.error("Error fetching user list (admin):", err.message);
@@ -848,27 +848,94 @@ router.post('/users/:userId/ban-device', ensureAdmin, (req, res) => {
         const sql = `
             INSERT INTO banned_devices (device_id, reason, admin_id, ban_until) 
             VALUES (?, ?, ?, ?)
-            ON CONFLICT(device_id) DO UPDATE SET 
-                reason = excluded.reason, 
-                admin_id = excluded.admin_id, 
-                ban_until = excluded.ban_until
+            ON CONFLICT(device_id) DO UPDATE SET reason=excluded.reason, ban_until=excluded.ban_until, banned_at=CURRENT_TIMESTAMP
         `;
 
-        db.run(sql, [user.device_id, reason, req.session.user.id, banUntil], (err) => {
-            if (err) {
-                console.error('Error banning device:', err);
-                return res.status(500).json({ error: 'Failed to ban device' });
-            }
+        db.run(sql, [user.device_id, reason || 'Admin Ban', req.session.user.id, banUntil], function (err) {
+            if (err) return res.status(500).json({ error: 'DB Error banning device' });
 
             logAdminAction({
                 adminId: req.session.user.id,
                 adminUsername: req.session.user.username,
                 actionType: 'BAN_DEVICE',
                 targetUserId: userId,
-                reason: `Device: ${user.device_id}, Reason: ${reason}`
+                reason: `Banned Device ${user.device_id}. Reason: ${reason}`
             });
 
-            res.json({ message: `Device for user ${user.username} banned.` });
+            res.json({ message: `Device ${user.device_id} banned successfully` });
+        });
+    });
+});
+
+router.get('/users/:userId/active-sessions', ensureAdmin, (req, res) => {
+    const { userId } = req.params;
+    db.all('SELECT * FROM active_sessions WHERE user_id = ? ORDER BY last_active DESC', [userId], (err, rows) => {
+        if (err) return res.status(500).json({ error: 'DB Error' });
+        res.json(rows);
+    });
+});
+
+router.delete('/sessions/:sessionId', ensureAdmin, (req, res) => {
+    const { sessionId } = req.params;
+    const currentSessionId = req.sessionID || req.cookies['connect.sid']; // Fallback depends on session config
+
+    // Check if the admin is trying to terminate their own CURRENT session
+    // req.sessionID is usually set by express-session
+    if (sessionId === req.sessionID) {
+        return res.status(400).json({ error: "You cannot terminate your own current session." });
+    }
+
+    db.get('SELECT user_id FROM active_sessions WHERE id = ?', [sessionId], (err, session) => {
+        if (err || !session) return res.status(404).json({ error: 'Session not found' });
+
+        const userId = session.user_id;
+
+        db.run('DELETE FROM active_sessions WHERE id = ?', [sessionId], function (err) {
+            if (err) return res.status(500).json({ error: 'DB Error' });
+
+            logAdminAction({
+                adminId: req.session.user.id,
+                adminUsername: req.session.user.username,
+                actionType: 'TERMINATE_SESSION_ADMIN',
+                reason: `Terminated session ${sessionId}`
+            });
+
+            // Notify user via socket
+            const io = req.app.get('socketio');
+            if (io) {
+                // We emit to the user's room. 
+                // Each socket joins a room named by their user ID in server.js (presumably)
+                io.to(`user_${userId}`).emit('sessionTerminated', { sessionId });
+            }
+
+            res.json({ message: 'Session terminated' });
+        });
+    });
+});
+
+router.get('/devices/:deviceId', ensureAdmin, (req, res) => {
+    const { deviceId } = req.params;
+
+    const deviceSql = 'SELECT * FROM known_devices WHERE id = ?';
+    const usersSql = `
+        SELECT u.id, u.username, ud.last_used 
+        FROM user_devices ud 
+        JOIN users u ON ud.user_id = u.id 
+        WHERE ud.device_id = ? 
+        ORDER BY ud.last_used DESC
+    `;
+
+    db.get(deviceSql, [deviceId], (err, device) => {
+        if (err) return res.status(500).json({ error: 'DB Error' });
+        if (!device) return res.status(404).json({ error: 'Device not found' });
+
+        db.all(usersSql, [deviceId], (err2, users) => {
+            if (err2) return res.status(500).json({ error: 'DB Error fetching users' });
+
+            res.json({
+                device,
+                users
+            });
         });
     });
 });
@@ -884,7 +951,37 @@ router.delete('/banned-devices/:id', ensureAdmin, (req, res) => {
     const { id } = req.params;
     db.run('DELETE FROM banned_devices WHERE id = ?', [id], function (err) {
         if (err) return res.status(500).json({ error: 'DB Error' });
-        res.json({ message: 'Device unbanned' });
+        res.json({ success: true, message: 'Device unbanned' });
+    });
+});
+
+router.post('/devices/:deviceId/ban', ensureAdmin, (req, res) => {
+    const { deviceId } = req.params;
+    const { reason, until } = req.body;
+    const adminId = req.session.user.id;
+
+    const sql = 'INSERT INTO banned_devices (device_id, reason, admin_id, ban_until) VALUES (?, ?, ?, ?)';
+    db.run(sql, [deviceId, reason || 'No reason', adminId, until || null], function (err) {
+        if (err) {
+            if (err.code === 'SQLITE_CONSTRAINT' || err.code === '23505') {
+                return res.status(400).json({ error: 'Device is already banned' });
+            }
+            return res.status(500).json({ error: 'DB Error' });
+        }
+
+        // Log the action
+        db.run('INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?)',
+            [adminId, 'BAN_DEVICE', 'device', deviceId, JSON.stringify({ reason, until })]);
+
+        res.json({ success: true, message: 'Device banned successfully' });
+    });
+});
+
+router.get('/devices/:deviceId/ban-info', ensureAdmin, (req, res) => {
+    const { deviceId } = req.params;
+    db.get('SELECT * FROM banned_devices WHERE device_id = ?', [deviceId], (err, row) => {
+        if (err) return res.status(500).json({ error: 'DB Error' });
+        res.json({ banned: !!row, info: row });
     });
 });
 

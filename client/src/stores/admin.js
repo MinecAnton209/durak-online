@@ -191,6 +191,77 @@ export const useAdminStore = defineStore('admin', () => {
         return { totalConnections: 0, connections: [] };
     }
 
+    async function fetchUserSessions(userId) {
+        try {
+            const response = await fetch(`/api/admin/users/${userId}/active-sessions`);
+            if (response.ok) return await response.json();
+        } catch (err) {
+            console.error('Error fetching user sessions (admin):', err);
+        }
+        return [];
+    }
+
+    async function terminateSession(sessionId) {
+        try {
+            const response = await fetch(`/api/admin/sessions/${sessionId}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) throw new Error('Failed to terminate session');
+            return await response.json();
+        } catch (err) {
+            console.error('Error terminating session (admin):', err);
+            throw err;
+        }
+    }
+
+    async function fetchDeviceDetails(deviceId) {
+        try {
+            const response = await fetch(`/api/admin/devices/${deviceId}`);
+            if (response.ok) return await response.json();
+        } catch (err) {
+            console.error('Error fetching device details (admin):', err);
+        }
+        return null;
+    }
+
+    async function banDevice(deviceId, reason, until) {
+        try {
+            const response = await fetch(`/api/admin/devices/${deviceId}/ban`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason, until })
+            });
+            if (!response.ok) throw new Error('Failed to ban device');
+            return await response.json();
+        } catch (err) {
+            console.error('Error banning device (admin):', err);
+            throw err;
+        }
+    }
+
+    async function unbanDevice(bannedId) {
+        try {
+            const response = await fetch(`/api/admin/banned-devices/${bannedId}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) throw new Error('Failed to unban device');
+            return await response.json();
+        } catch (err) {
+            console.error('Error unbanning device (admin):', err);
+            throw err;
+        }
+    }
+
+    async function fetchDeviceBanInfo(deviceId) {
+        try {
+            const response = await fetch(`/api/admin/devices/${deviceId}/ban-info`);
+            if (response.ok) return await response.json();
+        } catch (err) {
+            console.error('Error fetching device ban info (admin):', err);
+        }
+        return { banned: false };
+    }
+
     return {
         stats,
         loading,
@@ -209,6 +280,12 @@ export const useAdminStore = defineStore('admin', () => {
         fetchGameHistory,
         fetchAuditLog,
         fetchDonations,
-        fetchSockets
+        fetchSockets,
+        fetchUserSessions,
+        terminateSession,
+        fetchDeviceDetails,
+        banDevice,
+        unbanDevice,
+        fetchDeviceBanInfo
     };
 });

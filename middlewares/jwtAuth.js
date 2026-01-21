@@ -1,4 +1,8 @@
 const jwt = require('jsonwebtoken')
+const db = require('../db');
+const util = require('util');
+const dbGet = util.promisify(db.get.bind(db));
+const dbRun = util.promisify(db.run.bind(db));
 
 function getCookieDomain(hostname) {
     if (process.env.NODE_ENV !== 'production') return undefined;
@@ -95,12 +99,41 @@ function attachUserFromToken(req, _res, next) {
     if (token) {
         const decoded = verifyToken(token);
         if (decoded) {
-            req.user = decoded;
-            req.session = {
-                user: decoded,
-                save() { },
-                destroy() { },
+            // Check session validity if sessionId is present (Hybrid Stateful)
+            const checkSession = async () => {
+                if (decoded.sessionId) {
+                    try {
+                        const session = await dbGet('SELECT * FROM active_sessions WHERE id = ?', [decoded.sessionId]);
+                        if (session) {
+                            req.user = decoded;
+                            req.session = {
+                                user: decoded,
+                                save() { },
+                                destroy() { },
+                            };
+
+                            // Update last_active occasionally (e.g. if > 1 min old)
+                            const now = new Date();
+                            const lastActive = new Date(session.last_active);
+                            // Simple diff check
+                            if (now.getTime() - lastActive.getTime() > 1 * 60 * 1000) {
+                                dbRun('UPDATE active_sessions SET last_active = ? WHERE id = ?', [now.toISOString(), decoded.sessionId]).catch(err => console.error('Last active update fail', err.message));
+                            }
+                        } else {
+                            req.user = null; // Session terminated
+                        }
+                    } catch (e) {
+                        console.error('Session check error:', e);
+                        req.user = null;
+                    }
+                } else {
+                    // Legacy token support disabled - force logout
+                    req.user = null;
+                }
+                next();
             };
+            checkSession();
+            return;
         }
     }
 
@@ -119,23 +152,44 @@ function socketAttachUser(socket, next) {
     const decoded = verifyToken(token);
 
     if (decoded) {
-        socket.request.user = decoded;
-        socket.request.session = { user: decoded, save() { }, destroy() { } };
+        const verifySession = async () => {
+            if (decoded.sessionId) {
+                try {
+                    const session = await dbGet('SELECT * FROM active_sessions WHERE id = ?', [decoded.sessionId]);
+                    if (session) {
+                        socket.request.user = decoded;
+                        socket.request.session = { user: decoded, save() { }, destroy() { } };
+
+                        // Also update last_active on socket connect if needed
+                        const now = new Date();
+                        const lastActive = new Date(session.last_active);
+                        if (now.getTime() - lastActive.getTime() > 1 * 60 * 1000) {
+                            dbRun('UPDATE active_sessions SET last_active = ? WHERE id = ?', [now.toISOString(), decoded.sessionId]).catch(err => console.error('Socket last active update fail', err.message));
+                        }
+
+                        next();
+                        return;
+                    }
+                } catch (e) { console.error('Socket session check error', e); }
+            }
+            // Invalid
+            socket.request.user = null;
+            socket.request.session = { user: null, save() { }, destroy() { } };
+            next();
+        }
+        verifySession();
     } else {
         socket.request.session = { user: null, save() { }, destroy() { } };
+        next();
     }
-
-    next();
 }
 
 function authMiddleware(req, res, next) {
-    attachUserFromToken(req, res, () => {
-        if (req.user) {
-            next();
-        } else {
-            res.status(401).json({ i18nKey: 'error_unauthorized' });
-        }
-    });
+    if (req.user) {
+        next();
+    } else {
+        res.status(401).json({ i18nKey: 'error_unauthorized' });
+    }
 }
 
 
