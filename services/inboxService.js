@@ -105,7 +105,7 @@ async function markAsRead(userId, messageId) {
 
 async function getUnreadCount(userId) {
     try {
-        const result = await dbGet(`SELECT COUNT(*) as count FROM inbox_messages WHERE user_id = ? AND is_read = 0`, [userId]);
+        const result = await dbGet(`SELECT COUNT(*) as count FROM inbox_messages WHERE user_id = ? AND is_read = false`, [userId]);
         return result ? result.count : 0;
     } catch (error) {
         console.error('[Inbox Service] Error getting unread count:', error);

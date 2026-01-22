@@ -125,7 +125,21 @@ const locales = {
             next_page: "Туди ➡️",
             page_info: "Сторінка {current} з {total}",
             admin_message_title: "📢 Повідомлення від Адміністрації",
-            admin_message_content: "{text}"
+            admin_message_content: "{text}",
+            game_invite_title: "🎮 Запрошення в гру",
+            game_invite_content: "Гравець **{fromUsername}** запрошує вас приєднатися до гри.",
+            admin_coins_added_title: "💰 Монети отримано",
+            admin_coins_added_content: "Адміністратор додав вам **{amount}** монет. Привід: {reason}",
+            admin_mute_title: "🔇 Обмеження чату",
+            admin_mute_content: "Вам видано обмеження чату з причини: **{reason}**{until}",
+            admin_unmute_title: "🔊 Чат розблоковано",
+            admin_unmute_content: "Адміністратор зняв з вас обмеження чату.",
+            admin_ban_title: "🚫 Акаунт заблоковано",
+            admin_ban_content: "Ваш акаунт заблоковано з причини: **{reason}**{until}",
+            admin_unban_title: "✅ Акаунт розблоковано",
+            admin_unban_content: "Ваш акаунт було розблоковано адміністратором.",
+            admin_session_terminated_title: "🚪 Сесію завершено",
+            admin_session_terminated_content: "Вашу сесію було примусово завершено адміністратором."
         }
     },
 
@@ -255,7 +269,21 @@ const locales = {
             next_page: "Туда ➡️",
             page_info: "Страница {current} из {total}",
             admin_message_title: "📢 Сообщение от Администрации",
-            admin_message_content: "{text}"
+            admin_message_content: "{text}",
+            game_invite_title: "🎮 Приглашение в игру",
+            game_invite_content: "Игрок **{fromUsername}** приглашает вас присоединиться к игре.",
+            admin_coins_added_title: "💰 Монеты получены",
+            admin_coins_added_content: "Администратор добавил вам **{amount}** монет. Повод: {reason}",
+            admin_mute_title: "🔇 Ограничение чата",
+            admin_mute_content: "Вам выдано ограничение чата по причине: **{reason}**{until}",
+            admin_unmute_title: "🔊 Чат разблокирован",
+            admin_unmute_content: "Администратор снял с вас ограничение чата.",
+            admin_ban_title: "🚫 Аккаунт заблокирован",
+            admin_ban_content: "Ваш аккаунт заблокирован по причине: **{reason}**{until}",
+            admin_unban_title: "✅ Аккаунт разблокирован",
+            admin_unban_content: "Ваш аккаунт был разблокирован администратором.",
+            admin_session_terminated_title: "🚪 Сессия завершена",
+            admin_session_terminated_content: "Ваша сессия была принудительно завершена администратором."
         }
     },
 
@@ -385,7 +413,21 @@ const locales = {
             next_page: "Next ➡️",
             page_info: "Page {current} of {total}",
             admin_message_title: "📢 Message from Administration",
-            admin_message_content: "{text}"
+            admin_message_content: "{text}",
+            game_invite_title: "🎮 Game Invitation",
+            game_invite_content: "User **{fromUsername}** invites you to join a game.",
+            admin_coins_added_title: "💰 Coins Received",
+            admin_coins_added_content: "Admin added **{amount}** coins to your balance. Reason: {reason}",
+            admin_mute_title: "🔇 Chat Restricted",
+            admin_mute_content: "You have been muted for: **{reason}**{until}",
+            admin_unmute_title: "🔊 Chat Restored",
+            admin_unmute_content: "Admin has removed your chat restriction.",
+            admin_ban_title: "🚫 Account Banned",
+            admin_ban_content: "Your account has been banned for: **{reason}**{until}",
+            admin_unban_title: "✅ Account Restored",
+            admin_unban_content: "Your account has been restored by an administrator.",
+            admin_session_terminated_title: "🚪 Session Terminated",
+            admin_session_terminated_content: "Your session was forcibly terminated by an administrator."
         }
     }
 };

@@ -167,16 +167,40 @@ const handleBroadcast = async () => {
 
 const inboxMessage = ref('');
 const inboxTargetUserId = ref('');
+const inboxTargetUsername = ref('');
 const inboxIsBroadcast = ref(false);
+const showUserSelector = ref(false);
+const inboxSearchQuery = ref('');
+const inboxSearchResults = ref([]);
+
+const searchUsersForInbox = async () => {
+    if (!inboxSearchQuery.value || inboxSearchQuery.value.length < 2) return;
+    inboxSearchResults.value = await adminStore.fetchUsers(inboxSearchQuery.value);
+};
+
+const selectUserForInbox = (user) => {
+    inboxTargetUserId.value = user.id;
+    inboxTargetUsername.value = user.username;
+    showUserSelector.value = false;
+    inboxSearchQuery.value = '';
+    inboxSearchResults.value = [];
+};
+
+const goToInboxWithUser = (user) => {
+    inboxTargetUserId.value = user.id;
+    inboxTargetUsername.value = user.username;
+    inboxIsBroadcast.value = false;
+    currentTab.value = 'inbox';
+};
 
 const sendMessage = async () => {
     if (!inboxMessage.value.trim()) {
-        showToast(t('admin_inbox_error_message_required') || 'Message is required', 'error');
+        showToast(t('admin_inbox_error_message_required'), 'error');
         return;
     }
 
     if (!inboxIsBroadcast.value && !inboxTargetUserId.value) {
-        showToast(t('admin_inbox_error_user_required') || 'User ID is required', 'error');
+        showToast(t('admin_inbox_error_user_required'), 'error');
         return;
     }
 
@@ -192,15 +216,15 @@ const sendMessage = async () => {
         });
 
         if (res.ok) {
-            showToast(t('admin_inbox_success_sent') || 'Message sent successfully');
+            showToast(t('admin_inbox_success_sent'));
             inboxMessage.value = '';
             // keep user id if repeated sending
         } else {
             const err = await res.json();
-            showToast(err.error || t('admin_inbox_error_failed') || 'Failed to send', 'error');
+            showToast(err.error || t('admin_inbox_error_failed'), 'error');
         }
     } catch (e) {
-        showToast(t('admin_inbox_error_failed') || 'Failed to send', 'error');
+        showToast(t('admin_inbox_error_failed'), 'error');
     }
 };
 
@@ -670,42 +694,84 @@ onMounted(async () => {
                                 <span class="text-primary text-xs font-bold uppercase tracking-[0.2em]">MESSAGING</span>
                             </div>
                             <h1 class="text-4xl md:text-5xl font-extrabold text-white tracking-tight">{{
-                                t('admin_nav_inbox') }}</h1>
+                                t('admin_inbox_send_title') }}</h1>
                         </div>
                     </header>
 
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         <div class="bg-surface/30 backdrop-blur-xl border border-white/5 p-8 rounded-[2.5rem]">
-                            <h3 class="text-xl font-bold text-white mb-6">Send Message</h3>
+                            <h3 class="text-xl font-bold text-white mb-6">{{ t('admin_inbox_send_title') }}</h3>
 
                             <div class="space-y-6">
                                 <div class="flex items-center gap-4 bg-white/5 p-4 rounded-xl border border-white/5">
                                     <label class="flex items-center gap-3 cursor-pointer">
                                         <input type="checkbox" v-model="inboxIsBroadcast"
-                                            class="w-5 h-5 rounded border-gray-600 bg-gray-700 text-primary">
-                                        <span class="font-bold">Broadcast to All Users</span>
+                                            class="w-5 h-5 rounded border-white/10 bg-black/20 text-primary">
+                                        <span class="font-bold">{{ t('admin_inbox_broadcast_label') }}</span>
                                     </label>
                                 </div>
 
-                                <div v-if="!inboxIsBroadcast">
+                                <div v-if="!inboxIsBroadcast" class="relative">
                                     <label
-                                        class="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Target
-                                        User ID</label>
-                                    <input v-model="inboxTargetUserId" type="number" placeholder="Enter User ID"
-                                        class="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none transition-all">
+                                        class="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">{{
+                                        t('admin_inbox_target_label') }}</label>
+
+                                    <div class="flex gap-2">
+                                        <div class="relative flex-1">
+                                            <input v-model="inboxTargetUserId" type="number"
+                                                :placeholder="t('admin_inbox_placeholder_user_id')"
+                                                class="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none transition-all">
+                                            <div v-if="inboxTargetUsername"
+                                                class="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-bold text-xs uppercase">
+                                                @{{ inboxTargetUsername }}
+                                            </div>
+                                        </div>
+                                        <button @click="showUserSelector = !showUserSelector"
+                                            class="bg-white/5 hover:bg-white/10 border border-white/10 px-4 rounded-xl transition-all">
+                                            🔍
+                                        </button>
+                                    </div>
+
+                                    <!-- User Search Dropdown -->
+                                    <div v-if="showUserSelector"
+                                        class="absolute z-30 left-0 right-0 mt-2 bg-surface/90 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+                                        <div class="p-3 border-b border-white/5">
+                                            <input v-model="inboxSearchQuery" @input="searchUsersForInbox" type="text"
+                                                autoFocus :placeholder="t('admin_inbox_search_user_placeholder')"
+                                                class="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary outline-none">
+                                        </div>
+                                        <div class="max-h-60 overflow-y-auto">
+                                            <div v-if="inboxSearchResults.length === 0"
+                                                class="p-4 text-center text-xs text-on-surface-variant">
+                                                {{ t('leaderboard_empty') }}
+                                            </div>
+                                            <button v-for="user in inboxSearchResults" :key="user.id"
+                                                @click="selectUserForInbox(user)"
+                                                class="w-full text-left px-4 py-3 hover:bg-primary/20 flex items-center justify-between border-b border-white/5 last:border-0">
+                                                <div>
+                                                    <span class="font-bold text-white text-sm">{{ user.username
+                                                        }}</span>
+                                                    <span class="ml-2 text-[10px] text-on-surface-variant">ID: {{
+                                                        user.id }}</span>
+                                                </div>
+                                                <span class="text-xs text-primary font-bold">SELECT</span>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div>
                                     <label
-                                        class="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Message
-                                        Content</label>
-                                    <textarea v-model="inboxMessage" rows="5" placeholder="Type your message here..."
+                                        class="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">{{
+                                        t('admin_inbox_content_label') }}</label>
+                                    <textarea v-model="inboxMessage" rows="5"
+                                        :placeholder="t('admin_inbox_placeholder_content')"
                                         class="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none transition-all"></textarea>
                                 </div>
 
                                 <button @click="sendMessage"
                                     class="w-full bg-primary hover:bg-primary-dark text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 transition-all active:scale-95">
-                                    Send Message 📤
+                                    {{ t('admin_inbox_send_btn') }}
                                 </button>
                             </div>
                         </div>
@@ -822,6 +888,10 @@ onMounted(async () => {
                                                 <button v-else @click="handleUserAction(user.id, 'unverify')"
                                                     class="p-2.5 hover:bg-gray-500/10 text-gray-400 rounded-xl transition-all"
                                                     :title="t('admin_unverify_user')">❌</button>
+
+                                                <button @click="goToInboxWithUser(user)"
+                                                    class="p-2.5 hover:bg-primary/10 text-primary rounded-xl transition-all"
+                                                    :title="t('admin_inbox_send_title')">📨</button>
 
                                                 <button v-if="!user.is_banned"
                                                     @click="handleUserAction(user.id, 'tempban')"
@@ -940,7 +1010,7 @@ onMounted(async () => {
                         <div class="px-8 py-6 flex items-center justify-between bg-black/5 border-t border-white/5">
                             <p class="text-xs font-bold text-on-surface-variant uppercase">{{ t('admin_audit_total', {
                                 count: auditLogs.rowCount
-                                }) }}</p>
+                            }) }}</p>
                             <div class="flex gap-2">
                                 <button @click="auditPage--; loadAuditLogs()" :disabled="auditPage === 0"
                                     class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase transition-all hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none">{{
@@ -993,7 +1063,7 @@ onMounted(async () => {
                             <h3 class="text-xl font-bold text-white mb-2">{{ t('admin_games_lobby', {
                                 name:
                                     game.hostName
-                                }) }}</h3>
+                            }) }}</h3>
                             <p class="text-sm text-on-surface-variant mb-6">{{ t('admin_games_players') }} <span
                                     class="text-white font-bold">{{ game.playerCount }} / {{ game.maxPlayers }}</span>
                             </p>
@@ -1071,10 +1141,10 @@ onMounted(async () => {
                                             <td class="px-8 py-6">
                                                 <p class="text-sm text-on-surface-variant">{{ t('admin_game_winner', {
                                                     name: game.winner_username || t('admin_game_draw')
-                                                    }) }}</p>
+                                                }) }}</p>
                                                 <p class="text-xs text-on-surface-variant/60">{{ t('admin_game_loser', {
                                                     name: game.loser_username || '-'
-                                                    }) }}</p>
+                                                }) }}</p>
                                             </td>
                                             <td class="px-8 py-6">
                                                 <div class="flex items-center gap-2">
@@ -1295,7 +1365,7 @@ onMounted(async () => {
                         <div class="px-8 py-6 flex items-center justify-between bg-black/5 border-t border-white/5">
                             <p class="text-xs font-bold text-on-surface-variant uppercase">{{ t('admin_total_records', {
                                 count: donations.rowCount
-                                }) }}</p>
+                            }) }}</p>
                             <div class="flex gap-2">
                                 <button @click="donationPage--; loadDonations()" :disabled="donationPage === 0"
                                     class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase transition-all hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none">{{
@@ -1438,7 +1508,7 @@ onMounted(async () => {
                                         <h4 class="text-xl font-bold text-white">{{ t('admin_clones_count', {
                                             count:
                                                 device.count
-                                            }) }}</h4>
+                                        }) }}</h4>
                                     </div>
                                 </div>
                                 <button @click="openDeviceDetails(device.deviceId)"

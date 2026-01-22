@@ -93,7 +93,7 @@ global.chatFilters = {
 async function loadChatFilters() {
     try {
         const filters = await new Promise((resolve, reject) => {
-            db.all('SELECT type, content FROM chat_filters WHERE is_enabled = 1', [], (err, rows) => {
+            db.all('SELECT type, content FROM chat_filters WHERE is_enabled = true', [], (err, rows) => {
                 if (err) return reject(err);
                 resolve(rows || []);
             });
@@ -306,7 +306,7 @@ async function checkBanStatus(userId) {
     const user = await dbGet('SELECT is_banned, ban_reason, ban_until FROM users WHERE id = ?', [userId]);
     if (user && user.is_banned) {
         if (user.ban_until && new Date(user.ban_until) < new Date()) {
-            await dbRun('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [userId]);
+            await dbRun('UPDATE users SET is_banned = false, ban_until = NULL, ban_reason = NULL WHERE id = ?', [userId]);
             return null;
         }
         return user.ban_reason || 'Account banned';
@@ -514,6 +514,7 @@ async function startGame(gameId) {
     });
     updateTurn(game, firstAttackerIndex);
     broadcastGameState(gameId);
+    io.emit('lobbyStarted', { lobbyId: gameId });
 }
 
 function refillHands(game) {
@@ -1931,8 +1932,20 @@ io.on('connection', (socket) => {
             };
 
             await notificationService.sendNotification(targetUserId, payload);
+
+            // Add to Inbox
+            await inboxService.addMessage(targetUserId, {
+                type: 'game_invite',
+                titleKey: 'inbox.game_invite_title',
+                contentKey: 'inbox.game_invite_content',
+                contentParams: {
+                    fromUserId: sessionUser.id,
+                    fromUsername: sessionUser.username,
+                    lobbyId: gameId
+                }
+            });
         } catch (error) {
-            console.error(`[Invites] Failed to send push notification for user ${targetUserId}:`, error);
+            console.error(`[Invites] Failed to send push/inbox notification for user ${targetUserId}:`, error);
         }
     });
     socket.on('roulette:getState', () => {
@@ -2028,6 +2041,7 @@ io.on('connection', (socket) => {
                 console.log(`[Lobby] Lobby ${gameId} has only bots. Deleting.`);
                 delete games[gameId];
                 dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+                io.emit('lobbyExpired', { lobbyId: gameId });
             } else {
                 if (game.hostId === socket.id) {
                     game.hostId = humanIds[0];
@@ -2047,6 +2061,7 @@ io.on('connection', (socket) => {
             console.log(`[Lobby] Lobby ${gameId} is empty. Deleting.`);
             delete games[gameId];
             dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+            io.emit('lobbyExpired', { lobbyId: gameId });
             broadcastPublicLobbies();
         }
     });
@@ -2611,6 +2626,7 @@ setInterval(() => {
             console.log(`[GC] Removing zombie lobby: ${gameId}`);
             delete games[gameId];
             dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+            io.emit('lobbyExpired', { lobbyId: gameId });
             hasChanges = true;
         }
     }

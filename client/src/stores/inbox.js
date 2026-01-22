@@ -70,6 +70,14 @@ export const useInboxStore = defineStore('inbox', {
             if (this.pagination.page === 1) {
                 this.fetchMessages(1);
             }
+        },
+
+        expireMessagesForLobby(lobbyId) {
+            this.messages.forEach(msg => {
+                if (msg.type === 'game_invite' && msg.content_params.lobbyId === lobbyId && !msg.content_params.action_result) {
+                    msg.content_params.action_result = 'expired';
+                }
+            });
         }
     }
 });

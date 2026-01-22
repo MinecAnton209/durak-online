@@ -143,8 +143,8 @@ router.post('/login', loginLimiter, async (req, res) => {
             if (isMatch) {
                 if (user.is_banned) {
                     if (user.ban_until && new Date(user.ban_until) < new Date()) {
-                        await dbRun('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
-                        user.is_banned = 0;
+                        await dbRun('UPDATE users SET is_banned = false, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
+                        user.is_banned = false;
                         user.ban_until = null;
                         user.ban_reason = null;
                     } else {
@@ -333,7 +333,7 @@ router.get('/check-session', async (req, res) => {
 
                 if (diffDays > 1 && user.streak_count > 0) {
                     currentStreak = 0;
-                    await dbRun(`UPDATE users SET streak_count = 0 WHERE id = ?`, [user.id]).catch(e => console.error(e));
+                    await dbRun(`UPDATE users SET streak_count = false WHERE id = ?`, [user.id]).catch(e => console.error(e));
                 }
             }
 
@@ -343,7 +343,7 @@ router.get('/check-session', async (req, res) => {
             if (isMuted && muteUntil && new Date(muteUntil) < new Date()) {
                 isMuted = false;
                 muteUntil = null;
-                await dbRun('UPDATE users SET is_muted = 0, mute_until = NULL WHERE id = ?', [user.id]).catch(e => console.error(e));
+                await dbRun('UPDATE users SET is_muted = false, mute_until = NULL WHERE id = ?', [user.id]).catch(e => console.error(e));
             }
 
             let isBanned = user.is_banned;
@@ -354,7 +354,7 @@ router.get('/check-session', async (req, res) => {
                 isBanned = false;
                 banUntil = null;
                 banReason = null;
-                await dbRun('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]).catch(e => console.error(e));
+                await dbRun('UPDATE users SET is_banned = false, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]).catch(e => console.error(e));
             }
 
             const sessionUser = {

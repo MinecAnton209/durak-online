@@ -109,6 +109,26 @@ router.post('/system/sockets/:socketId/disconnect', ensureAdmin, async (req, res
     }
 });
 
+router.get('/users/search', ensureAdmin, (req, res) => {
+    const { query } = req.query;
+    if (!query || query.length < 2) return res.json([]);
+
+    // Check if query is ID or username
+    const isId = !isNaN(query);
+    const sql = isId
+        ? `SELECT id, username, is_verified FROM users WHERE id = ? LIMIT 10`
+        : `SELECT id, username, is_verified FROM users WHERE username ILIKE ? LIMIT 10`;
+    const params = isId ? [parseInt(query)] : [`%${query}%`];
+
+    db.all(sql, params, (err, users) => {
+        if (err) {
+            console.error("Error searching users (admin):", err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        res.json(users);
+    });
+});
+
 router.get('/users', ensureAdmin, (req, res) => {
     const sql = `SELECT id, username, wins, losses, streak_count, last_played_date, is_verified, is_admin, is_banned, ban_reason, is_muted, rating, coins, device_id FROM users ORDER BY id ASC`;
     db.all(sql, [], (err, users) => {
@@ -121,12 +141,17 @@ router.get('/users', ensureAdmin, (req, res) => {
 });
 
 router.get('/users/clones', ensureAdmin, (req, res) => {
+    const dbClient = process.env.DB_CLIENT || 'sqlite';
+    const groupSql = dbClient === 'postgres'
+        ? `STRING_AGG(username, ',') as usernames, STRING_AGG(id::text, ',') as user_ids`
+        : `GROUP_CONCAT(username) as usernames, GROUP_CONCAT(id) as user_ids`;
+
     const sql = `
-        SELECT device_id, COUNT(*) as account_count, GROUP_CONCAT(username) as usernames, GROUP_CONCAT(id) as user_ids
+        SELECT device_id, COUNT(*) as account_count, ${groupSql}
         FROM users 
         WHERE device_id IS NOT NULL AND device_id != ''
         GROUP BY device_id 
-        HAVING account_count > 1
+        HAVING COUNT(*) > 1
         ORDER BY account_count DESC
         LIMIT 100
     `;
@@ -247,6 +272,42 @@ function handleUserAction(req, res, actionType, sql, params, successMessage) {
                     }
                 });
             }
+
+            // Inbox notification
+            const inboxService = require('../services/inboxService');
+            if (isBan) {
+                inboxService.addMessage(userId, {
+                    type: 'admin_action',
+                    titleKey: 'inbox.admin_ban_title',
+                    contentKey: 'inbox.admin_ban_content',
+                    contentParams: {
+                        reason: reason || 'Violation of rules',
+                        until: actionType === 'BAN_USER_TEMPORARY' ? ` (до ${new Date(params[1]).toLocaleString()})` : ''
+                    }
+                });
+            } else if (actionType === 'UNBAN_USER') {
+                inboxService.addMessage(userId, {
+                    type: 'admin_action',
+                    titleKey: 'inbox.admin_unban_title',
+                    contentKey: 'inbox.admin_unban_content'
+                });
+            } else if (isMute) {
+                inboxService.addMessage(userId, {
+                    type: 'admin_action',
+                    titleKey: 'inbox.admin_mute_title',
+                    contentKey: 'inbox.admin_mute_content',
+                    contentParams: {
+                        reason: reason || 'Spam/Abuse',
+                        until: actionType === 'MUTE_USER_TEMPORARY' ? ` (до ${new Date(params[0]).toLocaleString()})` : ''
+                    }
+                });
+            } else if (isUnmute) {
+                inboxService.addMessage(userId, {
+                    type: 'admin_action',
+                    titleKey: 'inbox.admin_unmute_title',
+                    contentKey: 'inbox.admin_unmute_content'
+                });
+            }
             res.json({ message: successMessage(targetUser.username) });
         });
     });
@@ -254,7 +315,7 @@ function handleUserAction(req, res, actionType, sql, params, successMessage) {
 
 router.post('/users/:userId/ban', ensureAdmin, (req, res) => {
     const { reason } = req.body;
-    const sql = `UPDATE users SET is_banned = 1, ban_reason = ?, ban_until = NULL WHERE id = ?`;
+    const sql = `UPDATE users SET is_banned = true, ban_reason = ?, ban_until = NULL WHERE id = ?`;
 
     handleUserAction(req, res, 'BAN_USER_PERMANENT', sql, [reason || null, req.params.userId], (username) =>
         `User ${username} has been banned permanently. Reason: ${reason || 'No reason specified'}`
@@ -265,7 +326,7 @@ router.post('/users/:userId/tempban', ensureAdmin, (req, res) => {
     const { durationMinutes, reason } = req.body;
     const duration = parseInt(durationMinutes, 10) || 60;
     const banUntil = new Date(Date.now() + duration * 60000).toISOString();
-    const sql = `UPDATE users SET is_banned = 1, ban_reason = ?, ban_until = ? WHERE id = ?`;
+    const sql = `UPDATE users SET is_banned = true, ban_reason = ?, ban_until = ? WHERE id = ?`;
 
     handleUserAction(req, res, 'BAN_USER_TEMPORARY', sql, [reason || null, banUntil, req.params.userId], (username) =>
         `User ${username} has been banned until ${new Date(banUntil).toLocaleString()}. Reason: ${reason || 'No reason specified'}`
@@ -273,15 +334,15 @@ router.post('/users/:userId/tempban', ensureAdmin, (req, res) => {
 });
 
 router.post('/users/:userId/unban', ensureAdmin, (req, res) => {
-    const sql = `UPDATE users SET is_banned = 0, ban_reason = NULL, ban_until = NULL WHERE id = ?`;
+    const sql = `UPDATE users SET is_banned = false, ban_reason = NULL, ban_until = NULL WHERE id = ?`;
     handleUserAction(req, res, 'UNBAN_USER', sql, [req.params.userId], (username) =>
         `User ${username} has been unbanned.`
     );
 });
-router.post('/users/:userId/set-admin', ensureAdmin, (req, res) => handleUserAction(req, res, 'SET_ADMIN_ROLE', 'UPDATE users SET is_admin = 1 WHERE id = ?', [req.params.userId], (name) => `User ${name} is now an admin.`));
-router.post('/users/:userId/remove-admin', ensureAdmin, (req, res) => handleUserAction(req, res, 'REMOVE_ADMIN_ROLE', 'UPDATE users SET is_admin = 0 WHERE id = ?', [req.params.userId], (name) => `User ${name} is no longer an admin.`));
-router.post('/users/:userId/verify', ensureAdmin, (req, res) => handleUserAction(req, res, 'VERIFY_USER', 'UPDATE users SET is_verified = 1 WHERE id = ?', [req.params.userId], (name) => `User ${name} has been verified.`));
-router.post('/users/:userId/unverify', ensureAdmin, (req, res) => handleUserAction(req, res, 'UNVERIFY_USER', 'UPDATE users SET is_verified = 0 WHERE id = ?', [req.params.userId], (name) => `User ${name} verification removed.`));
+router.post('/users/:userId/set-admin', ensureAdmin, (req, res) => handleUserAction(req, res, 'SET_ADMIN_ROLE', 'UPDATE users SET is_admin = true WHERE id = ?', [req.params.userId], (name) => `User ${name} is now an admin.`));
+router.post('/users/:userId/remove-admin', ensureAdmin, (req, res) => handleUserAction(req, res, 'REMOVE_ADMIN_ROLE', 'UPDATE users SET is_admin = false WHERE id = ?', [req.params.userId], (name) => `User ${name} is no longer an admin.`));
+router.post('/users/:userId/verify', ensureAdmin, (req, res) => handleUserAction(req, res, 'VERIFY_USER', 'UPDATE users SET is_verified = true WHERE id = ?', [req.params.userId], (name) => `User ${name} has been verified.`));
+router.post('/users/:userId/unverify', ensureAdmin, (req, res) => handleUserAction(req, res, 'UNVERIFY_USER', 'UPDATE users SET is_verified = false WHERE id = ?', [req.params.userId], (name) => `User ${name} verification removed.`));
 
 router.put('/users/:userId', ensureAdmin, (req, res) => {
     const { userId } = req.params;
@@ -341,6 +402,20 @@ router.put('/users/:userId', ensureAdmin, (req, res) => {
             targetUserId: userId,
             reason: `Updated fields: ${fieldsToLog.join(', ')}`
         });
+
+        // Inbox notification for coins
+        if (req.body.coins !== undefined) {
+            const inboxService = require('../services/inboxService');
+            inboxService.addMessage(userId, {
+                type: 'admin_action',
+                titleKey: 'inbox.admin_coins_added_title',
+                contentKey: 'inbox.admin_coins_added_content',
+                contentParams: {
+                    amount: req.body.coins,
+                    reason: 'Admin Adjustment'
+                }
+            });
+        }
 
         res.json({ message: 'User account updated successfully' });
     });
@@ -425,7 +500,7 @@ router.get('/stats/leaderboard', ensureAdmin, (req, res) => { const type = req.q
 
 router.post('/users/:userId/mute', ensureAdmin, (req, res) => {
     const { reason } = req.body;
-    const sql = `UPDATE users SET is_muted = 1, mute_until = NULL WHERE id = ?`;
+    const sql = `UPDATE users SET is_muted = true, mute_until = NULL WHERE id = ?`;
 
     handleUserAction(req, res, 'MUTE_USER_PERMANENT', sql, [req.params.userId], (username) =>
         `User ${username} has been muted permanently. Reason: ${reason || 'No reason specified'}`
@@ -436,7 +511,7 @@ router.post('/users/:userId/tempmute', ensureAdmin, (req, res) => {
     const { durationMinutes, reason } = req.body;
     const duration = parseInt(durationMinutes, 10) || 60;
     const muteUntil = new Date(Date.now() + duration * 60000).toISOString();
-    const sql = `UPDATE users SET is_muted = 1, mute_until = ? WHERE id = ?`;
+    const sql = `UPDATE users SET is_muted = true, mute_until = ? WHERE id = ?`;
 
     handleUserAction(req, res, 'MUTE_USER_TEMPORARY', sql, [muteUntil, req.params.userId], (username) =>
         `User ${username} has been muted until ${new Date(muteUntil).toLocaleString()}. Reason: ${reason || 'No reason specified'}`
@@ -444,7 +519,7 @@ router.post('/users/:userId/tempmute', ensureAdmin, (req, res) => {
 });
 
 router.post('/users/:userId/unmute', ensureAdmin, (req, res) => {
-    const sql = `UPDATE users SET is_muted = 0, mute_until = NULL WHERE id = ?`;
+    const sql = `UPDATE users SET is_muted = false, mute_until = NULL WHERE id = ?`;
     handleUserAction(req, res, 'UNMUTE_USER', sql, [req.params.userId], (username) =>
         `User ${username} has been unmuted.`
     );
@@ -908,6 +983,14 @@ router.delete('/sessions/:sessionId', ensureAdmin, (req, res) => {
                 io.to(`user_${userId}`).emit('sessionTerminated', { sessionId });
             }
 
+            // Inbox notification
+            const inboxService = require('../services/inboxService');
+            inboxService.addMessage(userId, {
+                type: 'admin_action',
+                titleKey: 'inbox.admin_session_terminated_title',
+                contentKey: 'inbox.admin_session_terminated_content'
+            });
+
             res.json({ message: 'Session terminated' });
         });
     });
@@ -996,6 +1079,7 @@ router.post('/inbox/send', ensureAdmin, async (req, res) => {
     try {
         if (isBroadcast) {
             await inboxService.broadcastMessage({
+                type: 'admin_action',
                 titleKey: 'inbox.admin_message_title',
                 contentKey: 'inbox.admin_message_content',
                 contentParams: { text: message }
@@ -1015,6 +1099,7 @@ router.post('/inbox/send', ensureAdmin, async (req, res) => {
             }
 
             await inboxService.addMessage(userId, {
+                type: 'admin_action',
                 titleKey: 'inbox.admin_message_title',
                 contentKey: 'inbox.admin_message_content',
                 contentParams: { text: message }

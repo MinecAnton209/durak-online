@@ -123,6 +123,16 @@ onMounted(async () => {
       toastStore.addToast(`${title} 📩`, 'info', 5000);
       inboxStore.handleNewMessage(data);
     });
+
+    socketStore.socket.on('lobbyExpired', (data) => {
+      const inboxStore = useInboxStore();
+      inboxStore.expireMessagesForLobby(data.lobbyId);
+    });
+
+    socketStore.socket.on('lobbyStarted', (data) => {
+      const inboxStore = useInboxStore();
+      inboxStore.expireMessagesForLobby(data.lobbyId);
+    });
   } catch (error) {
     console.error("Socket connection failed in App.vue:", error);
   }

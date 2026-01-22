@@ -72,8 +72,8 @@ router.post('/auth', async (req, res) => {
 
         if (user.is_banned) {
             if (user.ban_until && new Date(user.ban_until) < new Date()) {
-                await dbRun('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
-                user.is_banned = 0;
+                await dbRun('UPDATE users SET is_banned = false, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
+                user.is_banned = false;
                 user.ban_until = null;
                 user.ban_reason = null;
             } else {
@@ -238,8 +238,8 @@ router.post('/widget-auth', async (req, res) => {
 
         if (user.is_banned) {
             if (user.ban_until && new Date(user.ban_until) < new Date()) {
-                await dbRun('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
-                user.is_banned = 0;
+                await dbRun('UPDATE users SET is_banned = false, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
+                user.is_banned = false;
                 user.ban_until = null;
                 user.ban_reason = null;
             } else {
