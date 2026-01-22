@@ -78,7 +78,7 @@ async function getMessages(userId, { page = 1, limit = 10 } = {}) {
         return {
             messages: messages.map(m => ({
                 ...m,
-                content_params: m.content_params ? JSON.parse(m.content_params) : {}
+                content_params: typeof m.content_params === 'string' ? JSON.parse(m.content_params) : (m.content_params || {})
             })),
             pagination: {
                 page,
