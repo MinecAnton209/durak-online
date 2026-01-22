@@ -247,6 +247,7 @@ app.use(helmet({
         },
     },
     crossOriginEmbedderPolicy: false,
+    frameguard: false,
 }));
 
 app.use(cors({
