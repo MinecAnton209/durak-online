@@ -69,6 +69,17 @@ router.post('/request', async (req, res, next) => {
             });
         }
 
+        const inboxService = require('../services/inboxService');
+        await inboxService.addMessage(toUserId, {
+            type: 'friend_request',
+            titleKey: 'inbox.friend_request_title',
+            contentKey: 'inbox.friend_request_content',
+            contentParams: {
+                fromUserId: fromUserId,
+                fromUsername: req.session.user.username
+            }
+        });
+
         res.status(201).json({ success: true, i18nKey: 'friends_request_sent' });
     } catch (error) {
         if (error.code === '23505' || (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE'))) {

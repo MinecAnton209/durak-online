@@ -24,7 +24,7 @@ const getIcon = (type) => {
 
 <template>
   <div
-    class="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 w-full max-w-sm pointer-events-none px-4">
+    class="fixed top-4 left-1/2 -translate-x-1/2 z-[100000] flex flex-col gap-2 w-full max-w-sm pointer-events-none px-4">
     <transition-group name="toast">
       <div v-for="toast in store.toasts" :key="toast.id"
         class="pointer-events-auto flex items-center gap-3 p-4 rounded-xl border backdrop-blur-md shadow-2xl cursor-pointer"

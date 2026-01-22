@@ -109,6 +109,23 @@ const locales = {
             version: "v{version}",
             error_fetch: "Помилка отримання статистики.",
             not_available: "Статистика недоступна."
+        },
+        inbox: {
+            title: "📥 Вхідні повідомлення",
+            empty: "У вас немає повідомлень.",
+            friend_request_title: "🤝 Запит у друзі",
+            friend_request_content: "Користувач **{fromUsername}** хоче додати вас у друзі.",
+            login_alert_title: "🛡 Новий вхід в акаунт",
+            login_alert_content: "Виконано вхід з IP: **{ip}** ({location}).\nПристрій: {userAgent}",
+            btn_accept: "Прийняти",
+            btn_decline: "Відхилити",
+            btn_it_was_me: "Це я",
+            btn_details: "Детальніше",
+            prev_page: "⬅️ Сюди",
+            next_page: "Туди ➡️",
+            page_info: "Сторінка {current} з {total}",
+            admin_message_title: "📢 Повідомлення від Адміністрації",
+            admin_message_content: "{text}"
         }
     },
 
@@ -222,6 +239,23 @@ const locales = {
             version: "v{version}",
             error_fetch: "Ошибка получения статистики.",
             not_available: "Статистика недоступна."
+        },
+        inbox: {
+            title: "📥 Входящие сообщения",
+            empty: "У вас нет сообщений.",
+            friend_request_title: "🤝 Запрос в друзья",
+            friend_request_content: "Пользователь **{fromUsername}** хочет добавить вас в друзья.",
+            login_alert_title: "🛡 Новый вход в аккаунт",
+            login_alert_content: "Выполнен вход с IP: **{ip}** ({location}).\nУстройство: {userAgent}",
+            btn_accept: "Принять",
+            btn_decline: "Отклонить",
+            btn_it_was_me: "Это я",
+            btn_details: "Подробнее",
+            prev_page: "⬅️ Сюда",
+            next_page: "Туда ➡️",
+            page_info: "Страница {current} из {total}",
+            admin_message_title: "📢 Сообщение от Администрации",
+            admin_message_content: "{text}"
         }
     },
 
@@ -335,6 +369,23 @@ const locales = {
             version: "v{version}",
             error_fetch: "Error fetching stats.",
             not_available: "Stats not available."
+        },
+        inbox: {
+            title: "📥 Inbox Messages",
+            empty: "You have no messages.",
+            friend_request_title: "🤝 Friend Request",
+            friend_request_content: "User **{fromUsername}** wants to add you as a friend.",
+            login_alert_title: "🛡 New Account Login",
+            login_alert_content: "Login from IP: **{ip}** ({location}).\nDevice: {userAgent}",
+            btn_accept: "Accept",
+            btn_decline: "Decline",
+            btn_it_was_me: "It was me",
+            btn_details: "Details",
+            prev_page: "⬅️ Prev",
+            next_page: "Next ➡️",
+            page_info: "Page {current} of {total}",
+            admin_message_title: "📢 Message from Administration",
+            admin_message_content: "{text}"
         }
     }
 };

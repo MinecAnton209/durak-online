@@ -24,6 +24,7 @@ const ratingService = require('./services/ratingService.js');
 const statsService = require('./services/statsService.js');
 const notificationService = require('./services/notificationService.js');
 const economyService = require('./services/economyService.js');
+const inboxService = require('./services/inboxService.js');
 const webpush = require('web-push');
 const util = require('util');
 const dbRun = util.promisify(db.run.bind(db));
@@ -191,6 +192,7 @@ const PORT = process.env.PORT || 3000;
 
 setTimeout(seedAchievements, 1000);
 achievementService.init(io);
+inboxService.init(io);
 
 app.set('trust proxy', 1);
 
@@ -280,6 +282,8 @@ app.use('/api/achievements', achievementRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/friends', friendsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+const inboxRoutes = require('./routes/inbox.js');
+app.use('/api/inbox', inboxRoutes);
 app.set('dbGet', dbGet);
 app.set('dbRun', dbRun);
 

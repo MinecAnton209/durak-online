@@ -3,22 +3,26 @@ import { ref, watchEffect, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useGameStore } from '@/stores/game';
+import { useInboxStore } from '@/stores/inbox';
 import { useI18n } from 'vue-i18n';
 
 import AuthModal from '@/components/ui/AuthModal.vue';
 import LeaderboardModal from '@/components/ui/LeaderboardModal.vue';
+import InboxModal from '@/components/ui/InboxModal.vue';
 
 const { t, locale } = useI18n();
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 const gameStore = useGameStore();
+const inboxStore = useInboxStore();
 
 const playerName = ref('');
 
 const isAuthModalOpen = ref(false);
 const authMode = ref('login');
 const isLeaderboardOpen = ref(false);
+const isInboxOpen = ref(false);
 
 onMounted(() => {
   if (route.query.gameId) {
@@ -32,6 +36,13 @@ onMounted(() => {
 watchEffect(() => {
   if (authStore.user && authStore.user.username) {
     playerName.value = authStore.user.username;
+    // Fetch unread count and sync sessionId
+    if (authStore.isAuthenticated) {
+      inboxStore.fetchUnreadCount();
+      if (authStore.user.sessionId) {
+        inboxStore.currentSessionId = authStore.user.sessionId;
+      }
+    }
   }
 });
 
@@ -154,6 +165,19 @@ const goToLobbyBrowser = () => {
               </div>
             </div>
           </div>
+          <button @click="isInboxOpen = true"
+            class="px-3 bg-transparent border border-outline/30 text-outline hover:bg-white/5 hover:border-outline hover:text-white rounded-xl transition-all active:scale-95 shrink-0 relative"
+            title="Inbox">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
+              </path>
+            </svg>
+            <span v-if="inboxStore.unreadCount > 0"
+              class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 rounded-full min-w-[1.2em] h-[1.2em] flex items-center justify-center border border-[#1a1a2e]">
+              {{ inboxStore.unreadCount > 9 ? '9+' : inboxStore.unreadCount }}
+            </span>
+          </button>
           <button @click="handleLogout"
             class="px-4 bg-transparent border border-error/30 text-error hover:bg-error/10 hover:border-error rounded-xl transition-colors active:scale-95 shrink-0"
             :title="$t('logout_title')">
@@ -213,6 +237,7 @@ const goToLobbyBrowser = () => {
     <AuthModal :is-open="isAuthModalOpen" :mode="authMode" @close="isAuthModalOpen = false"
       @submit="handleAuthSubmit" />
     <LeaderboardModal :is-open="isLeaderboardOpen" @close="isLeaderboardOpen = false" />
+    <InboxModal :is-open="isInboxOpen" @close="isInboxOpen = false" />
   </div>
 </template>
 

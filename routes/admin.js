@@ -985,4 +985,55 @@ router.get('/devices/:deviceId/ban-info', ensureAdmin, (req, res) => {
     });
 });
 
+router.post('/inbox/send', ensureAdmin, async (req, res) => {
+    const { userId, message, isBroadcast } = req.body;
+    const inboxService = require('../services/inboxService');
+
+    if (!message) {
+        return res.status(400).json({ error: 'Message is required' });
+    }
+
+    try {
+        if (isBroadcast) {
+            await inboxService.broadcastMessage({
+                titleKey: 'inbox.admin_message_title',
+                contentKey: 'inbox.admin_message_content',
+                contentParams: { text: message }
+            });
+
+            logAdminAction({
+                adminId: req.session.user.id,
+                adminUsername: req.session.user.username,
+                actionType: 'BROADCAST_INBOX',
+                reason: `Message: ${message}`
+            });
+
+            res.json({ message: 'Broadcast inbox message sent successfully' });
+        } else {
+            if (!userId) {
+                return res.status(400).json({ error: 'User ID is required for direct message' });
+            }
+
+            await inboxService.addMessage(userId, {
+                titleKey: 'inbox.admin_message_title',
+                contentKey: 'inbox.admin_message_content',
+                contentParams: { text: message }
+            });
+
+            logAdminAction({
+                adminId: req.session.user.id,
+                adminUsername: req.session.user.username,
+                actionType: 'SEND_INBOX_MESSAGE',
+                targetUserId: userId,
+                reason: `Message: ${message}`
+            });
+
+            res.json({ message: 'Inbox message sent successfully' });
+        }
+    } catch (error) {
+        console.error('Error sending inbox message:', error);
+        res.status(500).json({ error: 'Failed to send message' });
+    }
+});
+
 module.exports = router;

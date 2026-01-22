@@ -47,6 +47,7 @@ const navItems = [
     { id: 'system', label: t('admin_nav_system'), icon: '⚙️' },
     { id: 'audit', label: t('admin_nav_audit'), icon: '📜' },
     { id: 'maintenance', label: t('admin_nav_maintenance'), icon: '🛠️' },
+    { id: 'inbox', label: t('admin_nav_inbox'), icon: '📨' },
     { id: 'devices', label: t('admin_nav_devices'), icon: '📱' },
 ];
 
@@ -161,6 +162,45 @@ const handleBroadcast = async () => {
         showToast(t('admin_toast_broadcast_sent'), 'success');
     } catch (e) {
         showToast(t('admin_toast_broadcast_fail'), 'error');
+    }
+};
+
+const inboxMessage = ref('');
+const inboxTargetUserId = ref('');
+const inboxIsBroadcast = ref(false);
+
+const sendMessage = async () => {
+    if (!inboxMessage.value.trim()) {
+        showToast(t('admin_inbox_error_message_required') || 'Message is required', 'error');
+        return;
+    }
+
+    if (!inboxIsBroadcast.value && !inboxTargetUserId.value) {
+        showToast(t('admin_inbox_error_user_required') || 'User ID is required', 'error');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/admin/inbox/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: inboxIsBroadcast.value ? null : parseInt(inboxTargetUserId.value),
+                message: inboxMessage.value,
+                isBroadcast: inboxIsBroadcast.value
+            })
+        });
+
+        if (res.ok) {
+            showToast(t('admin_inbox_success_sent') || 'Message sent successfully');
+            inboxMessage.value = '';
+            // keep user id if repeated sending
+        } else {
+            const err = await res.json();
+            showToast(err.error || t('admin_inbox_error_failed') || 'Failed to send', 'error');
+        }
+    } catch (e) {
+        showToast(t('admin_inbox_error_failed') || 'Failed to send', 'error');
     }
 };
 
@@ -621,6 +661,57 @@ onMounted(async () => {
                     </div>
                 </div>
 
+                <!-- Tab: Inbox -->
+                <div v-else-if="currentTab === 'inbox'" class="space-y-10 animate-fade-in">
+                    <header class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                        <div>
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="w-8 h-[2px] bg-primary"></span>
+                                <span class="text-primary text-xs font-bold uppercase tracking-[0.2em]">MESSAGING</span>
+                            </div>
+                            <h1 class="text-4xl md:text-5xl font-extrabold text-white tracking-tight">{{
+                                t('admin_nav_inbox') }}</h1>
+                        </div>
+                    </header>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div class="bg-surface/30 backdrop-blur-xl border border-white/5 p-8 rounded-[2.5rem]">
+                            <h3 class="text-xl font-bold text-white mb-6">Send Message</h3>
+
+                            <div class="space-y-6">
+                                <div class="flex items-center gap-4 bg-white/5 p-4 rounded-xl border border-white/5">
+                                    <label class="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" v-model="inboxIsBroadcast"
+                                            class="w-5 h-5 rounded border-gray-600 bg-gray-700 text-primary">
+                                        <span class="font-bold">Broadcast to All Users</span>
+                                    </label>
+                                </div>
+
+                                <div v-if="!inboxIsBroadcast">
+                                    <label
+                                        class="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Target
+                                        User ID</label>
+                                    <input v-model="inboxTargetUserId" type="number" placeholder="Enter User ID"
+                                        class="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none transition-all">
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Message
+                                        Content</label>
+                                    <textarea v-model="inboxMessage" rows="5" placeholder="Type your message here..."
+                                        class="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none transition-all"></textarea>
+                                </div>
+
+                                <button @click="sendMessage"
+                                    class="w-full bg-primary hover:bg-primary-dark text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 transition-all active:scale-95">
+                                    Send Message 📤
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Tab: Users -->
                 <div v-else-if="currentTab === 'users'" class="space-y-10 animate-fade-in">
                     <header class="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -670,7 +761,7 @@ onMounted(async () => {
                                                 <div>
                                                     <div class="flex items-center gap-1.5">
                                                         <p class="font-bold text-white tracking-wide">{{ user.username
-                                                        }}</p>
+                                                            }}</p>
                                                         <span v-if="user.is_verified" class="text-blue-400"
                                                             :title="t('admin_status_verified')">✅</span>
                                                         <span v-if="user.is_admin"
@@ -849,7 +940,7 @@ onMounted(async () => {
                         <div class="px-8 py-6 flex items-center justify-between bg-black/5 border-t border-white/5">
                             <p class="text-xs font-bold text-on-surface-variant uppercase">{{ t('admin_audit_total', {
                                 count: auditLogs.rowCount
-                            }) }}</p>
+                                }) }}</p>
                             <div class="flex gap-2">
                                 <button @click="auditPage--; loadAuditLogs()" :disabled="auditPage === 0"
                                     class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase transition-all hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none">{{
@@ -902,7 +993,7 @@ onMounted(async () => {
                             <h3 class="text-xl font-bold text-white mb-2">{{ t('admin_games_lobby', {
                                 name:
                                     game.hostName
-                            }) }}</h3>
+                                }) }}</h3>
                             <p class="text-sm text-on-surface-variant mb-6">{{ t('admin_games_players') }} <span
                                     class="text-white font-bold">{{ game.playerCount }} / {{ game.maxPlayers }}</span>
                             </p>
@@ -980,10 +1071,10 @@ onMounted(async () => {
                                             <td class="px-8 py-6">
                                                 <p class="text-sm text-on-surface-variant">{{ t('admin_game_winner', {
                                                     name: game.winner_username || t('admin_game_draw')
-                                                }) }}</p>
+                                                    }) }}</p>
                                                 <p class="text-xs text-on-surface-variant/60">{{ t('admin_game_loser', {
                                                     name: game.loser_username || '-'
-                                                }) }}</p>
+                                                    }) }}</p>
                                             </td>
                                             <td class="px-8 py-6">
                                                 <div class="flex items-center gap-2">
@@ -1105,7 +1196,8 @@ onMounted(async () => {
                                         </td>
                                         <td class="px-8 py-6 max-w-[200px]">
                                             <p class="text-[10px] text-on-surface-variant truncate"
-                                                :title="conn.userAgent">{{ conn.userAgent }}</p>
+                                                :title="conn.userAgent">
+                                                {{ conn.userAgent }}</p>
                                         </td>
                                         <td class="px-8 py-6">
                                             <button @click="disconnectSocket(conn.socketId)"
@@ -1174,12 +1266,12 @@ onMounted(async () => {
                                             <div class="flex items-center gap-2">
                                                 <p class="text-sm font-bold text-white">{{ donate.username }}</p>
                                                 <span class="text-[10px] opacity-20 font-mono">#{{ donate.user_id
-                                                }}</span>
+                                                    }}</span>
                                             </div>
                                         </td>
                                         <td class="px-8 py-6">
                                             <p class="text-lg font-black text-yellow-500">⭐️ {{ donate.amount.toFixed(0)
-                                            }}</p>
+                                                }}</p>
                                         </td>
                                         <td class="px-8 py-6">
                                             <p class="text-[10px] font-mono text-on-surface-variant opacity-60">{{
@@ -1203,7 +1295,7 @@ onMounted(async () => {
                         <div class="px-8 py-6 flex items-center justify-between bg-black/5 border-t border-white/5">
                             <p class="text-xs font-bold text-on-surface-variant uppercase">{{ t('admin_total_records', {
                                 count: donations.rowCount
-                            }) }}</p>
+                                }) }}</p>
                             <div class="flex gap-2">
                                 <button @click="donationPage--; loadDonations()" :disabled="donationPage === 0"
                                     class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase transition-all hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none">{{
@@ -1346,7 +1438,7 @@ onMounted(async () => {
                                         <h4 class="text-xl font-bold text-white">{{ t('admin_clones_count', {
                                             count:
                                                 device.count
-                                        }) }}</h4>
+                                            }) }}</h4>
                                     </div>
                                 </div>
                                 <button @click="openDeviceDetails(device.deviceId)"
@@ -1379,7 +1471,7 @@ onMounted(async () => {
                 <div v-else class="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in">
                     <div class="text-[120px] mb-8 animate-bounce opacity-20">🪄</div>
                     <h2 class="text-2xl font-black text-white mb-2">{{ t('admin_mismatch_title') || "Wait, what's this?"
-                    }}</h2>
+                        }}</h2>
                     <p class="text-on-surface-variant max-w-sm mx-auto leading-relaxed">
                         {{ t('admin_mismatch_desc', { tab: currentTab }) }}
                     </p>
@@ -1593,7 +1685,7 @@ onMounted(async () => {
                             <p class="text-[10px] font-black uppercase text-on-surface-variant mb-1">{{
                                 t('admin_device_model') }}</p>
                             <p class="text-sm font-bold text-white">{{ selectedDevice.device?.device_model || 'Unknown'
-                            }}</p>
+                                }}</p>
                         </div>
                         <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
                             <p class="text-[10px] font-black uppercase text-on-surface-variant mb-1">{{

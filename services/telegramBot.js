@@ -43,6 +43,9 @@ async function showMainMenu(ctx, isEdit = false) {
         ],
         [
             { text: t(lang, 'btn_leaderboard'), callback_data: 'leaderboard_rating' },
+            { text: t(lang, 'inbox.title'), callback_data: 'inbox_1' }
+        ],
+        [
             { text: t(lang, 'btn_donate'), callback_data: 'donate_start' }
         ],
         [{ text: t(lang, 'add_group_btn'), url: `https://t.me/${ctx.botInfo.username}?startgroup=true` }]
@@ -100,6 +103,13 @@ ${t(lang, 'status.version', { version: stats.app.version })}
     bot.action('profile', async (ctx) => {
         await ctx.answerCbQuery();
         await showProfile(ctx, true);
+    });
+
+    bot.command('inbox', async (ctx) => showInbox(ctx, 1));
+    bot.action(/inbox_(\d+)/, async (ctx) => {
+        const page = parseInt(ctx.match[1]);
+        await ctx.answerCbQuery();
+        await showInbox(ctx, page, true);
     });
 
     async function showProfile(ctx, isEdit = false) {
@@ -538,8 +548,117 @@ ${t(lang, 'status.version', { version: stats.app.version })}
         }
     });
 
+    async function showInbox(ctx, page = 1, isEdit = false) {
+        const lang = ctx.from.language_code;
+        const telegramId = ctx.from.id;
+        try {
+            const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
+            if (!user) return ctx.reply(t(lang, 'errors.no_account'));
+
+            const inboxService = require('./inboxService');
+            const { messages, pagination } = await inboxService.getMessages(user.id, { page, limit: 5 });
+
+            if (messages.length === 0) {
+                const emptyMsg = t(lang, 'inbox.empty');
+                const kb = [[{ text: t(lang, 'buttons.back_to_menu'), callback_data: 'main_menu' }]];
+                if (isEdit) return ctx.editMessageText(emptyMsg, { reply_markup: { inline_keyboard: kb } }).catch(() => { });
+                return ctx.reply(emptyMsg, { reply_markup: { inline_keyboard: kb } });
+            }
+
+            let text = `${t(lang, 'inbox.title')}\n\n`;
+            const keyboard = [];
+
+            for (const msg of messages) {
+                const title = t(lang, msg.title_key || 'inbox.system_message');
+                const content = t(lang, msg.content_key, msg.content_params);
+                const status = msg.is_read ? '📖' : '📩';
+
+                text += `${status} **${title}**\n${content}\n\n`;
+
+                if (msg.type === 'friend_request' && !msg.is_read) {
+                    keyboard.push([
+                        { text: `✅ ${t(lang, 'inbox.btn_accept')}`, callback_data: `inbox_act_${msg.id}_accept` },
+                        { text: `❌ ${t(lang, 'inbox.btn_decline')}`, callback_data: `inbox_act_${msg.id}_decline` }
+                    ]);
+                } else if (msg.type === 'login_alert' && !msg.is_read) {
+                    keyboard.push([
+                        { text: `✅ ${t(lang, 'inbox.btn_it_was_me')}`, callback_data: `inbox_read_${msg.id}` }
+                    ]);
+                }
+            }
+
+            const navRow = [];
+            if (page > 1) navRow.push({ text: t(lang, 'inbox.prev_page'), callback_data: `inbox_${page - 1}` });
+            navRow.push({ text: t(lang, 'inbox.page_info', { current: page, total: pagination.totalPages }), callback_data: 'noop' });
+            if (page < pagination.totalPages) navRow.push({ text: t(lang, 'inbox.next_page'), callback_data: `inbox_${page + 1}` });
+
+            if (navRow.length > 0) keyboard.push(navRow);
+            keyboard.push([{ text: t(lang, 'buttons.back_to_menu'), callback_data: 'main_menu' }]);
+
+            if (isEdit) {
+                await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } }).catch(() => { });
+            } else {
+                await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } });
+            }
+        } catch (e) {
+            console.error("Inbox Error:", e);
+        }
+    }
+
+    bot.action(/inbox_act_(\d+)_(accept|decline)/, async (ctx) => {
+        const msgId = parseInt(ctx.match[1]);
+        const action = ctx.match[2];
+        const lang = ctx.from.language_code;
+        const telegramId = ctx.from.id;
+
+        try {
+            const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
+            const inboxService = require('./inboxService');
+            const { messages } = await inboxService.getMessages(user.id, { page: 1, limit: 100 });
+            const msg = messages.find(m => m.id === msgId);
+
+            if (msg && msg.type === 'friend_request') {
+                const fromUserId = msg.content_params.fromUserId;
+                if (action === 'accept') {
+                    await friendsDb.updateFriendshipStatus(fromUserId, user.id, 'accepted', user.id);
+                } else {
+                    await friendsDb.removeFriendship(fromUserId, user.id);
+                }
+                await inboxService.markAsRead(user.id, msgId);
+                await ctx.answerCbQuery(t(lang, action === 'accept' ? 'friends.accepted' : 'friends.declined', { username: msg.content_params.fromUsername }));
+            }
+            await showInbox(ctx, 1, true);
+        } catch (e) {
+            console.error(e);
+            ctx.answerCbQuery('Error');
+        }
+    });
+
+    bot.action(/inbox_read_(\d+)/, async (ctx) => {
+        const msgId = parseInt(ctx.match[1]);
+        const telegramId = ctx.from.id;
+        try {
+            const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
+            const inboxService = require('./inboxService');
+            await inboxService.markAsRead(user.id, msgId);
+            await ctx.answerCbQuery('OK');
+            await showInbox(ctx, 1, true);
+        } catch (e) {
+            console.error(e);
+        }
+    });
+
     bot.launch({ dropPendingUpdates: true }).then(() => console.log('🤖 Telegram Bot Started!'))
         .catch(err => console.error('Bot launch error:', err));
+}
+
+async function sendMessage(telegramId, text, extra = {}) {
+    if (!bot || !telegramId) return;
+    try {
+        return await bot.telegram.sendMessage(telegramId, text, { parse_mode: 'Markdown', ...extra });
+    } catch (e) {
+        console.error(`[Telegram Bot] Error sending message to ${telegramId}:`, e.message);
+    }
 }
 
 async function stop() {
@@ -550,4 +669,4 @@ async function stop() {
     }
 }
 
-module.exports = { init, stop };
+module.exports = { init, stop, sendMessage };

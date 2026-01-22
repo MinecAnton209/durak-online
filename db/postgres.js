@@ -440,6 +440,20 @@ pool.query(`
     .catch(err => console.error('Помилка створення таблиці "user_devices" в PostgreSQL:', err.stack));
 
 pool.query(`
+    CREATE TABLE IF NOT EXISTS inbox_messages (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT DEFAULT 'system',
+        title_key TEXT,
+        content_key TEXT NOT NULL,
+        content_params JSONB,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+`).then(() => console.log('Таблиця "inbox_messages" в PostgreSQL готова.'))
+    .catch(err => console.error('Помилка створення таблиці "inbox_messages":', err.stack));
+
+pool.query(`
     DO $$
     BEGIN
         IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='users' and column_name='telegram_id')

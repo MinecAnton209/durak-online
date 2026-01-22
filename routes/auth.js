@@ -208,6 +208,21 @@ router.post('/login', loginLimiter, async (req, res) => {
                 const token = signToken(payload)
                 setAuthCookie(req, res, token)
                 req.session = { user: payload, save() { }, destroy() { } }
+
+                const inboxService = require('../services/inboxService');
+                await inboxService.addMessage(user.id, {
+                    type: 'login_alert',
+                    titleKey: 'inbox.login_alert_title',
+                    contentKey: 'inbox.login_alert_content',
+                    contentParams: {
+                        ip: ip,
+                        location: location,
+                        userAgent: ua,
+                        sessionId: sessionId,
+                        deviceId: deviceId
+                    }
+                });
+
                 res.status(200).json({ message: 'Login successful!', user: payload, token });
             } else {
                 res.status(401).json({ message: 'Incorrect username or password.' });

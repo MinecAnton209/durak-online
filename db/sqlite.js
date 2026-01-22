@@ -290,6 +290,20 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 FOREIGN KEY(device_id) REFERENCES known_devices(id) ON DELETE CASCADE
             )
         `);
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS inbox_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                type TEXT DEFAULT 'system',
+                title_key TEXT,
+                content_key TEXT NOT NULL,
+                content_params TEXT, -- JSON string
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        `);
     });
 });
 function runUsersMigrations() {

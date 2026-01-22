@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
 import { useGameStore } from '@/stores/game';
 import { useTelegramStore } from '@/stores/telegram';
+import { useInboxStore } from '@/stores/inbox';
 import { useToastStore } from '@/stores/toast';
 import { useI18n } from 'vue-i18n';
 
@@ -104,11 +105,23 @@ onMounted(async () => {
       }
     });
 
-    socketStore.socket.on('sessionTerminated', () => {
+    socketStore.socket.on('sessionTerminated', (data) => {
+      // data may contain sessionId. If it matches ours, log out.
+      // If no sessionId in data, assume it's for us (legacy/broadcast)
+      if (!data || !data.sessionId || (authStore.user && authStore.user.sessionId === data.sessionId)) {
+        const toastStore = useToastStore();
+        toastStore.addToast(t('error_session_terminated_admin'), 'error', 10000);
+        authStore.logout();
+        window.location.href = '/';
+      }
+    });
+
+    socketStore.socket.on('newInboxMessage', (data) => {
       const toastStore = useToastStore();
-      toastStore.addToast(t('error_session_terminated_admin'), 'error', 10000);
-      authStore.logout();
-      router.push('/');
+      const inboxStore = useInboxStore();
+      const title = t(data.titleKey || 'inbox.system_message');
+      toastStore.addToast(`${title} 📩`, 'info', 5000);
+      inboxStore.handleNewMessage(data);
     });
   } catch (error) {
     console.error("Socket connection failed in App.vue:", error);
