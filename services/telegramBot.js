@@ -608,28 +608,43 @@ ${t(lang, 'status.version', { version: stats.app.version })}
     bot.action(/inbox_act_(\d+)_(accept|decline)/, async (ctx) => {
         const msgId = parseInt(ctx.match[1]);
         const action = ctx.match[2];
-        const lang = ctx.from.language_code;
+        const lang = ctx.from.language_code || 'ru';
         const telegramId = ctx.from.id;
 
         try {
             const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
-            const inboxService = require('./inboxService');
-            const { messages } = await inboxService.getMessages(user.id, { page: 1, limit: 100 });
-            const msg = messages.find(m => m.id === msgId);
+            if (!user) return ctx.answerCbQuery('User not found');
 
-            if (msg && msg.type === 'friend_request') {
-                const fromUserId = msg.content_params.fromUserId;
+            const inboxService = require('./inboxService');
+            // Fetch the specific message to perform the action
+            const msgData = await dbGet('SELECT * FROM inbox_messages WHERE id = ? AND user_id = ?', [msgId, user.id]);
+
+            if (msgData && msgData.type === 'friend_request') {
+                const params = typeof msgData.content_params === 'string' ? JSON.parse(msgData.content_params) : msgData.content_params;
+                const fromUserId = params.fromUserId;
+
                 if (action === 'accept') {
                     await friendsDb.updateFriendshipStatus(fromUserId, user.id, 'accepted', user.id);
                 } else {
                     await friendsDb.removeFriendship(fromUserId, user.id);
                 }
+
                 await inboxService.markAsRead(user.id, msgId);
-                await ctx.answerCbQuery(t(lang, action === 'accept' ? 'friends.accepted' : 'friends.declined', { username: msg.content_params.fromUsername }));
+                await ctx.answerCbQuery(t(lang, action === 'accept' ? 'friends.accepted' : 'friends.declined', { username: params.fromUsername }));
+
+                // If this button was in a notification message (not the inbox list), remove buttons
+                if (ctx.callbackQuery.message && ctx.callbackQuery.message.text && ctx.callbackQuery.message.text.includes('📩')) {
+                    const statusText = action === 'accept' ? '✅ Принято' : '❌ Отклонено';
+                    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
+                } else {
+                    await showInbox(ctx, 1, true);
+                }
+            } else {
+                await ctx.answerCbQuery('Message not found or action expired');
+                await showInbox(ctx, 1, true);
             }
-            await showInbox(ctx, 1, true);
         } catch (e) {
-            console.error(e);
+            console.error("Inbox Action Error:", e);
             ctx.answerCbQuery('Error');
         }
     });
@@ -639,12 +654,20 @@ ${t(lang, 'status.version', { version: stats.app.version })}
         const telegramId = ctx.from.id;
         try {
             const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
+            if (!user) return;
+
             const inboxService = require('./inboxService');
             await inboxService.markAsRead(user.id, msgId);
             await ctx.answerCbQuery('OK');
-            await showInbox(ctx, 1, true);
+
+            // If this was a quick-read button on a notification, remove buttons
+            if (ctx.callbackQuery.message && ctx.callbackQuery.message.text && ctx.callbackQuery.message.text.includes('📩')) {
+                await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
+            } else {
+                await showInbox(ctx, 1, true);
+            }
         } catch (e) {
-            console.error(e);
+            console.error("Inbox Read Error:", e);
         }
     });
 

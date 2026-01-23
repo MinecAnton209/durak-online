@@ -49,6 +49,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
             } else {
                 console.log('Таблиця "users" готова.');
                 runUsersMigrations();
+                runInboxMigrations();
             }
         });
 
@@ -306,6 +307,31 @@ const db = new sqlite3.Database(dbPath, (err) => {
         `);
     });
 });
+
+function runInboxMigrations() {
+    const migrations = [
+        { column: 'telegram_message_id', type: 'INTEGER', options: '' }
+    ];
+    db.all(`PRAGMA table_info(inbox_messages);`, [], (err, columns) => {
+        if (err) {
+            return console.error("Не вдалося отримати інформацію про таблицю inbox_messages:", err.message);
+        }
+        const existingColumns = columns.map(c => c.name);
+        migrations.forEach(migration => {
+            if (!existingColumns.includes(migration.column)) {
+                const sql = `ALTER TABLE inbox_messages ADD COLUMN ${migration.column} ${migration.type} ${migration.options};`;
+                db.run(sql, (alterErr) => {
+                    if (alterErr) {
+                        console.error(`Помилка додавання колонки '${migration.column}' в inbox_messages:`, alterErr.message);
+                    } else {
+                        console.log(`Колонка '${migration.column}' успішно додана в таблицю inbox_messages.`);
+                    }
+                });
+            }
+        });
+    });
+}
+
 function runUsersMigrations() {
     const migrations = [
         { column: 'coins', type: 'INTEGER', options: 'DEFAULT 1000 NOT NULL' },

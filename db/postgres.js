@@ -453,6 +453,7 @@ pool.query(`
 `).then(() => console.log('Таблиця "inbox_messages" в PostgreSQL готова.'))
     .catch(err => console.error('Помилка створення таблиці "inbox_messages":', err.stack));
 
+
 pool.query(`
     DO $$
     BEGIN
@@ -464,6 +465,18 @@ pool.query(`
     $$;
 `).then(() => console.log('Перевірено наявність колонки telegram_id.'))
     .catch(err => console.error('Помилка при перевірці/додаванні колонки telegram_id:', err));
+
+pool.query(`
+    DO $$
+    BEGIN
+        IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_name='inbox_messages' and column_name='telegram_message_id')
+        THEN
+            ALTER TABLE "inbox_messages" ADD COLUMN telegram_message_id BIGINT;
+        END IF;
+    END;
+    $$;
+`).then(() => console.log('Перевірено наявність колонки telegram_message_id в inbox_messages.'))
+    .catch(err => console.error('Помилка при перевірці/додаванні колонки telegram_message_id:', err));
 
 pool.query(`
     DO $$

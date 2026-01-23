@@ -9,9 +9,23 @@ const dbGet = db.get.constructor.name === 'AsyncFunction' ? db.get : util.promis
 const dbRun = db.run.constructor.name === 'AsyncFunction' ? db.run : util.promisify(db.run.bind(db));
 
 async function createSession(req, userId) {
-    const sessionId = crypto.randomUUID();
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
     const ua = req.headers['user-agent'] || 'Unknown';
+
+    // Check if there's already an active session from this device/IP
+    const existingSession = await dbGet(
+        'SELECT id FROM active_sessions WHERE user_id = ? AND ip_address = ? AND device_info = ? ORDER BY created_at DESC LIMIT 1',
+        [userId, ip, ua]
+    );
+
+    if (existingSession) {
+        // Update last_active timestamp
+        await dbRun('UPDATE active_sessions SET last_active = ? WHERE id = ?', [new Date().toISOString(), existingSession.id]);
+        return existingSession.id;
+    }
+
+    // Create new session if none exists
+    const sessionId = crypto.randomUUID();
     let location = 'Unknown';
 
     try {
