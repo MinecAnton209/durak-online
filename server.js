@@ -235,14 +235,14 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://telegram.org"],
             styleSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: ["'self'", "data:", "https:"],
             connectSrc: ["'self'", ...allowedOrigins],
             fontSrc: ["'self'", "data:"],
             objectSrc: ["'none'"],
             mediaSrc: ["'self'"],
-            frameSrc: ["'none'"],
+            frameSrc: ["'self'", "https://*.telegram.org"],
             frameAncestors: ["'self'", "https://*.telegram.org", "https://*.t.me"],
         },
     },

@@ -8,6 +8,24 @@ const util = require('util');
 const dbGet = db.get.constructor.name === 'AsyncFunction' ? db.get : util.promisify(db.get.bind(db));
 const dbRun = db.run.constructor.name === 'AsyncFunction' ? db.run : util.promisify(db.run.bind(db));
 
+async function createSession(req, userId) {
+    const sessionId = crypto.randomUUID();
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const ua = req.headers['user-agent'] || 'Unknown';
+    let location = 'Unknown';
+
+    try {
+        const locRes = await fetch(`http://ip-api.com/json/${ip.split(',')[0].trim()}?fields=status,country,city`).then(r => r.json()).catch(() => null);
+        if (locRes && locRes.status === 'success') {
+            location = `${locRes.city}, ${locRes.country}`;
+        }
+    } catch (e) { }
+
+    await dbRun('INSERT INTO active_sessions (id, user_id, device_info, ip_address, location) VALUES (?, ?, ?, ?, ?)',
+        [sessionId, userId, ua, ip, location]);
+    return sessionId;
+}
+
 
 function verifyTelegramWebAppData(telegramInitData) {
     const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -87,11 +105,14 @@ router.post('/auth', async (req, res) => {
             }
         }
 
+        const sessionId = await createSession(req, user.id);
+
         delete user.password;
         const jwtToken = signToken({
             id: user.id,
             username: user.username,
-            isAdmin: !!user.is_admin
+            isAdmin: !!user.is_admin,
+            sessionId: sessionId
         });
         setAuthCookie(req, res, jwtToken);
 
@@ -253,11 +274,14 @@ router.post('/widget-auth', async (req, res) => {
             }
         }
 
+        const sessionId = await createSession(req, user.id);
+
         delete user.password;
         const jwtToken = signToken({
             id: user.id,
             username: user.username,
-            isAdmin: !!user.is_admin
+            isAdmin: !!user.is_admin,
+            sessionId: sessionId
         });
         setAuthCookie(req, res, jwtToken);
 
