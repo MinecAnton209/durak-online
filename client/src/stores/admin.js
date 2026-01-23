@@ -105,11 +105,23 @@ export const useAdminStore = defineStore('admin', () => {
         }
     }
 
-    async function fetchUsers(query = '') {
+    async function fetchUsers(query = '', page = 0, limit = 20) {
         try {
-            const endpoint = query ? `/api/admin/users/search?query=${query}` : '/api/admin/users';
+            let endpoint;
+            if (query) {
+                endpoint = `/api/admin/users/search?query=${query}`;
+            } else {
+                endpoint = `/api/admin/users?page=${page}&limit=${limit}`;
+            }
             const response = await fetch(endpoint);
-            if (response.ok) return await response.json();
+            if (response.ok) {
+                const data = await response.json();
+                // Handle both old format (array) and new format (object with pagination)
+                if (Array.isArray(data)) {
+                    return data;
+                }
+                return data.users || [];
+            }
         } catch (err) {
             console.error('Error fetching users:', err);
         }

@@ -55,7 +55,23 @@ async function addMessage(userId, { type = 'system', titleKey = null, contentKey
             const title = t(titleKey || 'inbox.system_message');
             const content = t(contentKey, contentParams);
 
-            await telegramBot.sendMessage(user.telegram_id, `📩 *${title}*\n\n${content}`);
+            const extra = {};
+            if (type === 'friend_request') {
+                extra.reply_markup = {
+                    inline_keyboard: [[
+                        { text: `✅ ${t('inbox.btn_accept')}`, callback_data: `inbox_act_${messageId}_accept` },
+                        { text: `❌ ${t('inbox.btn_decline')}`, callback_data: `inbox_act_${messageId}_decline` }
+                    ]]
+                };
+            } else if (type === 'login_alert') {
+                extra.reply_markup = {
+                    inline_keyboard: [[
+                        { text: `✅ ${t('inbox.btn_it_was_me')}`, callback_data: `inbox_read_${messageId}` }
+                    ]]
+                };
+            }
+
+            await telegramBot.sendMessage(user.telegram_id, `📩 *${title}*\n\n${content}`, extra);
         }
 
         return messageId;

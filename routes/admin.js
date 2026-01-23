@@ -130,13 +130,35 @@ router.get('/users/search', ensureAdmin, (req, res) => {
 });
 
 router.get('/users', ensureAdmin, (req, res) => {
-    const sql = `SELECT id, username, wins, losses, streak_count, last_played_date, is_verified, is_admin, is_banned, ban_reason, is_muted, rating, coins, device_id FROM users ORDER BY id ASC`;
-    db.all(sql, [], (err, users) => {
-        if (err) {
-            console.error("Error fetching user list (admin):", err.message);
+    const page = parseInt(req.query.page, 10) || 0;
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const offset = page * limit;
+
+    const countSql = `SELECT COUNT(*) as total FROM users`;
+
+    db.get(countSql, [], (countErr, countRow) => {
+        if (countErr) {
+            console.error("Error counting users (admin):", countErr.message);
             return res.status(500).json({ error: 'Internal server error' });
         }
-        res.json(users);
+
+        const total = countRow ? countRow.total : 0;
+
+        const sql = `SELECT id, username, wins, losses, streak_count, last_played_date, is_verified, is_admin, is_banned, ban_reason, is_muted, rating, coins, device_id FROM users ORDER BY id ASC LIMIT ? OFFSET ?`;
+
+        db.all(sql, [limit, offset], (err, users) => {
+            if (err) {
+                console.error("Error fetching user list (admin):", err.message);
+                return res.status(500).json({ error: 'Internal server error' });
+            }
+            res.json({
+                users: users,
+                total: total,
+                page: page,
+                limit: limit,
+                totalPages: Math.ceil(total / limit)
+            });
+        });
     });
 });
 
