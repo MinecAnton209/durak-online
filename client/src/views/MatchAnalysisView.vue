@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, ref, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useHistoryStore } from '@/stores/history';
 import { useAuthStore } from '@/stores/auth';
@@ -157,6 +157,16 @@ const playerStats = computed(() => {
 
 const myUserId = computed(() => String(authStore.user?.id));
 
+const moveList = ref(null);
+
+watch(currentStep, async () => {
+    await nextTick();
+    const activeEl = moveList.value?.querySelector('.bg-white\\/10');
+    if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+});
+
 const nav = (step) => {
     currentStep.value = Math.max(0, Math.min(totalSteps.value - 1, step));
 };
@@ -240,11 +250,11 @@ const actionLabel = (action) => {
 
             <!-- LEFT: Move list -->
             <aside
-                class="w-full md:w-56 border-b md:border-b-0 md:border-r border-white/8 bg-surface/20 overflow-y-auto max-h-52 md:max-h-none flex-shrink-0">
-                <div class="p-3 border-b border-white/8">
+                class="w-full md:w-56 border-b md:border-b-0 md:border-r border-white/8 bg-surface/20 flex flex-col shrink-0 min-h-0">
+                <div class="p-3 border-b border-white/8 shrink-0">
                     <p class="text-[10px] text-white/40 uppercase tracking-widest">Move History</p>
                 </div>
-                <div class="divide-y divide-white/5">
+                <div ref="moveList" class="flex-1 overflow-y-auto divide-y divide-white/5 max-h-48 md:max-h-none">
                     <button v-for="(action, idx) in analysisData.history" :key="idx" @click="currentStep = idx"
                         class="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-white/5"
                         :class="currentStep === idx ? 'bg-white/10' : ''">
@@ -402,7 +412,7 @@ const actionLabel = (action) => {
 
             <!-- RIGHT: Stats sidebar -->
             <aside
-                class="w-full md:w-52 border-t md:border-t-0 md:border-l border-white/8 bg-surface/20 flex-shrink-0 overflow-y-auto">
+                class="w-full md:w-52 border-t md:border-t-0 md:border-l border-white/8 bg-surface/20 flex-shrink-0 flex flex-col shrink-0 min-h-0 overflow-y-auto">
                 <!-- Players -->
                 <div class="p-4 border-b border-white/8">
                     <p class="text-[10px] text-white/40 uppercase tracking-widest mb-3">Players</p>
