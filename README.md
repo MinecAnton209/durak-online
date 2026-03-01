@@ -1,10 +1,11 @@
-# Durak Online 🃏
+# Durak Online 🃏 (v4.0.0-RC.7)
 
-A real-time, multiplayer online version of the popular card game "Durak". This project was built from scratch with a focus on a clean, intuitive interface, fair gameplay with server-side logic, and easy access for all players without mandatory registration.
+A real-time, multiplayer online version of the popular card game "Durak". This project features a clean, intuitive interface, fair gameplay with server-side logic, and easy access for all players.
 
 **Live Demo:** https://durak-online-1li7.onrender.com/
+**Telegram Bot:** [t.me/durakthebot](https://t.me/durakthebot)
 
-[Read this README in Ukrainian](README-UA.md)
+[Читати цей README на українській](README-UA.md) | [Installation Guide](INSTALL.md)
 
 ![Durak Online Gameplay Screenshot](https://github.com/MinecAnton209/durak-online/blob/main/docs/main-img.jpg)
 
@@ -12,40 +13,42 @@ A real-time, multiplayer online version of the popular card game "Durak". This p
 
 ## ✨ Features
 
-*   **Real-time Multiplayer:** Play with 2-4 players in a single room.
+*   **Real-time Multiplayer:** Play with 2-4 players (including Bots and Guests).
+*   **Comprehensive Match Analysis:** Post-game breakdown with move quality (Best Move, Mistake, Blunder) and game reconstruction, inspired by chess.com.
+*   **Telegram Bot Integration:** Play directly within Telegram using the web app, manage your profile, and receive notifications.
 *   **No Registration Required:** Instantly join a game just by entering a nickname.
-*   **Optional User Accounts:** Register to track stats, daily streaks, and unlock customizations.
-*   **Persistent Sessions:** The site remembers you after a page refresh.
-*   **Player Reconnection:** If you accidentally close the tab or lose connection, you can rejoin an ongoing game.
-*   **Game Lobbies:** The host can wait for players and start the game when ready.
-*   **Customization:** Verified users can choose different card back styles.
-*   **In-Game Communication:** A unified game log and chat to see moves and communicate with players.
-*   **Internationalization (i18n):** The interface is available in multiple languages.
+*   **Optional User Accounts:** Register to track stats, daily streaks, achievements, and unlock customizations.
+*   **Persistent Sessions:** Site remembers you even after a page refresh.
+*   **Player Reconnection:** If you accidentally close the tab, you can rejoin an ongoing game.
+*   **Game Lobbies:** Host private or public lobbies with custom rules (Deck 36/52, Podkidnoy/Perevodnoy).
+*   **Internationalization (i18n):** Interface available in English, Russian, and Ukrainian.
 *   **Cheat-Proof:** All game logic is validated on the server.
-*   **Mobile-Friendly:** Responsive design for a great experience on any device.
+*   **Mobile-Friendly:** Responsive design and PWA support.
 
 ---
 
 ## 🛠️ Tech Stack
 
 ### Backend
-*   **Node.js:** JavaScript runtime environment.
-*   **Express.js:** Web framework for API and routing.
-*   **Socket.IO:** Library for real-time, bidirectional communication (WebSockets).
-*   **SQLite3:** A lightweight, file-based database for storing user data and stats.
-*   **bcrypt:** Library for securely hashing passwords.
-*   **express-session & connect-sqlite3:** For managing user sessions.
+*   **Node.js & Express.js:** Core server and REST API.
+*   **Socket.IO:** Real-time bidirectional communication.
+*   **Prisma ORM:** Database management with **SQLite** (local) and **PostgreSQL** (production) support.
+*   **Telegraf:** Telegram Bot API framework.
+*   **Web Push:** Browser notifications support.
+*   **bcryptjs:** Secure password hashing.
 
 ### Frontend
-*   **HTML5**
-*   **CSS3:** Modern styling with Flexbox, Grid, animations, and responsive design.
-*   **JavaScript (ES6+):** Vanilla JS for all client-side logic, with no frameworks.
+*   **Vue 3 (Composition API):** Modern reactive UI.
+*   **Vite:** Extremely fast build tool and dev server.
+*   **Pinia:** State management.
+*   **Tailwind CSS:** Utility-first styling with custom glassmorphism components.
+*   **Vue I18n:** Localization system.
 
 ---
 
-## 🚀 Local Setup
+## 🚀 Quick Start
 
-To run this project on your local machine, follow these steps:
+To run this project on your local machine:
 
 1.  **Clone the repository:**
     ```bash
@@ -55,47 +58,44 @@ To run this project on your local machine, follow these steps:
 
 2.  **Install dependencies:**
     ```bash
-    npm install
+    pnpm install
     ```
 
-3.  **Create the environment file:**
-    *   Copy `.env.example` and rename it to `.env`.
-    *   Open `.env` and set a value for `SESSION_SECRET`:
-      ```
-      SESSION_SECRET="your_very_long_and_random_secret_string"
-      ```
+3.  **Setup Environment:**
+    *   Copy `.env.example` to `.env` and fill in the required variables.
 
-4.  **Start the server:**
+4.  **Check the [Installation Guide](INSTALL.md)** for detailed database setup and configuration steps.
+
+5.  **Start Dev Servers:**
     ```bash
+    # Terminal 1 (Backend)
     node server.js
+
+    # Terminal 2 (Frontend)
+    cd client && pnpm run dev
     ```
 
-5.  **Open the game in your browser:**
-    Navigate to `http://localhost:3000`.
+---
+
+## 🗺️ Roadmap (v4.0.0)
+
+### Tier 1: Core UX & Social
+- [x] **Match Analysis & History:** Post-match overview and analysis.
+- [x] **Telegram Integration:** Full bot support.
+- [x] **Achievements System:** Unlockable badges and milestones.
+- [x] **Daily Streaks & Rewards:** Incentives for regular players.
+- [ ] **Friend System (Enhanced):** Better social interactions and invites.
+
+### Tier 2: Moderation & Anti-Cheat
+- [x] **Admin Dashboard:** Comprehensive control over users, games, and sessions.
+- [x] **Game Duration Analysis:** Detect suspicious game speed.
+- [ ] **Player Karma/Reputation System:** Post-match player rating.
+
+### Tier 3: Expansion
+- [x] **Modular Game Architecture:** Ready for adding more card/board games.
+- [x] **Switch to JWT:** Improved scalability and stateless auth.
+- [ ] **Mobile App (Capacitor):** Native iOS/Android builds.
 
 ---
 
-## 🗺️ Roadmap
-
-This project is actively being developed. Here are some of the planned features, categorized by priority.
-
-### Tier 1: Core UX & Community Features
-- [x] **Game Event Log & Chat:** A unified log to track moves and communicate.
-- [ ] **Player Achievements:** Unlockable badges for in-game accomplishments (e.g., "First Win", "100 Games Played").
-- [ ] **Daily Streaks & Rewards:** Incentives for playing daily, including visual indicators like a "fire" icon.
-- [ ] **Card Back Customization:** Allow registered users to choose their card back design.
-- [ ] **Emotes / Quick Reactions:** A safe and fun way to communicate in-game.
-
-### Tier 2: Anti-Cheat & Moderation
-- [ ] **Game Duration Analysis:** Flag games that end suspiciously fast.
-- [ ] **Matchup Analysis:** Detect patterns of collusion between specific players.
-- [ ] **Player Karma/Reputation System:** Allow players to rate each other after a match.
-
-### Tier 3: Platform Expansion
-- [ ] **Modular Game Architecture:** Refactor the core logic to easily add new games.
-- [ ] **New Games:** Add classics like Checkers, Chess, etc.
-- [ ] **Authentication with JWT:** Switch from sessions to JSON Web Tokens for better scalability.
-
----
-
-Thank you for your interest in the project!
+Thank you for your interest in the project! 🃏

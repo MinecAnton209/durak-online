@@ -49,8 +49,9 @@ function logEvent(game, message, options = {}) {
 function recordAction(game, playerId, type, data = {}) {
     if (!game.history) game.history = [];
     const player = game.players[playerId];
+    const userId = player ? (player.dbId || player.id) : null;
     game.history.push({
-        playerId,
+        userId,
         type,
         data,
         playerName: player ? player.name : 'System',
@@ -138,17 +139,16 @@ async function startGame(gameId) {
             const player = game.players[playerId];
             const isFirstAttacker = (index === firstAttackerIndex);
 
-            if (player.dbId) {
-                await prisma.gameParticipant.create({
-                    data: {
-                        game_id: game.id,
-                        user_id: player.dbId,
-                        is_bot: player.isGuest,
-                        is_first_attacker: isFirstAttacker,
-                        cards_at_start: JSON.stringify(player.cardsAtStart)
-                    }
-                });
-            }
+            await prisma.gameParticipant.create({
+                data: {
+                    game_id: game.id,
+                    user_id: player.dbId || null,
+                    bot_name: player.dbId ? null : player.name,
+                    is_bot: player.isBot || player.isGuest,
+                    is_first_attacker: isFirstAttacker,
+                    cards_at_start: JSON.stringify(player.cardsAtStart)
+                }
+            });
         }
 
     } catch (err) {
@@ -235,40 +235,47 @@ async function updateStatsAfterGame(game) {
             const allPlayersInGame = [...winners, loser].filter(p => p);
 
             for (const player of allPlayersInGame) {
-                if (player && !player.isGuest && player.dbId) {
+                if (player) {
                     const outcome = winners.some(w => w.id === player.id) ? 'win' : 'loss';
+
+                    const where = { game_id: game.id };
+                    if (player.dbId) where.user_id = player.dbId;
+                    else where.bot_name = player.name;
+
                     await tx.gameParticipant.updateMany({
-                        where: { game_id: game.id, user_id: player.dbId },
+                        where,
                         data: { outcome, cards_at_end: player.cards.length }
                     });
 
-                    const userData = await tx.user.findUnique({
-                        where: { id: player.dbId },
-                        select: { streak_count: true, last_played_date: true, wins: true, losses: true, win_streak: true }
-                    });
-                    if (!userData) throw new Error(`User not found for ID: ${player.dbId}`);
+                    if (!player.isGuest && player.dbId) {
+                        const userData = await tx.user.findUnique({
+                            where: { id: player.dbId },
+                            select: { streak_count: true, last_played_date: true, wins: true, losses: true, win_streak: true }
+                        });
+                        if (!userData) throw new Error(`User not found for ID: ${player.dbId}`);
 
-                    const isWinner = outcome === 'win';
-                    let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
-                    await achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
+                        const isWinner = outcome === 'win';
+                        let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
+                        await achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
 
-                    const today = new Date().toISOString().slice(0, 10);
-                    const lastPlayed = userData.last_played_date;
-                    let newStreak = 1;
-                    if (lastPlayed) {
-                        const lastDate = new Date(lastPlayed);
-                        const todayDate = new Date(today);
-                        const diffTime = Math.abs(todayDate - lastDate);
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                        if (diffDays === 0) newStreak = userData.streak_count; else if (diffDays === 1) newStreak = userData.streak_count + 1;
+                        const today = new Date().toISOString().slice(0, 10);
+                        const lastPlayed = userData.last_played_date;
+                        let newStreak = 1;
+                        if (lastPlayed) {
+                            const lastDate = new Date(lastPlayed);
+                            const todayDate = new Date(today);
+                            const diffTime = Math.abs(todayDate - lastDate);
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            if (diffDays === 0) newStreak = userData.streak_count; else if (diffDays === 1) newStreak = userData.streak_count + 1;
+                        }
+
+                        await tx.user.update({
+                            where: { id: player.dbId },
+                            data: isWinner
+                                ? { wins: { increment: 1 }, streak_count: newStreak, last_played_date: today, win_streak: newWinStreak }
+                                : { losses: { increment: 1 }, streak_count: newStreak, last_played_date: today, win_streak: 0 }
+                        });
                     }
-
-                    await tx.user.update({
-                        where: { id: player.dbId },
-                        data: isWinner
-                            ? { wins: { increment: 1 }, streak_count: newStreak, last_played_date: today, win_streak: newWinStreak }
-                            : { losses: { increment: 1 }, streak_count: newStreak, last_played_date: today, win_streak: 0 }
-                    });
                 }
             }
 
