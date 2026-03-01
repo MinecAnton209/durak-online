@@ -69,9 +69,14 @@ const router = createRouter({
       meta: { requiresAdmin: true }
     },
     {
-      path: '/error',
-      name: 'error',
-      component: ErrorView
+      path: '/history',
+      name: 'history',
+      component: () => import('../views/MatchHistoryView.vue')
+    },
+    {
+      path: '/analysis/:id',
+      name: 'analysis',
+      component: () => import('../views/MatchAnalysisView.vue')
     },
     {
       path: '/:catchAll(.*)',

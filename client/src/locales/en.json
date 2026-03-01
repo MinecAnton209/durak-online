@@ -533,5 +533,27 @@
     "action_result_expired": "Expired/Ended",
     "action_result_coins_received": "Received",
     "action_result_acknowledged": "Acknowledged"
+  },
+  "history_button": "My Matches",
+  "history": {
+    "title": "Match History",
+    "no_matches": "You haven't played any matches yet.",
+    "outcome_win": "Win",
+    "outcome_loss": "Loss",
+    "outcome_draw": "Draw",
+    "analyze_btn": "Analyze (250 💰)",
+    "analyze_title": "Match Analysis",
+    "move_best": "Best Move",
+    "move_excellent": "Excellent",
+    "move_good": "Good",
+    "move_inaccuracy": "Inaccuracy",
+    "move_mistake": "Mistake",
+    "move_blunder": "Blunder",
+    "move_forced": "Forced Move",
+    "analysis_expired": "Analysis only for 15 recent matches (max 14 days old).",
+    "playing_as": "Playing as",
+    "back_to_history": "Back to History",
+    "analysis_ready": "Analysis Ready",
+    "calculating": "Calculating..."
   }
 }

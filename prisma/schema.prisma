@@ -134,6 +134,7 @@ model GameParticipant {
   cards_at_end      Int?
   is_first_attacker Boolean @default(false)
   cards_taken_total Int     @default(0)
+  analysis_purchased Boolean @default(false)
 
   game              Game    @relation(fields: [game_id], references: [id], onDelete: Cascade)
   user              User    @relation(fields: [user_id], references: [id], onDelete: Cascade)

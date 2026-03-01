@@ -193,6 +193,10 @@ const goToLobbyBrowser = () => {
             class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
             <span>🏆</span> {{ $t('leaderboard_button') }}
           </button>
+          <button @click="router.push('/history')"
+            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
+            <span>📅</span> {{ $t('history_button') }}
+          </button>
           <button @click="router.push('/roulette')"
             class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
             <span>🎰</span> {{ $t('roulette_button') }}

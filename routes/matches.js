@@ -88,14 +88,15 @@ router.get('/:id', async (req, res) => {
             startTime: game.start_time,
             endTime: game.end_time,
             duration: game.duration_seconds,
-            winners: game.participants.filter(p => p.game_id === game.id && p.user_id === game.winner_user_id).map(p => p.user?.username),
-            loser: game.participants.find(p => p.game_id === game.id && p.user_id === game.loser_user_id)?.user?.username,
+            winners: game.participants.filter(p => game.winner_user_id === p.user_id).map(p => p.user?.username),
+            loser: game.participants.find(p => game.loser_user_id === p.user_id)?.user?.username,
             players: game.participants.map(p => ({
                 username: p.user?.username || (p.is_bot ? 'Bot' : 'Unknown'),
                 isVerified: p.user?.is_verified || false,
                 outcome: p.outcome,
                 cardsTaken: p.cards_taken_total
-            }))
+            })),
+            isAnalyzed: game.participants.find(p => p.user_id === user.id)?.analysis_purchased || false
         });
     } catch (e) {
         console.error(e);
@@ -114,36 +115,52 @@ router.post('/:id/analyze', async (req, res) => {
         const matchId = req.params.id;
         const result = await prisma.$transaction(async (tx) => {
             const user = await tx.user.findUnique({ where: { id: userSession.id } });
-            if (!user || user.coins < 250) throw new Error('Insufficient coins');
+            if (!user) throw new Error('User not found');
 
-            const game = await tx.game.findUnique({ where: { id: matchId } });
+            const game = await tx.game.findUnique({
+                where: { id: matchId },
+                include: { participants: true }
+            });
             if (!game || !game.history) throw new Error('Analysis unavailable for this match');
 
-            // Check if match is within the last 15
-            const recentMatches = await tx.gameParticipant.findMany({
-                where: { user_id: user.id },
-                orderBy: { game: { start_time: 'desc' } },
-                take: 15,
-                select: { game_id: true }
-            });
+            // Check if user participated
+            const participation = game.participants.find(p => p.user_id === user.id);
+            if (!participation && !userSession.is_admin) throw new Error('You did not participate in this match');
 
-            if (!recentMatches.some(m => m.game_id === matchId)) {
-                throw new Error('Analysis only available for the 15 most recent matches');
+            // Check if already purchased or if admin
+            const alreadyPurchased = participation?.analysis_purchased || false;
+            const skipPayment = alreadyPurchased || userSession.is_admin;
+
+            if (!skipPayment) {
+                if (user.coins < 250) throw new Error('Insufficient coins');
+
+                // Check if match is within the last 15
+                const recentMatches = await tx.gameParticipant.findMany({
+                    where: { user_id: user.id },
+                    orderBy: { game: { start_time: 'desc' } },
+                    take: 15,
+                    select: { game_id: true }
+                });
+
+                if (!recentMatches.some(m => m.game_id === matchId)) {
+                    throw new Error('Analysis only available for the 15 most recent matches');
+                }
+
+                // Deduct coins
+                await tx.user.update({
+                    where: { id: user.id },
+                    data: { coins: { decrement: 250 } }
+                });
+
+                // Update participation
+                await tx.gameParticipant.update({
+                    where: { game_id_user_id: { game_id: matchId, user_id: user.id } },
+                    data: { analysis_purchased: true }
+                });
             }
 
-            // Deduct coins
-            await tx.user.update({
-                where: { id: user.id },
-                data: { coins: { decrement: 250 } }
-            });
-
-            // Return analysis data
-            const participants = await tx.gameParticipant.findMany({
-                where: { game_id: matchId }
-            });
-
             const initialHands = Object.fromEntries(
-                participants.map(p => [p.user_id, JSON.parse(p.cards_at_start || '[]')])
+                game.participants.map(p => [p.user_id, JSON.parse(p.cards_at_start || '[]')])
             );
             const rawHistory = JSON.parse(game.history);
 
@@ -151,12 +168,17 @@ router.post('/:id/analyze', async (req, res) => {
             return {
                 history: rawHistory,
                 analysis: analysisService.analyzeMatch(rawHistory, initialHands),
-                initialHands: initialHands
+                initialHands: initialHands,
+                participants: game.participants.map(p => ({
+                    user_id: p.user_id,
+                    is_bot: p.is_bot
+                }))
             };
         });
 
         res.json(result);
     } catch (e) {
+        console.error('Analysis error:', e);
         res.status(400).json({ message: e.message });
     }
 });
