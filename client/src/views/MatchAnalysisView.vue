@@ -1,10 +1,9 @@
 <script setup>
-import { onMounted, ref, computed, watch } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useHistoryStore } from '@/stores/history';
 import { useAuthStore } from '@/stores/auth';
 import { useI18n } from 'vue-i18n';
-import Card from '@/components/game/Card.vue';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -17,13 +16,13 @@ const matchInfo = ref(null);
 const analysisData = ref(null);
 const loading = ref(true);
 const error = ref(null);
-const currentStep = ref(-1); // -1 is initial state
+const currentStep = ref(0);
 const purchasing = ref(false);
 
 const loadMatch = async () => {
     try {
         matchInfo.value = await historyStore.getMatchDetails(matchId);
-        if (matchInfo.value.isAnalyzed || authStore.user?.is_admin) {
+        if (matchInfo.value?.isAnalyzed || authStore.user?.is_admin) {
             await fetchAnalysis();
         }
     } catch (err) {
@@ -47,359 +46,394 @@ const fetchAnalysis = async () => {
 
 onMounted(loadMatch);
 
-// State Reconstruction Logic
+// ── Helpers ──────────────────────────────────────────────
+const SUIT_COLORS = { '♠': 'text-white', '♣': 'text-white', '♥': 'text-red-400', '♦': 'text-red-400' };
+
+const suitColor = (card) => card?.suit ? (SUIT_COLORS[card.suit] || 'text-white') : 'text-white';
+
+const EVAL_META = {
+    'Best Move': { color: 'text-emerald-400', bg: 'bg-emerald-400/20', dot: 'bg-emerald-400', icon: '✦' },
+    'Best': { color: 'text-emerald-400', bg: 'bg-emerald-400/20', dot: 'bg-emerald-400', icon: '✦' },
+    'Best (Forced)': { color: 'text-sky-400', bg: 'bg-sky-400/20', dot: 'bg-sky-400', icon: '◆' },
+    'Excellent': { color: 'text-blue-400', bg: 'bg-blue-400/20', dot: 'bg-blue-400', icon: '●' },
+    'Good': { color: 'text-green-400', bg: 'bg-green-400/20', dot: 'bg-green-400', icon: '●' },
+    'Inaccuracy': { color: 'text-yellow-400', bg: 'bg-yellow-400/20', dot: 'bg-yellow-400', icon: '▲' },
+    'Mistake': { color: 'text-orange-400', bg: 'bg-orange-400/20', dot: 'bg-orange-400', icon: '✕' },
+    'Blunder': { color: 'text-red-400', bg: 'bg-red-400/20', dot: 'bg-red-400', icon: '✕' },
+};
+const getEvalMeta = (label) => EVAL_META[label] || { color: 'text-white/40', bg: 'bg-white/5', dot: 'bg-white/20', icon: '·' };
+
+// ── State reconstruction at currentStep ─────────────────
 const gameState = computed(() => {
     if (!analysisData.value) return null;
+    const { history, initialHands } = analysisData.value;
+    if (!history || !initialHands) return null;
 
-    const { history, initialHands, participants } = analysisData.value;
-    const hands = JSON.parse(JSON.stringify(initialHands));
-    const table = []; // Array of { attack: Card, defense?: Card }
-    let trumpCard = history[0]?.trumpSuit || '♠'; // Fallback
+    const hands = {};
+    for (const [uid, cards] of Object.entries(initialHands)) {
+        hands[uid] = [...(Array.isArray(cards) ? cards : [])];
+    }
+    const table = [];
+    let trumpSuit = null;
 
-    // Reconstruct up to currentStep
-    for (let i = 0; i <= currentStep.value; i++) {
+    for (let i = 0; i <= currentStep.value && i < history.length; i++) {
         const action = history[i];
         if (!action) continue;
+        if (action.trumpSuit) trumpSuit = action.trumpSuit;
 
-        const playerHand = hands[action.userId];
+        const uid = String(action.userId ?? action.playerId);
+        if (!hands[uid]) hands[uid] = [];
 
         if (action.action === 'attack' || action.action === 'toss') {
-            // Find card in hand and remove it
-            const cardIdx = playerHand.findIndex(c => c.rank === action.card.rank && c.suit === action.card.suit);
-            if (cardIdx !== -1) playerHand.splice(cardIdx, 1);
-            table.push({ attack: action.card });
+            const idx = hands[uid].findIndex(c => c.rank === action.card?.rank && c.suit === action.card?.suit);
+            if (idx !== -1) hands[uid].splice(idx, 1);
+            if (action.card) table.push({ attack: action.card, defense: null });
         } else if (action.action === 'defend') {
-            const cardIdx = playerHand.findIndex(c => c.rank === action.card.rank && c.suit === action.card.suit);
-            if (cardIdx !== -1) playerHand.splice(cardIdx, 1);
-            // Find the undefended card on table
-            const undefended = table.find(pair => !pair.defense);
-            if (undefended) undefended.defense = action.card;
+            const idx = hands[uid].findIndex(c => c.rank === action.card?.rank && c.suit === action.card?.suit);
+            if (idx !== -1) hands[uid].splice(idx, 1);
+            const pair = table.find(p => !p.defense);
+            if (pair && action.card) pair.defense = action.card;
         } else if (action.action === 'take') {
-            // Add all table cards to player hand
-            table.forEach(pair => {
-                playerHand.push(pair.attack);
-                if (pair.defense) playerHand.push(pair.defense);
-            });
+            table.forEach(p => { hands[uid].push(p.attack); if (p.defense) hands[uid].push(p.defense); });
             table.length = 0;
         } else if (action.action === 'pass') {
             table.length = 0;
-        }
-
-        // Draw cards logic usually happens at end of turn, but history should record it if we want full sync.
-        // In our simplified history, we assume playerHand is correct if we subtract played cards.
-        // Wait, history records 'draw' actions too if we implemented it. Let's check.
-        if (action.action === 'draw') {
-            playerHand.push(...action.cards);
+        } else if (action.action === 'draw') {
+            if (Array.isArray(action.cards)) hands[uid].push(...action.cards);
         }
     }
 
-    return { hands, table, trumpCard };
+    return { hands, table, trumpSuit };
 });
 
-const currentEvaluation = computed(() => {
-    if (!analysisData.value || currentStep.value < 0) return null;
-    return analysisData.value.analysis[currentStep.value];
+const currentAction = computed(() => {
+    if (!analysisData.value) return null;
+    return analysisData.value.history?.[currentStep.value] || null;
 });
 
-const nextStep = () => {
-    if (currentStep.value < analysisData.value.history.length - 1) {
-        currentStep.value++;
-    }
+const currentEval = computed(() => {
+    if (!analysisData.value) return null;
+    return analysisData.value.analysis?.[currentStep.value]?.evaluation || null;
+});
+
+const totalSteps = computed(() => analysisData.value?.history?.length ?? 0);
+
+// ── Stats ────────────────────────────────────────────────
+const playerStats = computed(() => {
+    if (!analysisData.value) return [];
+    const { analysis, participants } = analysisData.value;
+    const stats = {};
+    participants?.forEach(p => {
+        const uid = String(p.user_id ?? p.bot_name);
+        stats[uid] = { best: 0, good: 0, ok: 0, mistake: 0, blunder: 0 };
+    });
+    analysis?.forEach(a => {
+        const uid = String(a.userId ?? a.playerId);
+        const label = a.evaluation?.label || '';
+        if (!stats[uid]) stats[uid] = { best: 0, good: 0, ok: 0, mistake: 0, blunder: 0 };
+        if (label.startsWith('Best')) stats[uid].best++;
+        else if (label === 'Excellent' || label === 'Good') stats[uid].good++;
+        else if (label === 'Inaccuracy') stats[uid].ok++;
+        else if (label === 'Mistake') stats[uid].mistake++;
+        else if (label === 'Blunder') stats[uid].blunder++;
+    });
+    return Object.entries(stats).map(([uid, s]) => ({ uid, ...s }));
+});
+
+const myUserId = computed(() => String(authStore.user?.id));
+
+const nav = (step) => {
+    currentStep.value = Math.max(0, Math.min(totalSteps.value - 1, step));
 };
 
-const prevStep = () => {
-    if (currentStep.value > 0) {
-        currentStep.value--;
-    }
+const goBack = () => router.push('/history');
+
+const fmt = (seconds) => {
+    if (!seconds) return '0:00';
+    const m = Math.floor(seconds / 60), s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
-const getEvalClass = (quality) => {
-    if (!quality) return 'text-on-surface-variant bg-white/10';
-    switch (quality) {
-        case 'Best Move': return 'text-primary bg-primary/20';
-        case 'Excellent': return 'text-blue-400 bg-blue-400/20';
-        case 'Good': return 'text-green-400 bg-green-400/20';
-        case 'Inaccuracy': return 'text-yellow-400 bg-yellow-400/20';
-        case 'Mistake': return 'text-orange-400 bg-orange-400/20';
-        case 'Blunder': return 'text-error bg-error/20';
-        default: return 'text-on-surface-variant bg-white/10';
-    }
-};
-
-const getEvalLabel = (quality) => {
-    if (!quality || typeof quality !== 'string') return '';
-    const key = quality.toLowerCase().replace(/ /g, '_');
-    return t(`history.move_${key}`);
-};
-
-const goBack = () => {
-    router.push('/history');
+const actionLabel = (action) => {
+    const labels = { attack: '⚔️', defend: '🛡️', take: '📥', pass: '✅', toss: '➕', draw: '🃏' };
+    return labels[action] ?? action;
 };
 </script>
 
 <template>
-    <div class="min-h-screen bg-background overflow-hidden flex flex-col">
-        <!-- Header -->
-        <div class="p-4 flex items-center justify-between border-b border-white/5 bg-surface/30 backdrop-blur-md z-10">
-            <div class="flex items-center gap-4">
-                <button @click="goBack" class="p-2 hover:bg-white/10 rounded-full transition-colors">
-                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                    </svg>
-                </button>
-                <h1 class="text-xl font-bold text-white">{{ t('history.analyze_title') }}</h1>
-            </div>
+    <div class="min-h-screen bg-background flex flex-col select-none">
 
-            <div v-if="matchInfo" class="text-right">
-                <div class="text-xs text-on-surface-variant uppercase tracking-wider">{{ t('history.playing_as') }}
+        <!-- Header -->
+        <header class="flex items-center gap-3 px-4 py-3 border-b border-white/8 bg-surface/50 backdrop-blur-lg z-20">
+            <button @click="goBack" class="p-2 rounded-full hover:bg-white/10 transition-colors">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+            <div class="flex-1 min-w-0">
+                <h1 class="text-base font-bold text-white truncate">{{ t('history.analyze_title') }}</h1>
+                <div v-if="matchInfo" class="text-[11px] text-white/40">{{ matchId }} · {{ fmt(matchInfo.duration) }}
                 </div>
-                <div class="text-primary font-bold">{{ authStore.user?.username }}</div>
             </div>
+            <div v-if="matchInfo" class="text-right shrink-0">
+                <div class="text-[10px] text-white/40 uppercase tracking-wide">{{ t('admin_table_result') }}</div>
+                <div class="text-sm font-bold"
+                    :class="matchInfo.loser === authStore.user?.username ? 'text-red-400' : 'text-emerald-400'">
+                    {{ matchInfo.loser === authStore.user?.username ? t('lose_title') : t('win_title') }}
+                </div>
+            </div>
+        </header>
+
+        <!-- Loading / Error -->
+        <div v-if="loading" class="flex-1 flex items-center justify-center">
+            <div class="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
         </div>
 
-        <!-- Main Content -->
-        <div class="flex-1 relative flex flex-col md:flex-row h-full overflow-hidden">
+        <div v-else-if="error" class="flex-1 flex flex-col items-center justify-center text-center p-8 gap-4">
+            <span class="text-5xl">⚠️</span>
+            <p class="text-red-400 font-medium max-w-sm">{{ error }}</p>
+            <button @click="goBack"
+                class="mt-2 px-5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm transition-colors">
+                {{ t('history.back_to_history') }}
+            </button>
+        </div>
 
-            <!-- Replay Area -->
-            <div
-                class="flex-1 flex flex-col p-4 gap-6 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-surface/20 to-transparent">
+        <!-- Purchase prompt -->
+        <div v-else-if="!analysisData && !purchasing"
+            class="flex-1 flex flex-col items-center justify-center text-center p-8 gap-6">
+            <div class="text-6xl">🧐</div>
+            <div>
+                <h2 class="text-2xl font-bold text-white mb-2">{{ t('history.analyze_title') }}</h2>
+                <p class="text-white/50 text-sm max-w-xs">{{ t('history.analysis_expired', { cost: 250 }) }}</p>
+            </div>
+            <button @click="fetchAnalysis"
+                class="flex items-center gap-2 px-8 py-3 bg-primary hover:brightness-110 text-black font-bold rounded-2xl transition-all active:scale-95 shadow-lg shadow-primary/30 text-lg">
+                ⚡️ {{ t('history.analyze_btn') }} — 250 🪙
+            </button>
+        </div>
 
-                <div v-if="loading" class="flex-1 flex items-center justify-center">
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <!-- Purchasing spinner -->
+        <div v-else-if="purchasing" class="flex-1 flex flex-col items-center justify-center gap-4">
+            <div class="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-white/50 text-sm">Analysing…</p>
+        </div>
+
+        <!-- Main Analysis UI -->
+        <div v-else-if="analysisData" class="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
+
+            <!-- LEFT: Move list -->
+            <aside
+                class="w-full md:w-56 border-b md:border-b-0 md:border-r border-white/8 bg-surface/20 overflow-y-auto max-h-52 md:max-h-none flex-shrink-0">
+                <div class="p-3 border-b border-white/8">
+                    <p class="text-[10px] text-white/40 uppercase tracking-widest">Move History</p>
                 </div>
-
-                <div v-else-if="error" class="flex-1 flex flex-col items-center justify-center text-center p-8">
-                    <span class="text-6xl mb-4">⚠️</span>
-                    <p class="text-error text-lg font-medium max-w-md">{{ error }}</p>
-                    <button @click="goBack"
-                        class="mt-6 px-6 py-2 bg-surface hover:bg-surface/80 rounded-xl transition-all border border-white/10">
-                        {{ t('history.back_to_history') }}
+                <div class="divide-y divide-white/5">
+                    <button v-for="(action, idx) in analysisData.history" :key="idx" @click="currentStep = idx"
+                        class="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-white/5"
+                        :class="currentStep === idx ? 'bg-white/10' : ''">
+                        <!-- eval dot -->
+                        <span class="w-2 h-2 rounded-full shrink-0"
+                            :class="getEvalMeta(analysisData.analysis?.[idx]?.evaluation?.label).dot"></span>
+                        <!-- step number -->
+                        <span class="text-[10px] text-white/30 w-5 shrink-0">{{ idx + 1 }}</span>
+                        <!-- action icon + card -->
+                        <span class="text-xs text-white/60">{{ actionLabel(action.action) }}</span>
+                        <span v-if="action.card" class="text-xs font-bold shrink-0" :class="suitColor(action.card)">
+                            {{ action.card.rank }}{{ action.card.suit }}
+                        </span>
                     </button>
                 </div>
+            </aside>
 
-                <!-- Purchase Overlay -->
-                <div v-else-if="!analysisData && !purchasing"
-                    class="flex-1 flex flex-col items-center justify-center text-center p-8 bg-black/40 backdrop-blur-sm rounded-3xl m-4 border border-white/5">
-                    <span class="text-6xl mb-6">🧐</span>
-                    <h2 class="text-2xl font-bold text-white mb-2">{{ t('history.analyze_title') }}</h2>
-                    <p class="text-on-surface-variant max-w-sm mb-8">
-                        {{ t('history.analysis_expired', { cost: 250 }) }}
-                    </p>
-                    <button @click="fetchAnalysis"
-                        class="px-8 py-4 bg-primary hover:bg-[#00A891] text-on-primary font-bold text-lg rounded-2xl shadow-lg shadow-primary/20 transition-all active:scale-95 flex items-center gap-2">
-                        <span>⚡️</span> {{ t('history.analyze_btn') }}
-                    </button>
+            <!-- CENTER: Board -->
+            <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+                <!-- Trump & step info bar -->
+                <div class="flex items-center justify-between px-4 py-2 border-b border-white/8 bg-surface/10">
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-white/40 text-xs uppercase tracking-wide">Trump</span>
+                        <span v-if="gameState?.trumpSuit" class="font-bold text-lg"
+                            :class="suitColor({ suit: gameState.trumpSuit })">{{ gameState.trumpSuit }}</span>
+                        <span v-else class="text-white/20">—</span>
+                    </div>
+                    <div class="text-xs text-white/40">{{ currentStep + 1 }} / {{ totalSteps }}</div>
                 </div>
 
-                <template v-else-if="analysisData">
-                    <!-- Game Board Replay -->
-                    <div class="flex-1 flex flex-col items-center justify-center relative min-h-[300px]">
+                <!-- Evaluation banner -->
+                <div v-if="currentEval" class="flex items-center gap-3 px-4 py-2 border-b border-white/8 transition-all"
+                    :class="getEvalMeta(currentEval.label).bg">
+                    <span class="font-bold text-lg" :class="getEvalMeta(currentEval.label).color">{{
+                        getEvalMeta(currentEval.label).icon }}</span>
+                    <div class="min-w-0">
+                        <div class="text-sm font-bold" :class="getEvalMeta(currentEval.label).color">{{
+                            currentEval.label }}</div>
+                        <div v-if="currentEval.reason" class="text-[11px] text-white/50 truncate">{{ currentEval.reason
+                            }}</div>
+                    </div>
+                </div>
 
-                        <!-- Trump Indicator -->
-                        <div
-                            class="absolute top-0 right-0 p-3 bg-surface/50 rounded-2xl border border-white/5 flex flex-col items-center">
-                            <span class="text-xs text-on-surface-variant uppercase">{{ t('deck_size_label') }}</span>
-                            <span class="text-2xl">{{ gameState?.trumpCard }}</span>
-                        </div>
+                <!-- Table area (center) -->
+                <div class="flex-1 flex flex-col items-center justify-center gap-6 p-4">
 
-                        <!-- Table -->
-                        <div
-                            class="flex flex-wrap justify-center gap-4 max-w-4xl p-8 rounded-3xl bg-white/5 border border-white/5 shadow-inner">
-                            <div v-if="gameState?.table.length === 0"
-                                class="text-on-surface-variant/20 italic text-lg select-none">
-                                {{ t('chat_empty') }}
-                            </div>
-                            <div v-for="(pair, idx) in gameState?.table" :key="idx" class="relative group">
-                                <div class="flex flex-col gap-2">
-                                    <Card v-bind="pair.attack" class="shadow-2xl" />
-                                    <Card v-if="pair.defense" v-bind="pair.defense"
-                                        class="absolute top-6 left-6 shadow-2xl" />
+                    <!-- Opponent hands (top) -->
+                    <div class="flex gap-6 flex-wrap justify-center">
+                        <div v-for="(hand, uid) in gameState?.hands" :key="uid">
+                            <div v-if="String(uid) !== myUserId" class="flex flex-col items-center gap-1">
+                                <div class="text-[10px] text-white/30 uppercase">
+                                    {{analysisData.participants?.find(p => String(p.user_id) === String(uid))?.is_bot ?
+                                    '🤖 Bot' : '👤 Opponent' }}
                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- Current Player Hand (Requester) -->
-                        <div class="absolute bottom-0 w-full flex flex-col items-center gap-2 px-4">
-                            <div class="text-xs text-on-surface-variant uppercase tracking-widest">{{ t('you_label') }}
-                            </div>
-                            <div
-                                class="flex flex-wrap justify-center -space-x-8 hover:space-x-1 transition-all duration-300 pb-4">
-                                <Card v-for="(card, idx) in gameState?.hands?.[authStore.user?.id]" :key="idx"
-                                    v-bind="card" />
-                            </div>
-                        </div>
-
-                        <!-- Opponent Hands (Simplified) -->
-                        <div class="absolute top-0 w-full flex flex-wrap justify-center gap-8 px-4 opacity-60">
-                            <div v-for="(hand, uid) in gameState?.hands" :key="uid">
-                                <div v-if="uid != authStore.user?.id" class="flex flex-col items-center">
-                                    <div class="text-[10px] text-on-surface-variant uppercase mb-1">
-                                        {{analysisData.participants.find(p => p.user_id == uid)?.is_bot ? 'Bot' :
-                                            'Opponent'}}
+                                <div class="flex -space-x-3">
+                                    <div v-for="n in hand.length" :key="n"
+                                        class="w-7 h-10 rounded-md bg-surface border border-white/15 shadow flex items-center justify-center text-[10px] text-white/20">
+                                        🂠
                                     </div>
-                                    <div class="flex -space-x-12 scale-50 origin-top">
-                                        <Card v-for="n in hand.length" :key="n" :isBack="true" />
+                                    <div v-if="hand.length === 0" class="text-[10px] text-white/20 italic px-2">empty
                                     </div>
                                 </div>
+                                <div class="text-[10px] text-white/20">{{ hand.length }} cards</div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Controls -->
+                    <!-- Table cards -->
                     <div
-                        class="p-6 bg-surface/40 backdrop-blur-md rounded-3xl border border-white/5 flex flex-col gap-4">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-3">
-                                <div v-if="currentEvaluation"
-                                    class="px-3 py-1.5 rounded-xl font-bold text-sm transition-all"
-                                    :class="getEvalClass(currentEvaluation?.evaluation)">
-                                    {{ getEvalLabel(currentEvaluation?.evaluation) }}
-                                </div>
-                                <div class="text-on-surface-variant text-sm font-medium">
-                                    {{ currentStep + 1 }} / {{ analysisData.history.length }}
-                                </div>
+                        class="flex flex-wrap justify-center gap-3 min-h-[80px] p-4 rounded-2xl bg-white/3 border border-white/6 w-full max-w-lg">
+                        <div v-if="!gameState?.table.length" class="text-white/20 italic text-sm self-center">Table is
+                            empty</div>
+                        <div v-for="(pair, idx) in gameState?.table" :key="idx"
+                            class="flex flex-col items-center gap-1">
+                            <!-- Attack card -->
+                            <div class="w-10 h-14 rounded-lg border flex flex-col items-center justify-center shadow-lg"
+                                :class="pair.attack?.suit && ['♥', '♦'].includes(pair.attack.suit)
+                                    ? 'bg-white border-red-300/30 text-red-500'
+                                    : 'bg-white border-white/20 text-gray-900'">
+                                <span class="text-[11px] font-black leading-none">{{ pair.attack?.rank }}</span>
+                                <span class="text-[14px] leading-none">{{ pair.attack?.suit }}</span>
                             </div>
-
-                            <div class="flex gap-2">
-                                <button @click="prevStep"
-                                    class="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all active:scale-90"
-                                    :disabled="currentStep <= 0">
-                                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
-                                    </svg>
-                                </button>
-                                <button @click="nextStep"
-                                    class="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all active:scale-90"
-                                    :disabled="currentStep >= analysisData.history.length - 1">
-                                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
-                                    </svg>
-                                </button>
+                            <!-- Defense card -->
+                            <div v-if="pair.defense"
+                                class="w-10 h-14 rounded-lg border flex flex-col items-center justify-center shadow-lg"
+                                :class="pair.defense?.suit && ['♥', '♦'].includes(pair.defense.suit)
+                                    ? 'bg-white border-red-300/30 text-red-500'
+                                    : 'bg-white border-white/20 text-gray-900'">
+                                <span class="text-[11px] font-black leading-none">{{ pair.defense?.rank }}</span>
+                                <span class="text-[14px] leading-none">{{ pair.defense?.suit }}</span>
                             </div>
-                        </div>
-
-                        <!-- Best Move Tooltip -->
-                        <div v-if="currentEvaluation?.evaluation === 'Mistake' || currentEvaluation?.evaluation === 'Blunder'"
-                            class="p-4 bg-error/10 border border-error/20 rounded-2xl flex items-start gap-3 animate-fade-in">
-                            <span class="text-2xl">💡</span>
-                            <div>
-                                <p class="text-white text-sm font-bold">{{ t('history.move_best') }}?</p>
-                                <p class="text-on-surface-variant text-xs mt-1">
-                                    {{ currentEvaluation.reason }}
-                                </p>
-                            </div>
-                        </div>
-                        <div v-else-if="currentEvaluation"
-                            class="p-4 bg-white/5 border border-white/5 rounded-2xl flex items-start gap-3">
-                            <span class="text-2xl">✅</span>
-                            <div>
-                                <p class="text-white text-sm font-bold">{{ getEvalLabel(currentEvaluation?.evaluation)
-                                    }}
-                                </p>
-                                <p class="text-on-surface-variant text-xs mt-1">
-                                    {{ currentEvaluation.reason }}
-                                </p>
+                            <div v-else
+                                class="w-10 h-14 rounded-lg border border-dashed border-white/15 flex items-center justify-center text-white/20 text-xs">
+                                ?
                             </div>
                         </div>
                     </div>
-                </template>
-            </div>
 
-            <!-- Info Sidebar -->
-            <div
-                class="w-full md:w-80 border-l border-white/5 bg-surface/30 backdrop-blur-md p-6 flex flex-col gap-6 overflow-y-auto">
-                <h3 class="text-lg font-bold text-white mb-2">{{ t('status_label') }}</h3>
-
-                <div v-if="matchInfo" class="space-y-4">
-                    <div class="p-4 bg-white/5 rounded-2xl border border-white/5">
-                        <div class="text-xs text-on-surface-variant uppercase mb-1">{{ t('admin_table_result') }}</div>
-                        <div class="text-xl font-bold"
-                            :class="matchInfo.loser === authStore.user?.username ? 'text-error' : 'text-primary'">
-                            {{ matchInfo.loser === authStore.user?.username ? t('lose_title') : t('win_title') }}
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="p-3 bg-white/5 rounded-xl border border-white/5">
-                            <div class="text-[10px] text-on-surface-variant uppercase mb-1">Taken</div>
-                            <div class="text-lg font-bold text-white">{{matchInfo.players.find(p => p.username ===
-                                authStore.user.username)?.cardsTaken || 0}}</div>
-                        </div>
-                        <div class="p-3 bg-white/5 rounded-xl border border-white/5">
-                            <div class="text-[10px] text-on-surface-variant uppercase mb-1">Duration</div>
-                            <div class="text-lg font-bold text-white">{{ matchInfo.duration }}s</div>
-                        </div>
-                    </div>
-
-                    <div class="mt-8">
-                        <h4 class="text-xs text-on-surface-variant uppercase tracking-widest mb-4">Players</h4>
-                        <div class="space-y-3">
-                            <div v-for="p in matchInfo.players" :key="p.username"
-                                class="flex items-center justify-between">
-                                <div class="flex items-center gap-2">
-                                    <span class="w-2 h-2 rounded-full"
-                                        :class="p.outcome === 'winner' ? 'bg-primary' : 'bg-error'"></span>
-                                    <span class="text-white text-sm font-medium">{{ p.username }}</span>
-                                </div>
-                                <span v-if="p.cardsTaken" class="text-xs text-on-surface-variant">+{{ p.cardsTaken }}
-                                    taken</span>
+                    <!-- MY hand -->
+                    <div class="flex flex-col items-center gap-1">
+                        <div class="text-[10px] text-white/30 uppercase">{{ authStore.user?.username || 'You' }}</div>
+                        <div class="flex flex-wrap justify-center gap-1">
+                            <div v-for="(card, i) in gameState?.hands?.[myUserId]" :key="i"
+                                class="w-9 h-13 rounded-md border flex flex-col items-center justify-center shadow-md cursor-default"
+                                :class="card.suit && ['♥', '♦'].includes(card.suit)
+                                    ? 'bg-white border-red-300/30 text-red-500'
+                                    : 'bg-white border-white/20 text-gray-900'">
+                                <span class="text-[10px] font-black leading-none">{{ card.rank }}</span>
+                                <span class="text-[12px] leading-none">{{ card.suit }}</span>
                             </div>
+                            <div v-if="!gameState?.hands?.[myUserId]?.length" class="text-[11px] text-white/20 italic">
+                                no cards</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Move List Overlay (Mini) -->
-                <div v-if="analysisData" class="flex-1 mt-6">
-                    <h4 class="text-xs text-on-surface-variant uppercase tracking-widest mb-4">Move History</h4>
-                    <div class="space-y-1 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
-                        <div v-for="(action, idx) in analysisData.history" :key="idx" @click="currentStep = idx"
-                            class="p-2 rounded-lg cursor-pointer transition-all flex items-center justify-between group"
-                            :class="currentStep === idx ? 'bg-primary/20 border border-primary/20' : 'hover:bg-white/5 border border-transparent'">
-                            <div class="flex items-center gap-2">
-                                <span class="text-[10px] text-on-surface-variant w-4">{{ idx + 1 }}</span>
-                                <span class="text-xs text-white">{{ action.action }}</span>
-                                <span v-if="action.card" class="text-[10px] text-primary">{{ action.card.rank }}{{
-                                    action.card.suit
-                                    }}</span>
-                            </div>
-                            <div v-if="analysisData.analysis[idx]" class="w-2 h-2 rounded-full"
-                                :class="getEvalClass(analysisData.analysis[idx].evaluation).replace('text-', 'bg-').split(' ')[0]">
+                <!-- Navigation controls -->
+                <div class="flex items-center justify-center gap-2 px-4 py-3 border-t border-white/8 bg-surface/10">
+                    <button @click="nav(0)" :disabled="currentStep === 0"
+                        class="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" />
+                        </svg>
+                    </button>
+                    <button @click="nav(currentStep - 1)" :disabled="currentStep === 0"
+                        class="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+                        </svg>
+                    </button>
+                    <div class="flex-1 flex justify-center">
+                        <!-- Progress bar -->
+                        <div class="w-40 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div class="h-full bg-primary rounded-full transition-all"
+                                :style="{ width: totalSteps > 1 ? `${(currentStep / (totalSteps - 1)) * 100}%` : '100%' }">
                             </div>
                         </div>
                     </div>
+                    <button @click="nav(currentStep + 1)" :disabled="currentStep >= totalSteps - 1"
+                        class="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                        </svg>
+                    </button>
+                    <button @click="nav(totalSteps - 1)" :disabled="currentStep >= totalSteps - 1"
+                        class="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 18l8.5-6L6 6v12zm2-8.14 4.77 2.14L8 14.14V9.86zM16 6h2v12h-2z" />
+                        </svg>
+                    </button>
                 </div>
-            </div>
+            </main>
+
+            <!-- RIGHT: Stats sidebar -->
+            <aside
+                class="w-full md:w-52 border-t md:border-t-0 md:border-l border-white/8 bg-surface/20 flex-shrink-0 overflow-y-auto">
+                <!-- Players -->
+                <div class="p-4 border-b border-white/8">
+                    <p class="text-[10px] text-white/40 uppercase tracking-widest mb-3">Players</p>
+                    <div class="space-y-2">
+                        <div v-for="p in matchInfo?.players" :key="p.username"
+                            class="flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-1.5 min-w-0">
+                                <span class="w-2 h-2 rounded-full shrink-0"
+                                    :class="p.outcome === 'win' ? 'bg-emerald-400' : 'bg-red-400'"></span>
+                                <span class="text-xs text-white truncate">{{ p.username }}</span>
+                            </div>
+                            <span v-if="p.cardsTaken" class="text-[10px] text-white/30 shrink-0">+{{ p.cardsTaken
+                                }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Move quality summary -->
+                <div class="p-4">
+                    <p class="text-[10px] text-white/40 uppercase tracking-widest mb-3">My Summary</p>
+                    <div v-if="playerStats.find(s => s.uid === myUserId) as myStat" class="space-y-1.5">
+                        <template v-if="myStat">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-emerald-400">Best / Excellent</span>
+                                <span class="text-white font-bold">{{ myStat.best + myStat.good }}</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-yellow-400">Inaccuracy</span>
+                                <span class="text-white font-bold">{{ myStat.ok }}</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-orange-400">Mistake</span>
+                                <span class="text-white font-bold">{{ myStat.mistake }}</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-red-400">Blunder</span>
+                                <span class="text-white font-bold">{{ myStat.blunder }}</span>
+                            </div>
+                        </template>
+                        <p v-else class="text-white/20 text-xs">No data</p>
+                    </div>
+                </div>
+            </aside>
         </div>
     </div>
 </template>
 
 <style scoped>
-.custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-}
-
-.animate-fade-in {
-    animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: scale(0.95);
-    }
-
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
+.h-13 {
+    height: 3.25rem;
 }
 </style>
