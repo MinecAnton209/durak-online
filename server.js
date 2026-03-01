@@ -10,7 +10,6 @@ const cors = require('cors');
 const i18next = require('i18next');
 const Backend = require('i18next-fs-backend');
 
-const db = require('./db');
 const authRoutes = require('./routes/auth.js');
 const telegramRoutes = require('./routes/telegram.js');
 const publicRoutes = require('./routes/public.js');
@@ -27,17 +26,22 @@ const economyService = require('./services/economyService.js');
 const inboxService = require('./services/inboxService.js');
 const webpush = require('web-push');
 const util = require('util');
-const dbRun = util.promisify(db.run.bind(db));
-const dbGet = util.promisify(db.get.bind(db));
+const prisma = require('./db/prisma');
 const cookieParser = require('cookie-parser');
 const { attachUserFromToken, socketAttachUser } = require('./middlewares/jwtAuth');
 const telegramBot = require('./services/telegramBot');
 const botLogic = require('./services/botLogic');
 const { escapeHtml, validateLobbySettings, validateCard, validateGameId } = require('./utils/validation');
+const { RANK_VALUES, createDeck, canBeat, getNextPlayerIndex, updateTurn, checkGameOver } = require('./utils/gameLogic');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const registerLobbyHandlers = require('./handlers/lobbyHandlers');
+const registerGameHandlers = require('./handlers/gameHandlers');
 
-dbRun("UPDATE games SET status = 'cancelled' WHERE status = 'waiting'")
+prisma.game.updateMany({
+    where: { status: 'waiting' },
+    data: { status: 'cancelled' }
+})
     .then(() => console.log('🧹 DB cleaned: Stale lobbies cancelled.'))
     .catch(err => console.error('DB Clean error:', err));
 
@@ -92,11 +96,9 @@ global.chatFilters = {
 
 async function loadChatFilters() {
     try {
-        const filters = await new Promise((resolve, reject) => {
-            db.all('SELECT type, content FROM chat_filters WHERE is_enabled = true', [], (err, rows) => {
-                if (err) return reject(err);
-                resolve(rows || []);
-            });
+        const filters = await prisma.chatFilter.findMany({
+            where: { is_enabled: true },
+            select: { type: true, content: true }
         });
 
         // Auto-seed default link regex if missing
@@ -106,7 +108,7 @@ async function loadChatFilters() {
         if (!hasLinkRegex) {
             console.log('Autoseeding default link regex...');
             try {
-                await dbRun("INSERT INTO chat_filters (type, content) VALUES ('regex', ?)", [defaultLinkRegex]);
+                await prisma.chatFilter.create({ data: { type: 'regex', content: defaultLinkRegex } });
                 filters.push({ type: 'regex', content: defaultLinkRegex });
             } catch (seedErr) {
                 console.error('Error autoseeding link regex:', seedErr);
@@ -285,8 +287,7 @@ app.use('/api/friends', friendsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 const inboxRoutes = require('./routes/inbox.js');
 app.use('/api/inbox', inboxRoutes);
-app.set('dbGet', dbGet);
-app.set('dbRun', dbRun);
+
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -304,101 +305,29 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
 io.use(socketAttachUser);
 
 async function checkBanStatus(userId) {
-    const user = await dbGet('SELECT is_banned, ban_reason, ban_until FROM users WHERE id = ?', [userId]);
-    if (user && user.is_banned) {
-        if (user.ban_until && new Date(user.ban_until) < new Date()) {
-            await dbRun('UPDATE users SET is_banned = false, ban_until = NULL, ban_reason = NULL WHERE id = ?', [userId]);
-            return null;
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { is_banned: true, ban_reason: true, ban_until: true }
+        });
+        if (user && user.is_banned) {
+            if (user.ban_until && new Date(user.ban_until) < new Date()) {
+                await prisma.user.update({
+                    where: { id: userId },
+                    data: { is_banned: false, ban_until: null, ban_reason: null }
+                });
+                return null;
+            }
+            return user.ban_reason || 'Account banned';
         }
-        return user.ban_reason || 'Account banned';
+        return null;
+    } catch (error) {
+        console.error("Error in checkBanStatus:", error);
+        return null;
     }
-    return null;
 }
 
 const VERIFIED_BADGE_SVG = `<span class="verified-badge" title="Verified player"><svg viewBox="0 0 20 22" xmlns="http://www.w3.org/2000/svg"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z" fill="#1d9bf0"></path></svg></span>`;
-const RANK_VALUES = {
-    '2': 2,
-    '3': 3,
-    '4': 4,
-    '5': 5,
-    '6': 6,
-    '7': 7,
-    '8': 8,
-    '9': 9,
-    '10': 10,
-    'J': 11,
-    'Q': 12,
-    'K': 13,
-    'A': 14
-};
-
-function createDeck(deckSize = 36) {
-    const SUITS = ['♦', '♥', '♠', '♣'];
-    let ranks;
-    switch (deckSize) {
-        case 52:
-            ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-            break;
-        case 24:
-            ranks = ['9', '10', 'J', 'Q', 'K', 'A'];
-            break;
-        default:
-            ranks = ['6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-            break;
-    }
-    const deck = [];
-    for (const suit of SUITS) {
-        for (const rank of ranks) {
-            deck.push({ suit, rank });
-        }
-    }
-    for (let i = deck.length - 1; i > 0; i--) {
-        const j = crypto.randomInt(0, i + 1);
-        [deck[i], deck[j]] = [deck[j], deck[i]];
-    }
-    return deck;
-}
-
-function canBeat(attackCard, defendCard, trumpSuit) {
-    if (!attackCard || !defendCard) return false;
-    if (attackCard.suit === defendCard.suit) return RANK_VALUES[defendCard.rank] > RANK_VALUES[attackCard.rank];
-    if (defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit) return true;
-    return false;
-}
-
-function getNextPlayerIndex(currentIndex, totalPlayers) {
-    if (totalPlayers === 0) return 0;
-    return (currentIndex + 1) % totalPlayers;
-}
-
-function updateTurn(game, intendedAttackerIndex) {
-    if (game.playerOrder.length < 2) return;
-    let currentAttackerIndex = intendedAttackerIndex % game.playerOrder.length;
-    let attempts = 0;
-    while (game.players[game.playerOrder[currentAttackerIndex]] && game.players[game.playerOrder[currentAttackerIndex]].cards.length === 0 && attempts < game.playerOrder.length) {
-        currentAttackerIndex = getNextPlayerIndex(currentAttackerIndex, game.playerOrder.length);
-        attempts++;
-    }
-    if (attempts >= game.playerOrder.length) {
-        return;
-    }
-    game.attackerId = game.playerOrder[currentAttackerIndex];
-    let currentDefenderIndex = getNextPlayerIndex(currentAttackerIndex, game.playerOrder.length);
-    attempts = 0;
-    while ((game.players[game.playerOrder[currentDefenderIndex]] && game.players[game.playerOrder[currentDefenderIndex]].cards.length === 0 && game.playerOrder.length > 1) && attempts < game.playerOrder.length) {
-        currentDefenderIndex = getNextPlayerIndex(currentDefenderIndex, game.playerOrder.length);
-        attempts++;
-        if (game.playerOrder.length > 1 && currentDefenderIndex === currentAttackerIndex) {
-            currentDefenderIndex = getNextPlayerIndex(currentDefenderIndex, game.playerOrder.length);
-        }
-    }
-    if (attempts >= game.playerOrder.length || (game.playerOrder.length > 1 && currentDefenderIndex === currentAttackerIndex)) {
-        game.defenderId = null;
-    } else {
-        game.defenderId = game.playerOrder[currentDefenderIndex];
-    }
-    game.turn = game.attackerId;
-}
 
 function addPlayerToGame(socket, game, playerName) {
     const sessionUser = socket.request.session.user;
@@ -451,9 +380,10 @@ async function startGame(gameId) {
 
         if (playerDbIds.length > 0) {
             try {
-                const placeholders = playerDbIds.map(() => '?').join(',');
-                const sql = `UPDATE users SET coins = coins - ? WHERE id IN (${placeholders})`;
-                await dbRun(sql, [betAmount, ...playerDbIds]);
+                await prisma.user.updateMany({
+                    where: { id: { in: playerDbIds } },
+                    data: { coins: { decrement: betAmount } }
+                });
                 console.log(`[Economy] Bets deducted for game ${gameId}. Bank is ${game.bank}`);
             } catch (error) {
                 console.error(`[Economy] CRITICAL: Failed to deduct bets for game ${gameId}. Cancelling game.`, error.message);
@@ -484,14 +414,18 @@ async function startGame(gameId) {
     const isBotGame = Object.values(game.players).some(p => p.isGuest);
 
     try {
-        await dbRun(
-            `UPDATE games 
-             SET start_time = ?, game_type = ?, is_bot_game = ?, status = 'in_progress', host_user_id = ?
-             WHERE id = ?`,
-            [game.startTime.toISOString(), gameType, isBotGame, hostUserId, game.id]
-        );
+        await prisma.game.update({
+            where: { id: game.id },
+            data: {
+                start_time: game.startTime.toISOString(),
+                game_type: gameType,
+                is_bot_game: isBotGame,
+                status: 'in_progress',
+                host_user_id: hostUserId
+            }
+        });
 
-        await dbRun('DELETE FROM game_participants WHERE game_id = ?', [game.id]);
+        await prisma.gameParticipant.deleteMany({ where: { game_id: game.id } });
 
         for (let index = 0; index < game.playerOrder.length; index++) {
             const playerId = game.playerOrder[index];
@@ -499,10 +433,14 @@ async function startGame(gameId) {
             const isFirstAttacker = (index === firstAttackerIndex);
 
             if (player.dbId) {
-                await dbRun(
-                    `INSERT INTO game_participants (game_id, user_id, is_bot, is_first_attacker) VALUES (?, ?, ?, ?)`,
-                    [game.id, player.dbId, player.isGuest, isFirstAttacker]
-                );
+                await prisma.gameParticipant.create({
+                    data: {
+                        game_id: game.id,
+                        user_id: player.dbId,
+                        is_bot: player.isGuest,
+                        is_first_attacker: isFirstAttacker
+                    }
+                });
             }
         }
 
@@ -533,22 +471,10 @@ function refillHands(game) {
                     i18nKey: 'log_draw_cards',
                     options: { name: player.name, count: drawnCards.length }
                 });
+                console.log(`[Game] ${player.name} drew ${drawnCards.length} cards in game ${game.id}`);
             }
         }
     }
-}
-
-function checkGameOver(game) {
-    if (game.deck.length === 0) {
-        const playersWithCards = game.playerOrder.map(id => game.players[id]).filter(p => p && p.cards.length > 0);
-        if (playersWithCards.length <= 1) {
-            const loser = playersWithCards.length === 1 ? playersWithCards[0] : null;
-            const winners = game.playerOrder.map(id => game.players[id]).filter(p => p && p.cards.length === 0);
-            game.winner = { winners, loser };
-            return true;
-        }
-    }
-    return false;
 }
 
 async function updateStatsAfterGame(game) {
@@ -563,7 +489,10 @@ async function updateStatsAfterGame(game) {
         const endTime = new Date();
         const durationSeconds = Math.round((endTime - game.startTime) / 1000);
         try {
-            await dbRun(`UPDATE games SET end_time = ?, duration_seconds = ? WHERE id = ?`, [endTime.toISOString(), durationSeconds, game.id]);
+            await prisma.game.update({
+                where: { id: game.id },
+                data: { end_time: endTime.toISOString(), duration_seconds: durationSeconds }
+            });
         } catch (err) {
             console.error(`[GAME END ${game.id}] Error updating game end time:`, err.message);
         }
@@ -572,103 +501,112 @@ async function updateStatsAfterGame(game) {
     const hasBots = Object.values(game.players).some(p => p.isBot);
 
     try {
-        await dbRun("BEGIN TRANSACTION");
+        await prisma.$transaction(async (tx) => {
+            const endTime = new Date();
+            const durationSeconds = Math.round((endTime - game.startTime) / 1000);
+            const { winners, loser } = game.winner;
+            const winnerDbIds = winners.filter(p => p && !p.isGuest).map(p => p.dbId);
+            const loserDbId = (loser && !loser.isGuest) ? loser.dbId : null;
 
-        const endTime = new Date();
-        const durationSeconds = Math.round((endTime - game.startTime) / 1000);
-        const { winners, loser } = game.winner;
-        const winnerDbIds = winners.filter(p => p && !p.isGuest).map(p => p.dbId);
-        const loserDbId = (loser && !loser.isGuest) ? loser.dbId : null;
-
-        await dbRun(`UPDATE games SET end_time = ?, duration_seconds = ?, winner_user_id = ?, loser_user_id = ? WHERE id = ?`,
-            [endTime.toISOString(), durationSeconds, winnerDbIds.length > 0 ? winnerDbIds[0] : null, loserDbId, game.id]);
-        await statsService.incrementDailyCounter('games_played');
-
-        const allPlayersInGame = [...winners, loser].filter(p => p);
-
-        for (const player of allPlayersInGame) {
-            if (player && !player.isGuest && player.dbId) {
-                const outcome = winners.some(w => w.id === player.id) ? 'win' : 'loss';
-                await dbRun(`UPDATE game_participants SET outcome = ?, cards_at_end = ? WHERE game_id = ? AND user_id = ?`,
-                    [outcome, player.cards.length, game.id, player.dbId]);
-
-                const userData = await dbGet(`SELECT streak_count, last_played_date, wins, losses, win_streak FROM users WHERE id = ?`, [player.dbId]);
-                if (!userData) throw new Error(`User not found for ID: ${player.dbId}`);
-
-                const isWinner = outcome === 'win';
-                let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
-                await achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
-
-                const today = new Date().toISOString().slice(0, 10);
-                const lastPlayed = userData.last_played_date;
-                let newStreak = 1;
-                if (lastPlayed) {
-                    const lastDate = new Date(lastPlayed);
-                    const todayDate = new Date(today);
-                    const diffTime = Math.abs(todayDate - lastDate);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    if (diffDays === 0) newStreak = userData.streak_count; else if (diffDays === 1) newStreak = userData.streak_count + 1;
+            await tx.game.update({
+                where: { id: game.id },
+                data: {
+                    end_time: endTime.toISOString(),
+                    duration_seconds: durationSeconds,
+                    winner_user_id: winnerDbIds.length > 0 ? winnerDbIds[0] : null,
+                    loser_user_id: loserDbId
                 }
+            });
+            await statsService.incrementDailyCounter('games_played');
 
-                const query = isWinner ? `UPDATE users SET wins = wins + 1, streak_count = ?, last_played_date = ?, win_streak = ? WHERE id = ?`
-                    : `UPDATE users SET losses = losses + 1, streak_count = ?, last_played_date = ?, win_streak = 0 WHERE id = ?`;
-                const params = isWinner ? [newStreak, today, newWinStreak, player.dbId] : [newStreak, today, player.dbId];
-                await dbRun(query, params);
-            }
-        }
+            const allPlayersInGame = [...winners, loser].filter(p => p);
 
-        const betAmount = game.settings.betAmount || 0;
-        if (betAmount > 0 && game.bank > 0) {
-            const winners = game.winner.winners.filter(p => p && !p.isGuest);
+            for (const player of allPlayersInGame) {
+                if (player && !player.isGuest && player.dbId) {
+                    const outcome = winners.some(w => w.id === player.id) ? 'win' : 'loss';
+                    await tx.gameParticipant.updateMany({
+                        where: { game_id: game.id, user_id: player.dbId },
+                        data: { outcome, cards_at_end: player.cards.length }
+                    });
 
-            if (winners.length > 0) {
-                const prizePerWinner = Math.floor(game.bank / winners.length);
-                console.log(`[Economy] Awarding ${prizePerWinner} coins to ${winners.length} winner(s) for game ${game.id}.`);
-                for (const winner of winners) {
-                    await dbRun(`UPDATE users SET coins = coins + ? WHERE id = ?`, [prizePerWinner, winner.dbId]);
-                }
-            } else {
-                console.log(`[Economy] No registered winners in game ${game.id}. Refunding bets.`);
+                    const userData = await tx.user.findUnique({
+                        where: { id: player.dbId },
+                        select: { streak_count: true, last_played_date: true, wins: true, losses: true, win_streak: true }
+                    });
+                    if (!userData) throw new Error(`User not found for ID: ${player.dbId}`);
 
-                const allRegisteredPlayers = Object.values(game.players).filter(p => p && !p.isGuest);
+                    const isWinner = outcome === 'win';
+                    let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
+                    await achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
 
-                if (allRegisteredPlayers.length > 0) {
-                    const playerDbIds = allRegisteredPlayers.map(p => p.dbId);
-                    const placeholders = playerDbIds.map(() => '?').join(',');
-                    const sql = `UPDATE users SET coins = coins + ? WHERE id IN (${placeholders})`;
+                    const today = new Date().toISOString().slice(0, 10);
+                    const lastPlayed = userData.last_played_date;
+                    let newStreak = 1;
+                    if (lastPlayed) {
+                        const lastDate = new Date(lastPlayed);
+                        const todayDate = new Date(today);
+                        const diffTime = Math.abs(todayDate - lastDate);
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        if (diffDays === 0) newStreak = userData.streak_count; else if (diffDays === 1) newStreak = userData.streak_count + 1;
+                    }
 
-                    await dbRun(sql, [betAmount, ...playerDbIds]);
-                    console.log(`[Economy] Refunded ${betAmount} coins to ${playerDbIds.length} players.`);
-
-                    allRegisteredPlayers.forEach(player => {
-                        const playerSocket = io.sockets.sockets.get(player.id);
-                        if (playerSocket) {
-                            playerSocket.emit('systemMessage', { i18nKey: 'info_bet_refunded' });
-                            if (playerSocket.request.session.user) {
-                                playerSocket.request.session.user.coins += betAmount;
-                                playerSocket.request.session.save();
-                            }
-                        }
+                    await tx.user.update({
+                        where: { id: player.dbId },
+                        data: isWinner
+                            ? { wins: { increment: 1 }, streak_count: newStreak, last_played_date: today, win_streak: newWinStreak }
+                            : { losses: { increment: 1 }, streak_count: newStreak, last_played_date: today, win_streak: 0 }
                     });
                 }
             }
-        }
 
-        if (hasBots) {
-            console.log(`[Rating] Game ${game.id} had bots. Rating update skipped.`);
-        } else {
-            await ratingService.updateRatingsAfterGame(game);
-        }
-        await dbRun("COMMIT");
+            const betAmount = game.settings.betAmount || 0;
+            if (betAmount > 0 && game.bank > 0) {
+                const txWinners = game.winner.winners.filter(p => p && !p.isGuest);
+
+                if (txWinners.length > 0) {
+                    const prizePerWinner = Math.floor(game.bank / txWinners.length);
+                    console.log(`[Economy] Awarding ${prizePerWinner} coins to ${txWinners.length} winner(s) for game ${game.id}.`);
+                    for (const winner of txWinners) {
+                        await tx.user.update({
+                            where: { id: winner.dbId },
+                            data: { coins: { increment: prizePerWinner } }
+                        });
+                    }
+                } else {
+                    console.log(`[Economy] No registered winners in game ${game.id}. Refunding bets.`);
+
+                    const allRegisteredPlayers = Object.values(game.players).filter(p => p && !p.isGuest);
+
+                    if (allRegisteredPlayers.length > 0) {
+                        await tx.user.updateMany({
+                            where: { id: { in: allRegisteredPlayers.map(p => p.dbId) } },
+                            data: { coins: { increment: betAmount } }
+                        });
+                        console.log(`[Economy] Refunded ${betAmount} coins to ${allRegisteredPlayers.length} players.`);
+
+                        allRegisteredPlayers.forEach(player => {
+                            const playerSocket = io.sockets.sockets.get(player.id);
+                            if (playerSocket) {
+                                playerSocket.emit('systemMessage', { i18nKey: 'info_bet_refunded' });
+                                if (playerSocket.request.session.user) {
+                                    playerSocket.request.session.user.coins += betAmount;
+                                    playerSocket.request.session.save();
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+
+            if (hasBots) {
+                console.log(`[Rating] Game ${game.id} had bots. Rating update skipped.`);
+            } else {
+                await ratingService.updateRatingsAfterGame(game);
+            }
+        });
 
     } catch (error) {
         console.error(`[GAME END ${game.id}] FATAL ERROR during stats update. Rolling back.`, error);
-        try {
-            await dbRun("ROLLBACK");
-            console.log(`[GAME END ${game.id}] Transaction rolled back successfully.`);
-        } catch (rollbackError) {
-            console.error(`[GAME END ${game.id}] CRITICAL: Failed to roll back transaction!`, rollbackError);
-        }
     } finally {
         if (game) {
             game.isStatsUpdating = false;
@@ -839,22 +777,22 @@ function rouletteTick() {
                 console.log(`[Roulette] User ${userId} won ${totalPayout} coins.`);
                 const userIdNum = parseInt(userId, 10);
 
-                const promise = dbRun('UPDATE users SET coins = coins + ? WHERE id = ?', [totalPayout, userIdNum])
-                    .then(() => {
+                const promise = prisma.user.update({
+                    where: { id: userIdNum },
+                    data: { coins: { increment: totalPayout } }
+                })
+                    .then(() => prisma.user.findUnique({ where: { id: userIdNum }, select: { coins: true } }))
+                    .then(user => {
                         const userSocketId = onlineUsers.get(userIdNum);
-                        if (userSocketId) {
-                            return dbGet('SELECT coins FROM users WHERE id = ?', [userIdNum]).then(user => {
-                                if (user) {
-                                    io.to(userSocketId).emit('updateBalance', { coins: user.coins });
-                                    io.to(userSocketId).emit('roulette:win', { amount: totalPayout });
+                        if (userSocketId && user) {
+                            io.to(userSocketId).emit('updateBalance', { coins: user.coins });
+                            io.to(userSocketId).emit('roulette:win', { amount: totalPayout });
 
-                                    const userSocket = io.sockets.sockets.get(userSocketId);
-                                    if (userSocket?.request?.session?.user) {
-                                        userSocket.request.session.user.coins = user.coins;
-                                        userSocket.request.session.save();
-                                    }
-                                }
-                            });
+                            const userSocket = io.sockets.sockets.get(userSocketId);
+                            if (userSocket?.request?.session?.user) {
+                                userSocket.request.session.user.coins = user.coins;
+                                userSocket.request.session.save();
+                            }
                         }
                     });
                 payoutPromises.push(promise);
@@ -967,7 +905,7 @@ function handleTurnTimeout(game, io) {
         game.playerOrder = game.playerOrder.filter(id => id !== currentPlayerId);
 
         io.to(game.id).emit('playerLeft', { playerId: currentPlayerId, name: player.name, reason: 'afk' });
-        logEvent(game, `🚫 ${player.name} видалений з гри за неактивність.`);
+        logEvent(game, `🚫 ${player.name} removed from the game due to inactivity.`);
 
         if (game.playerOrder.length < 2) {
             const winners = game.playerOrder.map(id => game.players[id]);
@@ -1144,14 +1082,17 @@ io.on('connection', (socket) => {
 
         economyService.checkAndAwardDailyBonus(userId, io, socket.id);
         console.log(`[Online Status] User connected: ${sessionUser.username} (ID: ${sessionUser.id}). Total online: ${onlineUsers.size}`);
-        db.get('SELECT is_banned, ban_reason, ban_until FROM users WHERE id = ?', [sessionUser.id], (err, dbUser) => {
-            if (err) {
-                socket.disconnect(true);
-                return;
-            }
+        prisma.user.findUnique({
+            where: { id: userId },
+            select: { is_banned: true, ban_reason: true, ban_until: true }
+        }).then(async (dbUser) => {
             if (dbUser && dbUser.is_banned) {
                 if (dbUser.ban_until && new Date(dbUser.ban_until) < new Date()) {
-                    db.run('UPDATE users SET is_banned = 0, ban_until = NULL, ban_reason = NULL WHERE id = ?', [sessionUser.id]);
+                    await prisma.user.update({
+                        where: { id: userId },
+                        data: { is_banned: false, ban_until: null, ban_reason: null }
+                    });
+                    console.log(`[Ban] Ban expired for user ${sessionUser.username}`);
                 } else {
                     const reasonText = dbUser.ban_reason || i18next.t('ban_reason_not_specified');
                     const options = { reason: reasonText };
@@ -1165,154 +1106,14 @@ io.on('connection', (socket) => {
                     socket.disconnect(true);
                 }
             }
+        }).catch(err => {
+            console.error(`[Ban] Error checking ban status for ${sessionUser.username}:`, err.message);
+            socket.disconnect(true);
         });
     } else {
         console.log(`Client connected: ${socket.id} (guest)`);
     }
-    socket.on('createLobby', async (settings) => {
-        const sessionUser = socket.request.session?.user;
-
-        if (sessionUser) {
-            const banReason = await checkBanStatus(sessionUser.id);
-            if (banReason) {
-                return socket.emit('forceDisconnect', { i18nKey: 'error_account_banned_with_reason', options: { reason: banReason } });
-            }
-        }
-
-        const validation = validateLobbySettings(settings);
-        if (!validation.valid) {
-            return socket.emit('error', { i18nKey: 'error_invalid_settings', message: validation.error });
-        }
-
-        const lobbySettings = validation.sanitized;
-
-        const playerName = sessionUser ? sessionUser.username : (settings.playerName || "Guest");
-        const userId = sessionUser ? sessionUser.id : null;
-
-        const betAmount = lobbySettings.betAmount;
-        if (betAmount > 0) {
-            if (!sessionUser) {
-                return socket.emit('error', { i18nKey: 'error_guests_cannot_bet' });
-            }
-            if (sessionUser.coins < betAmount) {
-                return socket.emit('error', { i18nKey: 'error_not_enough_coins_host' });
-            }
-        }
-
-        const gameId = crypto.randomBytes(3).toString('hex').toUpperCase();
-
-        try {
-            const inviteCode = lobbySettings.lobbyType === 'private' ? crypto.randomBytes(3).toString('hex').toUpperCase() : null;
-
-            await dbRun(
-                `INSERT INTO games (id, status, lobby_type, invite_code, max_players, host_user_id, game_settings, start_time)
-                 VALUES (?, 'waiting', ?, ?, ?, ?, ?, ?)`,
-                [gameId, lobbySettings.lobbyType, inviteCode, lobbySettings.maxPlayers, userId, JSON.stringify(lobbySettings), new Date().toISOString()]
-            );
-
-            games[gameId] = {
-                id: gameId,
-                status: 'waiting',
-                hostId: socket.id,
-                players: {},
-                playerOrder: [],
-                settings: lobbySettings,
-                deck: [], table: [], discardPile: [], trumpCard: null, trumpSuit: null,
-                attackerId: null, defenderId: null, turn: null, winner: null,
-                rematchVotes: new Set(), log: [], lastAction: null, startTime: null,
-                spectators: [], musicState: { currentTrackId: null, isPlaying: false, trackTitle: 'Silence', suggester: null, stateChangeTimestamp: null, seekTimestamp: 0 }
-            };
-
-            socket.join(gameId);
-            addPlayerToGame(socket, games[gameId], playerName);
-
-            console.log(`[Lobby] Lobby created: ${gameId} by ${playerName} (Guest: ${!sessionUser})`);
-            socket.emit('lobbyCreated', { gameId, inviteCode, settings: lobbySettings });
-            broadcastPublicLobbies();
-
-        } catch (e) {
-            console.error("[Lobby] Error creating lobby:", e);
-            socket.emit('error', { i18nKey: 'error_database' });
-        }
-    });
-    socket.on('joinLobby', async ({ gameId, inviteCode, playerName }) => {
-        console.log(`[JoinLobby] Request received: GameId=${gameId}, Code=${inviteCode}, Name=${playerName}`);
-
-        const sessionUser = socket.request.session?.user;
-
-        if (sessionUser) {
-            const banReason = await checkBanStatus(sessionUser.id);
-            if (banReason) return socket.emit('forceDisconnect', { i18nKey: 'error_account_banned_with_reason', options: { reason: banReason } });
-        }
-
-        const actualPlayerName = sessionUser ? sessionUser.username : (playerName || "Guest");
-        let lobbyToJoinId = gameId ? gameId.toUpperCase() : null;
-        let gameFromDb;
-
-        try {
-            if (inviteCode) {
-                const codeToCheck = inviteCode.toUpperCase();
-
-                gameFromDb = await dbGet("SELECT id, max_players FROM games WHERE invite_code = ? AND status = 'waiting'", [codeToCheck]);
-
-                if (!gameFromDb) {
-                    gameFromDb = await dbGet("SELECT id, max_players FROM games WHERE id = ? AND status = 'waiting'", [codeToCheck]);
-                }
-
-                if (gameFromDb) lobbyToJoinId = gameFromDb.id;
-
-            } else if (lobbyToJoinId) {
-                gameFromDb = await dbGet("SELECT id, max_players FROM games WHERE id = ? AND status = 'waiting'", [lobbyToJoinId]);
-            }
-
-            console.log(`[JoinLobby] DB Search Result:`, gameFromDb);
-
-            if (!lobbyToJoinId || !gameFromDb) {
-                console.log(`[JoinLobby] Lobby not found in DB or wrong status`);
-                return socket.emit('error', { i18nKey: 'error_lobby_not_found' });
-            }
-
-            const game = games[lobbyToJoinId];
-            if (!game) {
-                console.log(`[JoinLobby] Lobby found in DB but NOT in Memory. Cancelling DB record.`);
-                await dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [lobbyToJoinId]);
-                return socket.emit('error', { i18nKey: 'error_lobby_not_found_in_memory' });
-            }
-
-            if (sessionUser && Object.values(game.players).some(p => p.dbId === sessionUser.id)) {
-                console.log(`[JoinLobby] User already in game`);
-                return socket.emit('error', { i18nKey: 'error_already_in_game' });
-            }
-
-            if (Object.keys(game.players).length >= game.settings.maxPlayers) {
-                console.log(`[JoinLobby] Lobby is full`);
-                return socket.emit('error', { i18nKey: 'error_lobby_full' });
-            }
-
-            const betAmount = game.settings.betAmount || 0;
-            if (betAmount > 0) {
-                if (!sessionUser) return socket.emit('error', { i18nKey: 'error_guests_cannot_bet' });
-                if (sessionUser.coins < betAmount) return socket.emit('error', { i18nKey: 'error_not_enough_coins_join' });
-            }
-
-            socket.join(lobbyToJoinId);
-            addPlayerToGame(socket, game, actualPlayerName);
-
-            console.log(`[Lobby] ${actualPlayerName} joined lobby ${lobbyToJoinId}`);
-
-            socket.emit('joinSuccess', { gameId: lobbyToJoinId, playerId: socket.id });
-
-            io.to(lobbyToJoinId).emit('lobbyStateUpdate', {
-                players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, rating: p.rating, isVerified: p.isVerified })),
-                hostId: game.hostId,
-                maxPlayers: game.settings.maxPlayers
-            });
-
-        } catch (e) {
-            console.error("[Lobby] Error joining lobby:", e);
-            socket.emit('error', { i18nKey: 'error_database' });
-        }
-    });
+    registerLobbyHandlers(io, socket, { games, addPlayerToGame, broadcastPublicLobbies, checkBanStatus });
     socket.on('reconnectAttempt', async ({ gameId }) => {
         console.log(`[Reconnect] Attempt from socket ${socket.id} for game ${gameId}`);
 
@@ -1458,209 +1259,20 @@ io.on('connection', (socket) => {
             socket.emit('error', { i18nKey: 'error_game_not_found' });
         }
     });
-    socket.on('forceStartGame', ({ gameId }) => {
-        const game = games[gameId];
-        if (!game || game.hostId !== socket.id) return;
-        if (game.playerOrder.length >= 2) {
-            game.settings.maxPlayers = game.playerOrder.length;
-            startGame(gameId);
-        }
-    });
-    socket.on('sendMessage', ({ gameId, message }) => {
-        const game = games[gameId];
-        const player = game ? game.players[socket.id] : null;
-        if (!game || !player || !message) return;
-
-        if (player.is_muted) {
-            const sessionUser = socket.request.session?.user;
-            if (sessionUser && sessionUser.mute_until && new Date(sessionUser.mute_until) < new Date()) {
-                // Mute expired
-                player.is_muted = false;
-                if (sessionUser) {
-                    sessionUser.is_muted = false;
-                    sessionUser.mute_until = null;
-                }
-                db.run('UPDATE users SET is_muted = 0, mute_until = NULL WHERE id = ?', [player.dbId || sessionUser?.id]);
-            } else {
-                return socket.emit('systemMessage', { i18nKey: 'error_chat_muted', type: 'error' });
-            }
-        }
-        const trimmedMessage = message.trim();
-        if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) {
-            const escapedMessage = escapeHtml(trimmedMessage);
-            const escapedName = escapeHtml(player.name);
-            let authorHTML = escapedName;
-            if (player.isVerified) {
-                authorHTML += VERIFIED_BADGE_SVG;
-            }
-            const chatMessage = `<span class="message-author">${authorHTML}:</span> <span class="message-text">${escapedMessage}</span>`;
-            logEvent(game, chatMessage);
-        }
-    });
-    socket.on('makeMove', ({ gameId, card }) => {
-        const game = games[gameId];
-        if (!game || !game.players[socket.id] || game.winner) return;
-
-        const cardValidation = validateCard(card);
-        if (!cardValidation.valid) {
-            return socket.emit('invalidMove', { reason: "error_invalid_card" });
-        }
-
-        game.lastAction = 'move';
-        const player = game.players[socket.id];
-        player.afkStrikes = 0;
-        const isDefender = socket.id === game.defenderId;
-        const canToss = !isDefender && game.table.length > 0 && game.table.length % 2 === 0;
-
-        if (game.turn !== socket.id && !canToss) {
-            return socket.emit('invalidMove', { reason: "error_invalid_move_turn" });
-        }
-
-        if (!player.cards.some(c => c.rank === card.rank && c.suit === card.suit)) {
-            return socket.emit('invalidMove', { reason: "error_invalid_move_no_card" });
-        }
-
-        if (isDefender) {
-
-            const isPerevodnoy = game.settings.gameMode === 'perevodnoy';
-            const isSameRank = game.table.length > 0 && game.table.every(c => c.rank === card.rank);
-
-            if (isPerevodnoy && isSameRank) {
-                const currentDefenderIndex = game.playerOrder.indexOf(game.defenderId);
-                const nextPlayerIndex = getNextPlayerIndex(currentDefenderIndex, game.playerOrder.length);
-                const nextPlayerId = game.playerOrder[nextPlayerIndex];
-                const nextPlayer = game.players[nextPlayerId];
-
-                if (nextPlayer && nextPlayer.cards.length >= (game.table.length + 1)) {
-
-                    player.cards = player.cards.filter(c => !(c.rank === card.rank && c.suit === card.suit));
-                    game.table.push(card);
-
-                    logEvent(game, null, {
-                        i18nKey: 'log_transfer',
-                        options: { name: player.name, nextPlayer: nextPlayer.name }
-                    });
-
-                    game.attackerId = game.defenderId;
-                    game.defenderId = nextPlayerId;
-                    game.turn = nextPlayerId;
-                    game.lastAction = 'transfer';
-
-                    broadcastGameState(gameId);
-                    return;
-                } else {
-                }
-            }
-
-            if (!canBeat(game.table[game.table.length - 1], card, game.trumpSuit)) {
-                return socket.emit('invalidMove', { reason: "error_invalid_move_cannot_beat" });
-            }
-
-            logEvent(game, null, {
-                i18nKey: 'log_defend',
-                options: { name: player.name, rank: card.rank, suit: card.suit }
-            });
-            game.turn = game.attackerId;
-
-        } else {
-            const isAttacking = game.attackerId === socket.id;
-            const logKey = isAttacking ? 'log_attack' : 'log_toss';
-
-            if (game.table.length > 0 && !game.table.some(c => c.rank === card.rank)) {
-                return socket.emit('invalidMove', { reason: "error_invalid_move_wrong_rank" });
-            }
-
-            const defender = game.players[game.defenderId];
-            if (!defender) return;
-
-            const cardsToBeat = game.table.length - (game.table.length % 2 === 0 ? game.table.length / 2 : Math.floor(game.table.length / 2));
-
-            if ((game.table.length - Math.floor(game.table.length / 2)) >= defender.cards.length) {
-                return socket.emit('invalidMove', { reason: "error_invalid_move_toss_limit" });
-            }
-
-            logEvent(game, null, { i18nKey: logKey, options: { name: player.name, rank: card.rank, suit: card.suit } });
-            game.turn = game.defenderId;
-        }
-
-        player.cards = player.cards.filter(c => !(c.rank === card.rank && c.suit === card.suit));
-        game.table.push(card);
-        broadcastGameState(gameId);
-    });
-    socket.on('passTurn', ({ gameId }) => {
-        const game = games[gameId];
-        if (!game || game.attackerId !== socket.id || game.table.length === 0 || game.table.length % 2 !== 0 || game.winner) return;
-        if (game.players[socket.id]) {
-            game.players[socket.id].afkStrikes = 0;
-        }
-        game.lastAction = 'pass';
-        const defenderIdBeforeRefill = game.defenderId;
-        const defender = game.players[defenderIdBeforeRefill];
-        if (defender) {
-            const defenderStats = defender.gameStats;
-            defenderStats.successfulDefenses += 1;
-            defenderStats.cardsBeatenInDefense += game.table.length / 2;
-            achievementService.checkInGameAchievements(game, defenderIdBeforeRefill, 'passTurn');
-            logEvent(game, null, { i18nKey: 'log_pass', options: { name: defender.name } });
-        }
-        game.discardPile.push(...game.table);
-        game.table = [];
-        refillHands(game);
-        if (checkGameOver(game)) {
-            updateStatsAfterGame(game);
-            return broadcastGameState(gameId);
-        }
-        let defenderIndex = game.playerOrder.indexOf(defenderIdBeforeRefill);
-        if (defenderIndex === -1) defenderIndex = 0;
-        updateTurn(game, defenderIndex);
-        broadcastGameState(gameId);
-    });
-    socket.on('takeCards', ({ gameId }) => {
-        const game = games[gameId];
-        if (!game || game.defenderId !== socket.id || game.table.length === 0 || game.winner) return;
-        if (game.players[socket.id]) {
-            game.players[socket.id].afkStrikes = 0;
-        }
-        game.lastAction = 'take';
-        const defender = game.players[game.defenderId];
-        if (defender) {
-            defender.gameStats.cardsTaken += game.table.length;
-            if (defender.dbId) {
-                db.run(`UPDATE game_participants
-                        SET cards_taken_total = cards_taken_total + ?
-                        WHERE game_id = ?
-                          AND user_id = ?`, [game.table.length, gameId, defender.dbId], (err) => {
-                    if (err) console.error(`Помилка оновлення cards_taken_total для гри ${gameId}:`, err.message);
-                });
-            }
-            logEvent(game, null, { i18nKey: 'log_take', options: { name: defender.name } });
-            defender.cards.push(...game.table);
-        }
-        game.table = [];
-        refillHands(game);
-        if (checkGameOver(game)) {
-            updateStatsAfterGame(game);
-            return broadcastGameState(gameId);
-        }
-        const defenderIndex = game.playerOrder.indexOf(game.defenderId);
-        const nextPlayerIndex = getNextPlayerIndex(defenderIndex, game.playerOrder.length);
-        updateTurn(game, nextPlayerIndex);
-        broadcastGameState(gameId);
-    });
-    socket.on('requestRematch', ({ gameId }) => {
-        const game = games[gameId];
-        if (!game || !game.players[socket.id]) return;
-        game.rematchVotes.add(socket.id);
-        const remainingPlayers = game.playerOrder.filter(id => game.players[id]);
-        io.to(gameId).emit('rematchUpdate', { votes: game.rematchVotes.size, total: remainingPlayers.length });
-        if (game.rematchVotes.size === remainingPlayers.length && remainingPlayers.length >= 2) {
-            game.table = [];
-            game.discardPile = [];
-            game.winner = null;
-            game.rematchVotes.clear();
-            game.playerOrder.sort(() => Math.random() - 0.5);
-            setTimeout(() => startGame(gameId), 1000);
-        }
+    registerGameHandlers(io, socket, {
+        games,
+        startGame,
+        canBeat,
+        getNextPlayerIndex,
+        checkGameOver,
+        logEvent,
+        updateTurn,
+        broadcastGameState,
+        refillHands,
+        updateStatsAfterGame,
+        achievementService,
+        VERIFIED_BADGE_SVG,
+        escapeHtml
     });
     socket.on('disconnect', () => {
         let disconnectedUserId = null;
@@ -1702,7 +1314,7 @@ io.on('connection', (socket) => {
                         const humanIds = game.playerOrder.filter(id => game.players[id] && !game.players[id].isBot);
                         if (humanIds.length === 0) {
                             delete games[gameId];
-                            dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+                            prisma.game.update({ where: { id: gameId }, data: { status: 'cancelled' } }).catch(() => { });
                             console.log(`[Lobby] Lobby ${gameId} has only bots and was deleted.`);
                         } else {
                             if (game.hostId === socket.id) {
@@ -1723,7 +1335,7 @@ io.on('connection', (socket) => {
                         }
                     } else {
                         delete games[gameId];
-                        dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+                        prisma.game.update({ where: { id: gameId }, data: { status: 'cancelled' } }).catch(() => { });
                         console.log(`[Lobby] Lobby ${gameId} is empty and was deleted.`);
                     }
                     broadcastPublicLobbies();
@@ -1862,14 +1474,14 @@ io.on('connection', (socket) => {
         const updateCountdown = () => {
             const timeLeft = startTime - Date.now();
             if (timeLeft <= 0) {
-                maintenanceBannerCountdown.textContent = "Роботи почалися!";
+                maintenanceBannerCountdown.textContent = "Maintenance started!";
                 clearInterval(maintenanceCountdownInterval);
                 setTimeout(() => window.location.reload(), 2000);
                 return;
             }
             const minutes = Math.floor((timeLeft / 1000 / 60) % 60);
             const seconds = Math.floor((timeLeft / 1000) % 60);
-            maintenanceBannerCountdown.textContent = `До початку: ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            maintenanceBannerCountdown.textContent = `Until start: ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         };
 
         maintenanceCountdownInterval = setInterval(updateCountdown, 1000);
@@ -1952,9 +1564,12 @@ io.on('connection', (socket) => {
     socket.on('roulette:getState', () => {
         socket.emit('roulette:updateState', rouletteState);
         if (socket.request.session.user) {
-            db.get('SELECT coins FROM users WHERE id = ?', [socket.request.session.user.id], (err, user) => {
+            prisma.user.findUnique({
+                where: { id: socket.request.session.user.id },
+                select: { coins: true }
+            }).then(user => {
                 if (user) socket.emit('updateBalance', { coins: user.coins });
-            });
+            }).catch(err => console.error('[Roulette] Error getting balance:', err.message));
         }
     });
 
@@ -1970,15 +1585,15 @@ io.on('connection', (socket) => {
         }
 
         const amount = parseInt(bet.amount, 10);
-        const userId = sessionUser.id;
+        const userId = parseInt(sessionUser.id, 10);
 
         try {
-            const dbUser = await dbGet('SELECT coins FROM users WHERE id = ?', [userId]);
+            const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { coins: true } });
             if (!dbUser || dbUser.coins < amount) {
                 return socket.emit('roulette:betError', { messageKey: 'error_not_enough_coins' });
             }
 
-            await dbRun('UPDATE users SET coins = coins - ? WHERE id = ?', [amount, userId]);
+            await prisma.user.update({ where: { id: userId }, data: { coins: { decrement: amount } } });
 
             socket.request.session.user.coins -= amount;
             socket.request.session.save();
@@ -2015,10 +1630,8 @@ io.on('connection', (socket) => {
         }
 
         try {
-            await dbRun("UPDATE games SET status = 'in_progress' WHERE id = ?", [gameId]);
-
+            await prisma.game.update({ where: { id: gameId }, data: { status: 'in_progress' } });
             startGame(gameId);
-
             broadcastPublicLobbies();
         } catch (e) {
             console.error(`[Game] Error starting game ${gameId}:`, e);
@@ -2041,7 +1654,7 @@ io.on('connection', (socket) => {
             if (humanIds.length === 0) {
                 console.log(`[Lobby] Lobby ${gameId} has only bots. Deleting.`);
                 delete games[gameId];
-                dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+                prisma.game.update({ where: { id: gameId }, data: { status: 'cancelled' } }).catch(() => { });
                 io.emit('lobbyExpired', { lobbyId: gameId });
             } else {
                 if (game.hostId === socket.id) {
@@ -2061,7 +1674,7 @@ io.on('connection', (socket) => {
         } else {
             console.log(`[Lobby] Lobby ${gameId} is empty. Deleting.`);
             delete games[gameId];
-            dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+            prisma.game.update({ where: { id: gameId }, data: { status: 'cancelled' } }).catch(() => { });
             io.emit('lobbyExpired', { lobbyId: gameId });
             broadcastPublicLobbies();
         }
@@ -2082,9 +1695,10 @@ io.on('connection', (socket) => {
         }
 
         try {
-            await dbRun("UPDATE games SET game_settings = ?, max_players = ? WHERE id = ?",
-                [JSON.stringify(game.settings), game.settings.maxPlayers, gameId]
-            );
+            await prisma.game.update({
+                where: { id: gameId },
+                data: { game_settings: JSON.stringify(game.settings), max_players: game.settings.maxPlayers }
+            });
 
             io.to(gameId).emit('lobbyStateUpdate', {
                 players: Object.values(game.players).map(p => ({
@@ -2333,7 +1947,10 @@ io.on('connection', (socket) => {
                 // Mute expired
                 sessionUser.is_muted = false;
                 sessionUser.mute_until = null;
-                db.run('UPDATE users SET is_muted = 0, mute_until = NULL WHERE id = ?', [sessionUser.id]);
+                prisma.user.update({
+                    where: { id: sessionUser.id },
+                    data: { is_muted: false, mute_until: null }
+                }).catch(err => console.error('[Mute] Error unmuting user:', err.message));
             } else {
                 return socket.emit('systemMessage', { i18nKey: 'error_chat_muted', type: 'error' });
             }
@@ -2436,9 +2053,14 @@ io.on('connection', (socket) => {
         chatSpamTracker.set(sessionUser.id, userData);
 
         // Save to Persistent History (Async, don't block)
-        dbRun('INSERT INTO chat_messages (user_id, username, content, created_at) VALUES (?, ?, ?, ?)',
-            [sessionUser.id, sessionUser.username, trimmedMessage, new Date(now).toISOString()])
-            .catch(err => console.error('Failed to save chat message:', err));
+        prisma.chatMessage.create({
+            data: {
+                user_id: sessionUser.id,
+                username: sessionUser.username,
+                content: trimmedMessage,
+                created_at: new Date(now)
+            }
+        }).catch(err => console.error('Failed to save chat message:', err));
 
         globalChatHistory.push(messageObject);
         if (globalChatHistory.length > CHAT_HISTORY_LIMIT) {
@@ -2458,7 +2080,10 @@ io.on('connection', (socket) => {
             muteUntil = new Date(Date.now() + duration * 60000).toISOString();
         }
 
-        await dbRun('UPDATE users SET is_muted = 1, mute_until = ? WHERE id = ?', [muteUntil, userId]);
+        await prisma.user.update({
+            where: { id: parseInt(userId, 10) },
+            data: { is_muted: true, mute_until: muteUntil ? new Date(muteUntil) : null }
+        });
 
         // Update existing messages in history to reflect mute status immediately
         globalChatHistory.forEach(msg => {
@@ -2470,7 +2095,7 @@ io.on('connection', (socket) => {
         });
 
         // Log admin action
-        const targetUser = await dbGet('SELECT username FROM users WHERE id = ?', [userId]);
+        const targetUser = await prisma.user.findUnique({ where: { id: parseInt(userId, 10) }, select: { username: true } });
         logAdminAction({
             adminId: sessionUser.id,
             adminUsername: sessionUser.username,
@@ -2491,11 +2116,17 @@ io.on('connection', (socket) => {
             banUntil = new Date(Date.now() + duration * 60000).toISOString();
         }
 
-        await dbRun('UPDATE users SET is_banned = 1, ban_until = ?, ban_reason = ? WHERE id = ?',
-            [banUntil, permanent ? 'Permanent ban from global chat' : 'Temporary ban from global chat', userId]);
+        await prisma.user.update({
+            where: { id: parseInt(userId, 10) },
+            data: {
+                is_banned: true,
+                ban_until: banUntil ? new Date(banUntil) : null,
+                ban_reason: permanent ? 'Permanent ban from global chat' : 'Temporary ban from global chat'
+            }
+        });
 
         // Log admin action
-        const targetUser = await dbGet('SELECT username FROM users WHERE id = ?', [userId]);
+        const targetUser = await prisma.user.findUnique({ where: { id: parseInt(userId, 10) }, select: { username: true } });
         logAdminAction({
             adminId: sessionUser.id,
             adminUsername: sessionUser.username,
@@ -2626,7 +2257,7 @@ setInterval(() => {
         if (game.status === 'waiting' && (!game.playerOrder || game.playerOrder.length === 0)) {
             console.log(`[GC] Removing zombie lobby: ${gameId}`);
             delete games[gameId];
-            dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+            prisma.game.update({ where: { id: gameId }, data: { status: 'cancelled' } }).catch(() => { });
             io.emit('lobbyExpired', { lobbyId: gameId });
             hasChanges = true;
         }
@@ -2665,11 +2296,11 @@ async function getSystemStats() {
 
         const { performance } = require('perf_hooks');
         const dbStartTime = performance.now();
-        await dbGet('SELECT 1');
+        await prisma.$queryRaw`SELECT 1`;
         const dbPing = Math.round(performance.now() - dbStartTime);
 
         const today = new Date().toISOString().slice(0, 10);
-        let dailyStats = await dbGet('SELECT * FROM system_stats_daily WHERE date = ?', [today]);
+        let dailyStats = await prisma.systemStatsDaily.findUnique({ where: { date: today } });
         if (!dailyStats) {
             dailyStats = { new_registrations: 0, games_played: 0 };
         }
@@ -2797,21 +2428,8 @@ async function gracefulShutdown(signal) {
         }
 
         console.log("Closing database connection...");
-        if (db.pool) {
-            await db.pool.end();
-            console.log("PostgreSQL pool has been closed.");
-        } else {
-            await new Promise((resolve) => {
-                db.close((err) => {
-                    if (err) {
-                        console.error("SQLite close error:", err);
-                    } else {
-                        console.log("SQLite closed");
-                    }
-                    resolve();
-                });
-            });
-        }
+        await prisma.$disconnect();
+        console.log("Prisma disconnected");
 
         clearTimeout(forceExitTimer);
 

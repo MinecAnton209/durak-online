@@ -1,77 +1,85 @@
-﻿const db = require('./index');
+﻿const prisma = require('./prisma');
 
-async function saveSubscription(userId, subscriptionData) {
-    return new Promise((resolve, reject) => {
-        const query = `
-            INSERT INTO push_subscriptions (user_id, subscription_data)
-            VALUES (?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET
-                subscription_data = excluded.subscription_data;
-        `;
+/**
+ * Saves or updates a push subscription for a user.
+ */
+async function saveSubscription(userId, subscription) {
+    const endpoint = subscription.endpoint;
+    const keys = JSON.stringify(subscription.keys);
 
-        const dataString = JSON.stringify(subscriptionData);
-
-        db.run(query, [userId, dataString], (err) => {
-            if (err) return reject(err);
-            resolve();
-        });
-    });
-}
-async function deleteSubscription(userId) {
-    return new Promise((resolve, reject) => {
-        const query = `DELETE FROM push_subscriptions WHERE user_id = ?;`;
-        db.run(query, [userId], (err) => {
-            if (err) return reject(err);
-            resolve();
-        });
-    });
-}
-
-async function findSubscriptionByUserId(userId) {
-    return new Promise((resolve, reject) => {
-        const query = `SELECT subscription_data FROM push_subscriptions WHERE user_id = ?;`;
-        db.get(query, [userId], (err, row) => {
-            if (err) return reject(err);
-            if (!row) return resolve(null);
-
-            try {
-                const data = typeof row.subscription_data === 'string'
-                    ? JSON.parse(row.subscription_data)
-                    : row.subscription_data;
-                resolve(data);
-            } catch (parseError) {
-                console.error(`Error parsing subscription for user ${userId}:`, parseError);
-                resolve(null);
+    try {
+        return await prisma.pushSubscription.upsert({
+            where: { endpoint },
+            update: {
+                user_id: userId,
+                keys,
+                updated_at: new Date()
+            },
+            create: {
+                user_id: userId,
+                endpoint,
+                keys
             }
         });
-    });
+    } catch (err) {
+        console.error(`[Push] Error saving subscription:`, err.message);
+        throw err;
+    }
 }
 
-async function getAllSubscriptions() {
-    return new Promise((resolve, reject) => {
-        const query = `SELECT user_id, subscription_data FROM push_subscriptions;`;
-        db.all(query, [], (err, rows) => {
-            if (err) return reject(err);
-            const results = rows.map(row => {
-                try {
-                    return {
-                        userId: row.user_id,
-                        subscription: typeof row.subscription_data === 'string'
-                            ? JSON.parse(row.subscription_data)
-                            : row.subscription_data
-                    };
-                } catch (e) {
-                    return null;
-                }
-            }).filter(sub => sub !== null);
-            resolve(results);
+/**
+ * Deletes a push subscription by endpoint.
+ */
+async function deleteSubscription(endpoint) {
+    try {
+        return await prisma.pushSubscription.delete({
+            where: { endpoint }
         });
-    });
+    } catch (err) {
+        console.error(`[Push] Error deleting subscription:`, err.message);
+        throw err;
+    }
+}
+
+/**
+ * Retrieves all push subscriptions for a user.
+ */
+async function getSubscriptionsForUser(userId) {
+    try {
+        const rows = await prisma.pushSubscription.findMany({
+            where: { user_id: userId }
+        });
+
+        return rows.map(s => ({
+            endpoint: s.endpoint,
+            keys: JSON.parse(s.keys)
+        }));
+    } catch (err) {
+        console.error(`[Push] Error getting subscriptions:`, err.message);
+        throw err;
+    }
+}
+
+/**
+ * Retrieves all subscriptions in the system.
+ */
+async function getAllSubscriptions() {
+    try {
+        const rows = await prisma.pushSubscription.findMany();
+
+        return rows.map(s => ({
+            endpoint: s.endpoint,
+            keys: JSON.parse(s.keys)
+        }));
+    } catch (err) {
+        console.error(`[Push] Error getting all subscriptions:`, err.message);
+        throw err;
+    }
 }
 
 module.exports = {
     saveSubscription,
     deleteSubscription,
-    findSubscriptionByUserId,
+    getSubscriptionsForUser,
     getAllSubscriptions
 };

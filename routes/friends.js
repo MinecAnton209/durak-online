@@ -82,7 +82,7 @@ router.post('/request', async (req, res, next) => {
 
         res.status(201).json({ success: true, i18nKey: 'friends_request_sent' });
     } catch (error) {
-        if (error.code === '23505' || (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE'))) {
+        if (error.code === 'P2002') {
             return res.status(409).json({ i18nKey: 'error_friend_request_already_exists' });
         }
         console.error("Error sending friend request:", error);

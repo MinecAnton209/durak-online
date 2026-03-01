@@ -1,8 +1,5 @@
 const jwt = require('jsonwebtoken')
-const db = require('../db');
-const util = require('util');
-const dbGet = util.promisify(db.get.bind(db));
-const dbRun = util.promisify(db.run.bind(db));
+const prisma = require('../db/prisma');
 
 function getCookieDomain(hostname) {
     if (process.env.NODE_ENV !== 'production') return undefined;
@@ -99,11 +96,11 @@ function attachUserFromToken(req, _res, next) {
     if (token) {
         const decoded = verifyToken(token);
         if (decoded) {
-            // Check session validity if sessionId is present (Hybrid Stateful)
+            // Check session validity if sessionId is present
             const checkSession = async () => {
                 if (decoded.sessionId) {
                     try {
-                        const session = await dbGet('SELECT * FROM active_sessions WHERE id = ?', [decoded.sessionId]);
+                        const session = await prisma.activeSession.findUnique({ where: { id: decoded.sessionId } });
                         if (session) {
                             req.user = decoded;
                             req.session = {
@@ -117,7 +114,10 @@ function attachUserFromToken(req, _res, next) {
                             const lastActive = new Date(session.last_active);
                             // Simple diff check
                             if (now.getTime() - lastActive.getTime() > 1 * 60 * 1000) {
-                                dbRun('UPDATE active_sessions SET last_active = ? WHERE id = ?', [now.toISOString(), decoded.sessionId]).catch(err => console.error('Last active update fail', err.message));
+                                prisma.activeSession.update({
+                                    where: { id: decoded.sessionId },
+                                    data: { last_active: now }
+                                }).catch(err => console.error('Last active update fail', err.message));
                             }
                         } else {
                             req.user = null; // Session terminated
@@ -155,7 +155,7 @@ function socketAttachUser(socket, next) {
         const verifySession = async () => {
             if (decoded.sessionId) {
                 try {
-                    const session = await dbGet('SELECT * FROM active_sessions WHERE id = ?', [decoded.sessionId]);
+                    const session = await prisma.activeSession.findUnique({ where: { id: decoded.sessionId } });
                     if (session) {
                         socket.request.user = decoded;
                         socket.request.session = { user: decoded, save() { }, destroy() { } };
@@ -164,7 +164,10 @@ function socketAttachUser(socket, next) {
                         const now = new Date();
                         const lastActive = new Date(session.last_active);
                         if (now.getTime() - lastActive.getTime() > 1 * 60 * 1000) {
-                            dbRun('UPDATE active_sessions SET last_active = ? WHERE id = ?', [now.toISOString(), decoded.sessionId]).catch(err => console.error('Socket last active update fail', err.message));
+                            prisma.activeSession.update({
+                                where: { id: decoded.sessionId },
+                                data: { last_active: now }
+                            }).catch(err => console.error('Socket last active update fail', err.message));
                         }
 
                         next();

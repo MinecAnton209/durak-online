@@ -1,17 +1,12 @@
 const { Telegraf } = require('telegraf');
 const crypto = require('crypto');
 const locales = require('./locales');
-const db = require('../db');
 const friendsDb = require('../db/friends');
-const util = require('util');
 const bcrypt = require('bcryptjs');
+const prisma = require('../db/prisma');
 
 let bot = null;
 const APP_URL = 'https://t.me/durakthebot/durak';
-
-const dbGet = db.get.constructor.name === 'AsyncFunction' ? db.get : util.promisify(db.get.bind(db));
-const dbRun = db.run.constructor.name === 'AsyncFunction' ? db.run : util.promisify(db.run.bind(db));
-const dbAll = db.all.constructor.name === 'AsyncFunction' ? db.all : util.promisify(db.all.bind(db));
 
 const userStates = {};
 
@@ -45,9 +40,7 @@ async function showMainMenu(ctx, isEdit = false) {
             { text: t(lang, 'btn_leaderboard'), callback_data: 'leaderboard_rating' },
             { text: t(lang, 'inbox.title'), callback_data: 'inbox_1' }
         ],
-        [
-            { text: t(lang, 'btn_donate'), callback_data: 'donate_start' }
-        ],
+        [{ text: t(lang, 'btn_donate'), callback_data: 'donate_start' }],
         [{ text: t(lang, 'add_group_btn'), url: `https://t.me/${ctx.botInfo.username}?startgroup=true` }]
     ];
 
@@ -56,11 +49,11 @@ async function showMainMenu(ctx, isEdit = false) {
     try {
         if (isEdit) await ctx.editMessageText(text, { reply_markup: markup }).catch(() => { });
         else await ctx.reply(text, { reply_markup: markup });
-    } catch (e) { console.error("MainMenu Error:", e); }
+    } catch (e) { console.error('[TelegramBot] MainMenu error:', e); }
 }
 
 function init(token, getStatsCallback) {
-    if (!token) return console.warn("⚠️ TELEGRAM_BOT_TOKEN не задан.");
+    if (!token) return console.warn('[TelegramBot] TELEGRAM_BOT_TOKEN not set.');
     bot = new Telegraf(token);
 
     bot.command('status', async (ctx) => {
@@ -114,9 +107,9 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
     async function showProfile(ctx, isEdit = false) {
         const lang = ctx.from.language_code;
-        const telegramId = ctx.from.id;
+        const telegramId = String(ctx.from.id);
         try {
-            const user = await dbGet('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId } });
             if (!user) return ctx.reply(t(lang, 'errors.no_account'));
 
             const isTgOnly = isTelegramOnly(user.password);
@@ -138,7 +131,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
             if (isEdit) await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard }).catch(() => { });
             else await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error('[TelegramBot] showProfile error:', e); }
     }
 
     bot.action('edit_nick', async (ctx) => {
@@ -166,7 +159,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
         }
 
         try {
-            const user = await dbGet('SELECT password FROM users WHERE telegram_id = ?', [userId]);
+            const user = await prisma.user.findFirst({ where: { telegram_id: String(userId) }, select: { password: true } });
             if (isTelegramOnly(user.password)) {
                 userStates[userId] = { action: 'awaiting_new_pass' };
                 await ctx.reply(t(lang, 'profile.enter_new_pass'), {
@@ -181,7 +174,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
                 });
             }
             await ctx.answerCbQuery();
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error('[TelegramBot] edit_pass error:', e); }
     });
 
     bot.command('friends', async (ctx) => showFriendsMenu(ctx, false));
@@ -190,21 +183,22 @@ ${t(lang, 'status.version', { version: stats.app.version })}
         await ctx.answerCbQuery();
         await showFriendsMenu(ctx, true);
     });
+
     async function showFriendsMenu(ctx, isEdit = false) {
         const lang = ctx.from.language_code;
-        const telegramId = ctx.from.id;
+        const telegramId = String(ctx.from.id);
         try {
-            const user = await dbGet('SELECT id, username FROM users WHERE telegram_id = ?', [telegramId]);
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId }, select: { id: true, username: true } });
             if (!user) {
                 const msg = t(lang, 'errors.user_not_found');
                 return isEdit ? ctx.answerCbQuery(msg) : ctx.reply(msg);
             }
 
-            const { accepted, incoming } = await friendsDb.getFriendships(user.id);
-            const text = t(lang, 'friends.caption', { count: accepted.length, requests: incoming.length });
+            const { accepted, pendingReceived } = await friendsDb.getFriendships(user.id);
+            const text = t(lang, 'friends.caption', { count: accepted.length, requests: pendingReceived.length });
 
             const keyboard = [
-                incoming.length > 0 ? [{ text: t(lang, 'friends.btn_requests', { count: incoming.length }), callback_data: 'friends_requests' }] : [],
+                pendingReceived.length > 0 ? [{ text: t(lang, 'friends.btn_requests', { count: pendingReceived.length }), callback_data: 'friends_requests' }] : [],
                 [{ text: t(lang, 'friends.btn_add'), switch_inline_query: "" }],
                 [{ text: t(lang, 'buttons.back_to_menu'), callback_data: 'main_menu' }]
             ];
@@ -233,20 +227,20 @@ ${t(lang, 'status.version', { version: stats.app.version })}
             }
 
         } catch (e) {
-            console.error(e);
+            console.error('[TelegramBot] showFriendsMenu error:', e);
             if (isEdit) ctx.answerCbQuery('Error');
         }
     }
 
     bot.action('friends_requests', async (ctx) => {
         const lang = ctx.from.language_code;
-        const telegramId = ctx.from.id;
+        const telegramId = String(ctx.from.id);
         try {
-            const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
-            const { incoming } = await friendsDb.getFriendships(user.id);
-            if (incoming.length === 0) { await ctx.answerCbQuery('No requests'); return showFriendsMenu(ctx); }
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId }, select: { id: true } });
+            const { pendingReceived } = await friendsDb.getFriendships(user.id);
+            if (pendingReceived.length === 0) { await ctx.answerCbQuery('No requests'); return showFriendsMenu(ctx); }
 
-            const request = incoming[0];
+            const request = pendingReceived[0];
             const safeNick = request.nickname.replace(/[_*[`]/g, '\\$&');
             const text = t(lang, 'friends.incoming_request', { username: safeNick });
             const keyboard = [
@@ -254,17 +248,17 @@ ${t(lang, 'status.version', { version: stats.app.version })}
                 [{ text: t(lang, 'buttons.cancel'), callback_data: 'friends_menu' }]
             ];
             await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } });
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error('[TelegramBot] friends_requests error:', e); }
     });
 
     bot.action(/friend_(accept|decline)_(\d+)/, async (ctx) => {
         const lang = ctx.from.language_code;
         const action = ctx.match[1];
         const friendId = parseInt(ctx.match[2]);
-        const telegramId = ctx.from.id;
+        const telegramId = String(ctx.from.id);
         try {
-            const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
-            const friendUser = await dbGet('SELECT username FROM users WHERE id = ?', [friendId]);
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId }, select: { id: true } });
+            const friendUser = await prisma.user.findUnique({ where: { id: friendId }, select: { username: true } });
             if (action === 'accept') {
                 await friendsDb.updateFriendshipStatus(user.id, friendId, 'accepted', user.id);
                 await ctx.answerCbQuery(t(lang, 'friends.accepted', { username: friendUser?.username || 'User' }));
@@ -273,7 +267,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
                 await ctx.answerCbQuery(t(lang, 'friends.declined'));
             }
             showFriendsMenu(ctx);
-        } catch (e) { console.error(e); ctx.answerCbQuery('Error'); }
+        } catch (e) { console.error('[TelegramBot] friend accept/decline error:', e); ctx.answerCbQuery('Error'); }
     });
 
     bot.command('leaderboard', async (ctx) => showLeaderboard(ctx, 'rating', false));
@@ -288,9 +282,13 @@ ${t(lang, 'status.version', { version: stats.app.version })}
         const lang = ctx.from.language_code;
         const limit = 10;
         try {
-            const orderBy = type === 'rating' ? 'rating' : 'wins';
-            const sql = `SELECT username, rating, wins, is_verified FROM users WHERE is_banned = FALSE ORDER BY ${orderBy} DESC LIMIT ?`;
-            const rows = await dbAll(sql, [limit]);
+            const orderBy = type === 'rating' ? { rating: 'desc' } : { wins: 'desc' };
+            const rows = await prisma.user.findMany({
+                where: { is_banned: false },
+                select: { username: true, rating: true, wins: true, is_verified: true },
+                orderBy,
+                take: limit
+            });
 
             if (!rows.length) {
                 const msg = t(lang, 'leaderboard.empty');
@@ -324,8 +322,8 @@ ${t(lang, 'status.version', { version: stats.app.version })}
             }
 
         } catch (e) {
-            console.error(e);
-            if (isEdit) ctx.answerCbQuery('Db Error');
+            console.error('[TelegramBot] showLeaderboard error:', e);
+            if (isEdit) ctx.answerCbQuery('DB Error');
         }
     }
 
@@ -350,25 +348,35 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
     bot.command('createroom', async (ctx) => {
         const lang = ctx.from.language_code;
-        const telegramId = ctx.from.id;
+        const telegramId = String(ctx.from.id);
         try {
-            const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId }, select: { id: true } });
             if (!user) return ctx.reply(t(lang, 'errors.no_account'));
 
             const gameId = crypto.randomBytes(3).toString('hex').toUpperCase();
             const inviteCode = crypto.randomBytes(3).toString('hex').toUpperCase();
             const rawText = ctx.message?.text || '';
             const lowerText = rawText.toLowerCase();
-            const isTransferMode = lowerText.includes('perevod') || lowerText.includes('перевод') || lowerText.includes('transfer');
+            const isTransferMode = lowerText.includes('perevod') || lowerText.includes('transfer');
             const lobbySettings = { maxPlayers: 4, lobbyType: 'private', gameMode: isTransferMode ? 'perevodnoy' : 'podkidnoy', betAmount: 0, deckSize: 36, turnDuration: 60 };
 
-            await dbRun(`INSERT INTO games (id, status, lobby_type, invite_code, max_players, host_user_id, game_settings, start_time) VALUES (?, 'waiting', ?, ?, ?, ?, ?, ?)`,
-                [gameId, 'private', inviteCode, lobbySettings.maxPlayers, user.id, JSON.stringify(lobbySettings), new Date().toISOString()]);
+            await prisma.game.create({
+                data: {
+                    id: gameId,
+                    status: 'waiting',
+                    lobby_type: 'private',
+                    invite_code: inviteCode,
+                    max_players: lobbySettings.maxPlayers,
+                    host_user_id: user.id,
+                    game_settings: JSON.stringify(lobbySettings),
+                    start_time: new Date().toISOString()
+                }
+            });
 
             setTimeout(async () => {
-                const game = await dbGet("SELECT status FROM games WHERE id = ?", [gameId]);
+                const game = await prisma.game.findUnique({ where: { id: gameId }, select: { status: true } });
                 if (game && game.status === 'waiting') {
-                    await dbRun("UPDATE games SET status = 'cancelled' WHERE id = ?", [gameId]);
+                    await prisma.game.update({ where: { id: gameId }, data: { status: 'cancelled' } });
                     ctx.telegram.sendMessage(telegramId, t(lang, 'bot.lobby_expired', { id: gameId }));
                 }
             }, 300000);
@@ -379,7 +387,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
                 parse_mode: 'Markdown',
                 reply_markup: { inline_keyboard: [[{ text: t(lang, 'bot.join_link_btn'), url: joinLink }]] }
             });
-        } catch (e) { console.error(e); ctx.reply(t(lang, 'bot.create_error')); }
+        } catch (e) { console.error('[TelegramBot] createroom error:', e); ctx.reply(t(lang, 'bot.create_error')); }
     });
 
     bot.on('text', async (ctx) => {
@@ -390,13 +398,12 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
         if (!state) return;
 
-
         if (state.action === 'awaiting_nick') {
             if (text.length < 3 || text.length > 15 || !/^[a-zA-Z0-9_]+$/.test(text)) return ctx.reply(t(lang, 'profile.error_format'));
             try {
-                const existing = await dbGet('SELECT id FROM users WHERE username = ?', [text]);
+                const existing = await prisma.user.findFirst({ where: { username: text }, select: { id: true } });
                 if (existing) return ctx.reply(t(lang, 'profile.error_nick_taken'));
-                await dbRun('UPDATE users SET username = ? WHERE telegram_id = ?', [text, userId]);
+                await prisma.user.updateMany({ where: { telegram_id: String(userId) }, data: { username: text } });
                 delete userStates[userId];
                 await ctx.reply(t(lang, 'profile.nick_updated', { username: text }), { parse_mode: 'Markdown', reply_markup: { remove_keyboard: true } });
                 showProfile(ctx);
@@ -406,7 +413,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
         else if (state.action === 'awaiting_old_pass') {
             try { await ctx.deleteMessage(); } catch (e) { }
             try {
-                const user = await dbGet('SELECT password FROM users WHERE telegram_id = ?', [userId]);
+                const user = await prisma.user.findFirst({ where: { telegram_id: String(userId) }, select: { password: true } });
                 const isMatch = await bcrypt.compare(text, user.password);
                 if (!isMatch) {
                     const msg = await ctx.reply(t(lang, 'profile.error_wrong_pass'));
@@ -415,7 +422,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
                 }
                 userStates[userId] = { action: 'awaiting_new_pass' };
                 await ctx.reply(t(lang, 'profile.enter_new_pass'), { parse_mode: 'Markdown' });
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error('[TelegramBot] awaiting_old_pass error:', e); }
         }
 
         else if (state.action === 'awaiting_new_pass') {
@@ -427,7 +434,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
             }
             try {
                 const hashedPassword = await bcrypt.hash(text, 10);
-                await dbRun('UPDATE users SET password = ? WHERE telegram_id = ?', [hashedPassword, userId]);
+                await prisma.user.updateMany({ where: { telegram_id: String(userId) }, data: { password: hashedPassword } });
                 delete userStates[userId];
                 const msg = await ctx.reply(t(lang, 'profile.pass_set_success'), { parse_mode: 'Markdown', reply_markup: { remove_keyboard: true } });
                 setTimeout(() => ctx.telegram.deleteMessage(ctx.chat.id, msg.message_id).catch(() => { }), 3000);
@@ -460,20 +467,25 @@ ${t(lang, 'status.version', { version: stats.app.version })}
         const lang = ctx.from.language_code;
         const payment = ctx.message.successful_payment;
         try {
-            const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [ctx.from.id]);
+            const user = await prisma.user.findFirst({ where: { telegram_id: String(ctx.from.id) }, select: { id: true } });
             if (user) {
-                await dbRun('INSERT INTO donations (user_id, telegram_payment_charge_id, amount) VALUES (?, ?, ?)',
-                    [user.id, payment.telegram_payment_charge_id, payment.total_amount]);
+                await prisma.donation.create({
+                    data: {
+                        user_id: user.id,
+                        telegram_payment_charge_id: payment.telegram_payment_charge_id,
+                        amount: payment.total_amount
+                    }
+                });
             }
             await ctx.reply(t(lang, 'donate.success', { amount: payment.total_amount }), { parse_mode: 'Markdown' });
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error('[TelegramBot] successful_payment error:', e); }
     });
 
     bot.on('inline_query', async (ctx) => {
         try {
             const lang = ctx.from.language_code;
-            const telegramId = ctx.from.id;
-            const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
+            const telegramId = String(ctx.from.id);
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId }, select: { id: true } });
 
             const results = [{
                 type: 'article', id: 'play_game',
@@ -498,7 +510,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
                 });
             }
             await ctx.answerInlineQuery(results, { cache_time: 0 });
-        } catch (err) { console.error('Inline Query Error:', err); }
+        } catch (err) { console.error('[TelegramBot] Inline query error:', err); }
     });
 
     bot.action('cancel_input', async (ctx) => {
@@ -522,17 +534,20 @@ ${t(lang, 'status.version', { version: stats.app.version })}
             const gameId = crypto.randomBytes(3).toString('hex').toUpperCase();
             const inviteCode = crypto.randomBytes(3).toString('hex').toUpperCase();
 
-            const lobbySettings = {
-                maxPlayers: 4,
-                lobbyType: 'private',
-                deckSize: 36,
-                gameMode: mode,
-                betAmount: 0,
-                turnDuration: 60
-            };
+            const lobbySettings = { maxPlayers: 4, lobbyType: 'private', deckSize: 36, gameMode: mode, betAmount: 0, turnDuration: 60 };
 
-            await dbRun(`INSERT INTO games (id, status, lobby_type, invite_code, max_players, host_user_id, game_settings, start_time) VALUES (?, 'waiting', ?, ?, ?, ?, ?, ?)`,
-                [gameId, 'private', inviteCode, lobbySettings.maxPlayers, hostUserId, JSON.stringify(lobbySettings), new Date().toISOString()]);
+            await prisma.game.create({
+                data: {
+                    id: gameId,
+                    status: 'waiting',
+                    lobby_type: 'private',
+                    invite_code: inviteCode,
+                    max_players: lobbySettings.maxPlayers,
+                    host_user_id: hostUserId,
+                    game_settings: JSON.stringify(lobbySettings),
+                    start_time: new Date().toISOString()
+                }
+            });
 
             const joinLink = `https://t.me/${ctx.botInfo.username}/durak?startapp=${gameId}`;
 
@@ -543,16 +558,16 @@ ${t(lang, 'status.version', { version: stats.app.version })}
             await ctx.answerCbQuery(t(lang, 'bot.lobby_created', { id: gameId, code: inviteCode }).split('\n')[0]);
 
         } catch (e) {
-            console.error("Error creating inline lobby:", e);
+            console.error('[TelegramBot] Error creating inline lobby:', e);
             ctx.answerCbQuery(t(lang, 'bot.create_error'));
         }
     });
 
     async function showInbox(ctx, page = 1, isEdit = false) {
         const lang = ctx.from.language_code;
-        const telegramId = ctx.from.id;
+        const telegramId = String(ctx.from.id);
         try {
-            const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId }, select: { id: true } });
             if (!user) return ctx.reply(t(lang, 'errors.no_account'));
 
             const inboxService = require('./inboxService');
@@ -581,9 +596,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
                         { text: `❌ ${t(lang, 'inbox.btn_decline')}`, callback_data: `inbox_act_${msg.id}_decline` }
                     ]);
                 } else if (msg.type === 'login_alert' && !msg.is_read) {
-                    keyboard.push([
-                        { text: `✅ ${t(lang, 'inbox.btn_it_was_me')}`, callback_data: `inbox_read_${msg.id}` }
-                    ]);
+                    keyboard.push([{ text: `✅ ${t(lang, 'inbox.btn_it_was_me')}`, callback_data: `inbox_read_${msg.id}` }]);
                 }
             }
 
@@ -601,23 +614,24 @@ ${t(lang, 'status.version', { version: stats.app.version })}
                 await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } });
             }
         } catch (e) {
-            console.error("Inbox Error:", e);
+            console.error('[TelegramBot] Inbox error:', e);
         }
     }
 
     bot.action(/inbox_act_(\d+)_(accept|decline)/, async (ctx) => {
         const msgId = parseInt(ctx.match[1]);
         const action = ctx.match[2];
-        const lang = ctx.from.language_code || 'ru';
-        const telegramId = ctx.from.id;
+        const lang = ctx.from.language_code || 'en';
+        const telegramId = String(ctx.from.id);
 
         try {
-            const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId }, select: { id: true } });
             if (!user) return ctx.answerCbQuery('User not found');
 
             const inboxService = require('./inboxService');
-            // Fetch the specific message to perform the action
-            const msgData = await dbGet('SELECT * FROM inbox_messages WHERE id = ? AND user_id = ?', [msgId, user.id]);
+            const msgData = await prisma.inboxMessage.findFirst({
+                where: { id: msgId, user_id: user.id }
+            });
 
             if (msgData && msgData.type === 'friend_request') {
                 const params = typeof msgData.content_params === 'string' ? JSON.parse(msgData.content_params) : msgData.content_params;
@@ -631,48 +645,36 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
                 await inboxService.markAsRead(user.id, msgId);
                 await ctx.answerCbQuery(t(lang, action === 'accept' ? 'friends.accepted' : 'friends.declined', { username: params.fromUsername }));
-
-                // If this button was in a notification message (not the inbox list), remove buttons
-                if (ctx.callbackQuery.message && ctx.callbackQuery.message.text && ctx.callbackQuery.message.text.includes('📩')) {
-                    const statusText = action === 'accept' ? '✅ Принято' : '❌ Отклонено';
-                    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
-                } else {
-                    await showInbox(ctx, 1, true);
-                }
+                await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
             } else {
                 await ctx.answerCbQuery('Message not found or action expired');
                 await showInbox(ctx, 1, true);
             }
         } catch (e) {
-            console.error("Inbox Action Error:", e);
+            console.error('[TelegramBot] Inbox action error:', e);
             ctx.answerCbQuery('Error');
         }
     });
 
     bot.action(/inbox_read_(\d+)/, async (ctx) => {
         const msgId = parseInt(ctx.match[1]);
-        const telegramId = ctx.from.id;
+        const telegramId = String(ctx.from.id);
         try {
-            const user = await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegramId]);
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId }, select: { id: true } });
             if (!user) return;
 
             const inboxService = require('./inboxService');
             await inboxService.markAsRead(user.id, msgId);
             await ctx.answerCbQuery('OK');
-
-            // If this was a quick-read button on a notification, remove buttons
-            if (ctx.callbackQuery.message && ctx.callbackQuery.message.text && ctx.callbackQuery.message.text.includes('📩')) {
-                await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
-            } else {
-                await showInbox(ctx, 1, true);
-            }
+            await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
         } catch (e) {
-            console.error("Inbox Read Error:", e);
+            console.error('[TelegramBot] Inbox read error:', e);
         }
     });
 
-    bot.launch({ dropPendingUpdates: true }).then(() => console.log('🤖 Telegram Bot Started!'))
-        .catch(err => console.error('Bot launch error:', err));
+    bot.launch({ dropPendingUpdates: true })
+        .then(() => console.log('[TelegramBot] Bot started successfully.'))
+        .catch(err => console.error('[TelegramBot] Bot launch error:', err));
 }
 
 async function sendMessage(telegramId, text, extra = {}) {
@@ -680,15 +682,15 @@ async function sendMessage(telegramId, text, extra = {}) {
     try {
         return await bot.telegram.sendMessage(telegramId, text, { parse_mode: 'Markdown', ...extra });
     } catch (e) {
-        console.error(`[Telegram Bot] Error sending message to ${telegramId}:`, e.message);
+        console.error(`[TelegramBot] Error sending message to ${telegramId}:`, e.message);
     }
 }
 
 async function stop() {
     if (bot) {
-        console.log('🤖 Stopping Telegram Bot...');
+        console.log('[TelegramBot] Stopping...');
         await bot.stop();
-        console.log('✅ Telegram Bot stopped');
+        console.log('[TelegramBot] Stopped.');
     }
 }
 
