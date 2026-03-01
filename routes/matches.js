@@ -154,8 +154,8 @@ router.post('/:id/analyze', async (req, res) => {
                 });
 
                 // Update participation
-                await tx.gameParticipant.update({
-                    where: { game_id_user_id: { game_id: matchId, user_id: user.id } },
+                await tx.gameParticipant.updateMany({
+                    where: { game_id: matchId, user_id: user.id },
                     data: { analysis_purchased: true }
                 });
             }

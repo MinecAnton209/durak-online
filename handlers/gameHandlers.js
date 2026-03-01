@@ -210,8 +210,8 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
         if (defender) {
             defender.gameStats.cardsTaken += game.table.length;
             if (defender.dbId) {
-                prisma.gameParticipant.update({
-                    where: { game_id_user_id: { game_id: gameId, user_id: defender.dbId } },
+                prisma.gameParticipant.updateMany({
+                    where: { game_id: gameId, user_id: defender.dbId },
                     data: { cards_taken_total: { increment: game.table.length } }
                 }).catch(err => console.error(`[Game] Error updating cards_taken_total:`, err.message));
             }
