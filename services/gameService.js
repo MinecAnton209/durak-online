@@ -213,6 +213,8 @@ async function updateStatsAfterGame(game) {
     const hasBots = Object.values(game.players).some(p => p.isBot);
 
     try {
+        const postTxWork = [];
+
         await prisma.$transaction(async (tx) => {
             const endTime = new Date();
             const durationSeconds = Math.round((endTime - game.startTime) / 1000);
@@ -255,8 +257,9 @@ async function updateStatsAfterGame(game) {
                         if (!userData) throw new Error(`User not found for ID: ${player.dbId}`);
 
                         const isWinner = outcome === 'win';
-                        let newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
-                        await achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
+                        const newWinStreak = isWinner ? (userData.win_streak || 0) + 1 : 0;
+                        // Queue achievement checks for after the transaction
+                        postTxWork.push({ player, userData, isWinner, newWinStreak });
 
                         const today = new Date().toISOString().slice(0, 10);
                         const lastPlayed = userData.last_played_date;
@@ -318,12 +321,26 @@ async function updateStatsAfterGame(game) {
                 }
             }
 
-            if (hasBots) {
-                console.log(`[Rating] Game ${game.id} had bots. Rating update skipped.`);
-            } else {
-                await ratingService.updateRatingsAfterGame(game);
+        }, { timeout: 15000 });
+
+        // --- Post-transaction: achievements & ratings (non-critical, safe to fail individually) ---
+        for (const { player, userData, newWinStreak } of postTxWork) {
+            try {
+                await achievementService.checkPostGameAchievements(game, player, userData, newWinStreak);
+            } catch (achErr) {
+                console.error(`[Achievements] Error for player ${player.dbId}:`, achErr.message);
             }
-        });
+        }
+
+        if (hasBots) {
+            console.log(`[Rating] Game ${game.id} had bots. Rating update skipped.`);
+        } else {
+            try {
+                await ratingService.updateRatingsAfterGame(game);
+            } catch (ratingErr) {
+                console.error(`[Rating] Error updating ratings for game ${game.id}:`, ratingErr.message);
+            }
+        }
 
     } catch (error) {
         console.error(`[GAME END ${game.id}] FATAL ERROR during stats update. Rolling back.`, error);

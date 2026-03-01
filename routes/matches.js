@@ -121,7 +121,8 @@ router.post('/:id/analyze', async (req, res) => {
                 where: { id: matchId },
                 include: { participants: true }
             });
-            if (!game || !game.history) throw new Error('Analysis unavailable for this match');
+            if (!game) return res.status(404).json({ message: 'Match not found' });
+            if (!game.history) throw new Error('Match history is not available. The game may not have saved correctly.');
 
             // Check if user participated
             const participation = game.participants.find(p => p.user_id === user.id);
