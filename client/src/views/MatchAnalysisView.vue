@@ -82,12 +82,22 @@ const gameState = computed(() => {
         if (action.trumpSuit) trumpSuit = action.trumpSuit;
 
         const uid = String(action.userId ?? action.playerId);
+        if (uid === 'null' || action.playerName === 'System') continue;
 
         // Find best possible hand key (numeric ID or player name)
         let handKey = uid;
-        if (!hands[handKey] && action.playerName && hands[action.playerName]) {
-            handKey = action.playerName;
+        if (!hands[handKey]) {
+            if (action.playerName && hands[action.playerName]) {
+                handKey = action.playerName;
+            } else if (hands["null"] && (uid.startsWith('bot_') || uid === 'null')) {
+                handKey = "null";
+            } else if (uid.startsWith('bot_')) {
+                // Fallback: finding any key that looks like a bot name if direct match fails
+                const botKey = Object.keys(hands).find(k => k === action.playerName || k.includes('Bot') || k === 'null');
+                if (botKey) handKey = botKey;
+            }
         }
+
         if (!hands[handKey]) hands[handKey] = [];
 
         if (action.type === 'attack' || action.type === 'toss') {
@@ -140,10 +150,16 @@ const playerStats = computed(() => {
         const uid = String(a.userId ?? historyAction?.userId);
         const name = historyAction?.playerName;
 
+        // Skip System/Start/etc.
+        if (uid === 'null' || name === 'System' || !a.evaluation) return;
+
         // Find bucket by ID or name
         let key = uid;
         if (!stats[key] && name && stats[name]) key = name;
-        if (!stats[key]) stats[key] = { name: name || uid, best: 0, good: 0, ok: 0, mistake: 0, blunder: 0 };
+        if (!stats[key]) {
+            // Only add if it's not system
+            stats[key] = { name: name || uid, best: 0, good: 0, ok: 0, mistake: 0, blunder: 0 };
+        }
 
         const label = a.evaluation?.label || '';
         if (label.startsWith('Best')) stats[key].best++;
@@ -296,7 +312,7 @@ const actionLabel = (action) => {
                         <div class="text-sm font-bold" :class="getEvalMeta(currentEval.label).color">{{
                             currentEval.label }}</div>
                         <div v-if="currentEval.reason" class="text-[11px] text-white/50 truncate">{{ currentEval.reason
-                            }}</div>
+                        }}</div>
                     </div>
                 </div>
 
@@ -425,7 +441,7 @@ const actionLabel = (action) => {
                                 <span class="text-xs text-white truncate">{{ p.username }}</span>
                             </div>
                             <span v-if="p.cardsTaken" class="text-[10px] text-white/30 shrink-0">+{{ p.cardsTaken
-                                }}</span>
+                            }}</span>
                         </div>
                     </div>
                 </div>
