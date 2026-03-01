@@ -146,6 +146,8 @@ const nav = (step) => {
     currentStep.value = Math.max(0, Math.min(totalSteps.value - 1, step));
 };
 
+const myStat = computed(() => playerStats.value.find(s => s.uid === myUserId.value) ?? null);
+
 const goBack = () => router.push('/history');
 
 const fmt = (seconds) => {
@@ -281,7 +283,7 @@ const actionLabel = (action) => {
                             <div v-if="String(uid) !== myUserId" class="flex flex-col items-center gap-1">
                                 <div class="text-[10px] text-white/30 uppercase">
                                     {{analysisData.participants?.find(p => String(p.user_id) === String(uid))?.is_bot ?
-                                    '🤖 Bot' : '👤 Opponent' }}
+                                        '🤖 Bot' : '👤 Opponent'}}
                                 </div>
                                 <div class="flex -space-x-3">
                                     <div v-for="n in hand.length" :key="n"
@@ -405,27 +407,25 @@ const actionLabel = (action) => {
                 <!-- Move quality summary -->
                 <div class="p-4">
                     <p class="text-[10px] text-white/40 uppercase tracking-widest mb-3">My Summary</p>
-                    <div v-if="playerStats.find(s => s.uid === myUserId) as myStat" class="space-y-1.5">
-                        <template v-if="myStat">
-                            <div class="flex items-center justify-between text-xs">
-                                <span class="text-emerald-400">Best / Excellent</span>
-                                <span class="text-white font-bold">{{ myStat.best + myStat.good }}</span>
-                            </div>
-                            <div class="flex items-center justify-between text-xs">
-                                <span class="text-yellow-400">Inaccuracy</span>
-                                <span class="text-white font-bold">{{ myStat.ok }}</span>
-                            </div>
-                            <div class="flex items-center justify-between text-xs">
-                                <span class="text-orange-400">Mistake</span>
-                                <span class="text-white font-bold">{{ myStat.mistake }}</span>
-                            </div>
-                            <div class="flex items-center justify-between text-xs">
-                                <span class="text-red-400">Blunder</span>
-                                <span class="text-white font-bold">{{ myStat.blunder }}</span>
-                            </div>
-                        </template>
-                        <p v-else class="text-white/20 text-xs">No data</p>
+                    <div v-if="myStat" class="space-y-1.5">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-emerald-400">Best / Excellent</span>
+                            <span class="text-white font-bold">{{ myStat.best + myStat.good }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-yellow-400">Inaccuracy</span>
+                            <span class="text-white font-bold">{{ myStat.ok }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-orange-400">Mistake</span>
+                            <span class="text-white font-bold">{{ myStat.mistake }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-red-400">Blunder</span>
+                            <span class="text-white font-bold">{{ myStat.blunder }}</span>
+                        </div>
                     </div>
+                    <p v-else class="text-white/20 text-xs">No data</p>
                 </div>
             </aside>
         </div>
