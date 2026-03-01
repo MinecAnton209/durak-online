@@ -184,6 +184,7 @@ function refillHands(game) {
                     options: { name: player.name, count: drawnCards.length }
                 });
                 console.log(`[Game] ${player.name} drew ${drawnCards.length} cards in game ${game.id}`);
+                recordAction(game, game.playerOrder[playerIndex], 'draw', { cards: drawnCards });
             }
         }
     }
