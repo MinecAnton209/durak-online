@@ -136,7 +136,8 @@ dist
 .pnp.*
 
 .history/
-data/database.sqlite
+*.sqlite
+prisma/data/database.sqlite
 .vscode/
 .idea/
 /public/
