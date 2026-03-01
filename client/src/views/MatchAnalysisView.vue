@@ -114,6 +114,7 @@ const prevStep = () => {
 };
 
 const getEvalClass = (quality) => {
+    if (!quality) return 'text-on-surface-variant bg-white/10';
     switch (quality) {
         case 'Best Move': return 'text-primary bg-primary/20';
         case 'Excellent': return 'text-blue-400 bg-blue-400/20';
@@ -126,7 +127,8 @@ const getEvalClass = (quality) => {
 };
 
 const getEvalLabel = (quality) => {
-    const key = quality.toLowerCase().replace(' ', '_');
+    if (!quality || typeof quality !== 'string') return '';
+    const key = quality.toLowerCase().replace(/ /g, '_');
     return t(`history.move_${key}`);
 };
 
@@ -197,17 +199,17 @@ const goBack = () => {
                         <div
                             class="absolute top-0 right-0 p-3 bg-surface/50 rounded-2xl border border-white/5 flex flex-col items-center">
                             <span class="text-xs text-on-surface-variant uppercase">{{ t('deck_size_label') }}</span>
-                            <span class="text-2xl">{{ gameState.trumpCard }}</span>
+                            <span class="text-2xl">{{ gameState?.trumpCard }}</span>
                         </div>
 
                         <!-- Table -->
                         <div
                             class="flex flex-wrap justify-center gap-4 max-w-4xl p-8 rounded-3xl bg-white/5 border border-white/5 shadow-inner">
-                            <div v-if="gameState.table.length === 0"
+                            <div v-if="gameState?.table.length === 0"
                                 class="text-on-surface-variant/20 italic text-lg select-none">
                                 {{ t('chat_empty') }}
                             </div>
-                            <div v-for="(pair, idx) in gameState.table" :key="idx" class="relative group">
+                            <div v-for="(pair, idx) in gameState?.table" :key="idx" class="relative group">
                                 <div class="flex flex-col gap-2">
                                     <Card v-bind="pair.attack" class="shadow-2xl" />
                                     <Card v-if="pair.defense" v-bind="pair.defense"
@@ -222,18 +224,18 @@ const goBack = () => {
                             </div>
                             <div
                                 class="flex flex-wrap justify-center -space-x-8 hover:space-x-1 transition-all duration-300 pb-4">
-                                <Card v-for="(card, idx) in gameState.hands[authStore.user.id]" :key="idx"
+                                <Card v-for="(card, idx) in gameState?.hands?.[authStore.user?.id]" :key="idx"
                                     v-bind="card" />
                             </div>
                         </div>
 
                         <!-- Opponent Hands (Simplified) -->
                         <div class="absolute top-0 w-full flex flex-wrap justify-center gap-8 px-4 opacity-60">
-                            <div v-for="(hand, uid) in gameState.hands" :key="uid">
-                                <div v-if="uid != authStore.user.id" class="flex flex-col items-center">
+                            <div v-for="(hand, uid) in gameState?.hands" :key="uid">
+                                <div v-if="uid != authStore.user?.id" class="flex flex-col items-center">
                                     <div class="text-[10px] text-on-surface-variant uppercase mb-1">
                                         {{analysisData.participants.find(p => p.user_id == uid)?.is_bot ? 'Bot' :
-                                        'Opponent' }}
+                                            'Opponent'}}
                                     </div>
                                     <div class="flex -space-x-12 scale-50 origin-top">
                                         <Card v-for="n in hand.length" :key="n" :isBack="true" />
@@ -250,8 +252,8 @@ const goBack = () => {
                             <div class="flex items-center gap-3">
                                 <div v-if="currentEvaluation"
                                     class="px-3 py-1.5 rounded-xl font-bold text-sm transition-all"
-                                    :class="getEvalClass(currentEvaluation.evaluation)">
-                                    {{ getEvalLabel(currentEvaluation.evaluation) }}
+                                    :class="getEvalClass(currentEvaluation?.evaluation)">
+                                    {{ getEvalLabel(currentEvaluation?.evaluation) }}
                                 </div>
                                 <div class="text-on-surface-variant text-sm font-medium">
                                     {{ currentStep + 1 }} / {{ analysisData.history.length }}
@@ -291,7 +293,8 @@ const goBack = () => {
                             class="p-4 bg-white/5 border border-white/5 rounded-2xl flex items-start gap-3">
                             <span class="text-2xl">✅</span>
                             <div>
-                                <p class="text-white text-sm font-bold">{{ getEvalLabel(currentEvaluation.evaluation) }}
+                                <p class="text-white text-sm font-bold">{{ getEvalLabel(currentEvaluation?.evaluation)
+                                    }}
                                 </p>
                                 <p class="text-on-surface-variant text-xs mt-1">
                                     {{ currentEvaluation.reason }}
@@ -311,8 +314,8 @@ const goBack = () => {
                     <div class="p-4 bg-white/5 rounded-2xl border border-white/5">
                         <div class="text-xs text-on-surface-variant uppercase mb-1">{{ t('admin_table_result') }}</div>
                         <div class="text-xl font-bold"
-                            :class="matchInfo.loser === authStore.user.username ? 'text-error' : 'text-primary'">
-                            {{ matchInfo.loser === authStore.user.username ? t('lose_title') : t('win_title') }}
+                            :class="matchInfo.loser === authStore.user?.username ? 'text-error' : 'text-primary'">
+                            {{ matchInfo.loser === authStore.user?.username ? t('lose_title') : t('win_title') }}
                         </div>
                     </div>
 
@@ -320,7 +323,7 @@ const goBack = () => {
                         <div class="p-3 bg-white/5 rounded-xl border border-white/5">
                             <div class="text-[10px] text-on-surface-variant uppercase mb-1">Taken</div>
                             <div class="text-lg font-bold text-white">{{matchInfo.players.find(p => p.username ===
-                                authStore.user.username)?.cardsTaken || 0 }}</div>
+                                authStore.user.username)?.cardsTaken || 0}}</div>
                         </div>
                         <div class="p-3 bg-white/5 rounded-xl border border-white/5">
                             <div class="text-[10px] text-on-surface-variant uppercase mb-1">Duration</div>
