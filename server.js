@@ -206,6 +206,7 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
 
 io.use(socketAttachUser);
 
+
 async function checkBanStatus(userId) {
     try {
         const user = await prisma.user.findUnique({
@@ -231,29 +232,7 @@ async function checkBanStatus(userId) {
 
 // Game state management functions moved to services/gameService.js
 // Roulette logic moved to services/rouletteService.js
-
 // Roulette win check moved to services/rouletteService.js
-
-function broadcastPublicLobbies() {
-    const publicLobbies = Object.values(games)
-        .filter(game => {
-            return game.status === 'waiting' &&
-                game.settings.lobbyType === 'public' &&
-                game.playerOrder &&
-                game.playerOrder.length > 0;
-        })
-        .map(game => ({
-            gameId: game.id,
-            hostName: game.players[game.hostId]?.name || 'Unknown',
-            playerCount: game.playerOrder.length,
-            maxPlayers: game.settings.maxPlayers,
-            betAmount: game.settings.betAmount || 0,
-            deckSize: game.settings.deckSize || 36,
-            gameMode: game.settings.gameMode || 'podkidnoy'
-        }));
-
-    io.to('lobby_browser').emit('lobbyListUpdate', publicLobbies);
-}
 
 io.on('connection', (socket) => {
     const session = socket.request.session;
@@ -296,10 +275,16 @@ io.on('connection', (socket) => {
     } else {
         console.log(`Client connected: ${socket.id} (guest)`);
     }
-    registerLobbyHandlers(io, socket, { games, addPlayerToGame: gameService.addPlayerToGame, broadcastPublicLobbies: gameService.broadcastPublicLobbies, checkBanStatus });
+    registerLobbyHandlers(io, socket, {
+        games,
+        addPlayerToGame: gameService.addPlayerToGame,
+        broadcastPublicLobbies: gameService.broadcastPublicLobbies,
+        logEvent: gameService.logEvent,
+        checkBanStatus
+    });
     registerRouletteHandlers(io, socket);
     registerChatHandlers(io, socket);
-    registerGameHandlers(io, socket, { games, gameService, achievementService, VERIFIED_BADGE_SVG, escapeHtml });
+    registerGameHandlers(io, socket, { games, gameService, achievementService, escapeHtml });
     registerFriendHandlers(io, socket, { games, onlineUsers });
     registerHealthHandlers(io, socket, { onlineUsers, games });
 

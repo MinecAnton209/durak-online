@@ -6,7 +6,6 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
         games,
         gameService,
         achievementService,
-        VERIFIED_BADGE_SVG,
         escapeHtml
     } = sharedContext;
 
@@ -66,12 +65,12 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
         if (trimmedMessage.length > 0 && trimmedMessage.length <= 100) {
             const escapedMessage = escapeHtml(trimmedMessage);
             const escapedName = escapeHtml(player.name);
-            let authorHTML = escapedName;
-            if (player.isVerified) {
-                authorHTML += VERIFIED_BADGE_SVG;
-            }
-            const chatMessage = `<span class="message-author">${authorHTML}:</span> <span class="message-text">${escapedMessage}</span>`;
-            gameService.logEvent(game, chatMessage);
+            gameService.logEvent(game, escapedMessage, {
+                author: {
+                    name: escapedName,
+                    isVerified: player.isVerified
+                }
+            });
         }
     });
 

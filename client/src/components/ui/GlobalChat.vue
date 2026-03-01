@@ -317,6 +317,8 @@ const getBubbleClass = (msg, index) => {
               <span class="text-[11px] font-black text-primary/80 uppercase tracking-widest">
                 {{ msg.author.username }}
               </span>
+              <span v-if="msg.author.isVerified" class="text-blue-400 font-bold text-[10px]"
+                :title="$t('verified_label')">✓</span>
             </div>
 
             <div class="relative flex items-center gap-1 group/bubble"

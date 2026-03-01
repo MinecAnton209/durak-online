@@ -92,13 +92,13 @@ function updateAnimatedTime(seconds) {
     const minutesEl = document.querySelector('#current-time-display .minutes');
     const secsTensReel = document.getElementById('secs-tens');
     const secsOnesReel = document.getElementById('secs-ones');
-    
+
     if (!minutesEl || !secsTensReel || !secsOnesReel) return;
 
     const roundedSeconds = Math.floor(seconds || 0);
     const minutes = Math.floor(roundedSeconds / 60);
     const secs = roundedSeconds % 60;
-    
+
     const secsTens = Math.floor(secs / 10);
     const secsOnes = secs % 10;
 
@@ -281,12 +281,12 @@ window.addEventListener('DOMContentLoaded', () => {
             if (!musicPanel) return;
             const isPanelVisible = musicPanel.style.display === 'block';
             musicPanel.style.display = isPanelVisible ? 'none' : 'block';
-    
+
             if (!isPanelVisible) {
                 const meIsHost = lastGameState && playerId && lastGameState.hostId === playerId;
-                
+
                 console.log(`Перевірка на хоста: my_playerId=${playerId}, hostId_from_state=${lastGameState?.hostId}. Результат: ${meIsHost}`);
-    
+
                 if (hostMusicControls) {
                     hostMusicControls.style.display = meIsHost ? 'block' : 'none';
                 }
@@ -341,8 +341,8 @@ window.addEventListener('DOMContentLoaded', () => {
             if (!ytPlayer || typeof ytPlayer.getCurrentTime !== 'function') return;
             const isCurrentlyPlaying = togglePlaybackBtn.textContent.includes('⏸️');
             const currentTime = ytPlayer.getCurrentTime();
-            socket.emit('hostTogglePlayback', { 
-                gameId, 
+            socket.emit('hostTogglePlayback', {
+                gameId,
                 isPlaying: !isCurrentlyPlaying,
                 currentTime: currentTime
             });
@@ -351,7 +351,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (volumeSlider) {
         const savedVolume = localStorage.getItem('ytVolume') || 50;
-        volumeSlider.value = savedVolume; 
+        volumeSlider.value = savedVolume;
         volumeSlider.addEventListener('input', (e) => {
             const volume = e.target.value;
             if (ytPlayer && typeof ytPlayer.setVolume === 'function') {
@@ -509,12 +509,12 @@ socket.on('musicStateUpdate', (musicState) => {
     const trackTitleDisplay = document.getElementById('track-title-display');
     const suggesterDisplay = document.getElementById('suggester-display');
     const togglePlaybackBtn = document.getElementById('toggle-playback-btn');
-    
+
     if (!isYtApiReady) {
         setTimeout(() => socket.emit('requestMusicState'), 500);
         return;
     }
-    
+
     if (!ytPlayer || typeof ytPlayer.getPlayerState !== 'function') {
         initYtPlayer();
     }
@@ -536,7 +536,7 @@ socket.on('musicStateUpdate', (musicState) => {
     const timeSinceLastAction = musicState.stateChangeTimestamp ? (Date.now() - musicState.stateChangeTimestamp) / 1000 : 0;
     const expectedTime = musicState.seekTimestamp + (musicState.isPlaying ? timeSinceLastAction : 0);
     const currentTime = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
-    
+
     if (Math.abs(currentTime - expectedTime) > 2) {
         console.log(`[Music] Синхронізація часу. Очікуваний: ${expectedTime.toFixed(2)}, поточний: ${currentTime.toFixed(2)}. Перемотую...`);
         if (typeof ytPlayer.seekTo === 'function') {
@@ -545,7 +545,7 @@ socket.on('musicStateUpdate', (musicState) => {
     }
 
     const playerState = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : YT.PlayerState.UNSTARTED;
-    
+
     if (musicState.isPlaying && playerState !== YT.PlayerState.PLAYING) {
         if (typeof ytPlayer.playVideo === 'function') {
             ytPlayer.playVideo();
@@ -567,9 +567,9 @@ socket.on('musicStateUpdate', (musicState) => {
             if (ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
                 const currentTime = ytPlayer.getCurrentTime();
                 const duration = ytPlayer.getDuration();
-                updateAnimatedTime(currentTime); 
+                updateAnimatedTime(currentTime);
                 const durationDisplay = document.getElementById('duration-display');
-                if(durationDisplay) durationDisplay.textContent = formatTime(duration);
+                if (durationDisplay) durationDisplay.textContent = formatTime(duration);
             }
         }, 1000);
     } else {
@@ -578,7 +578,7 @@ socket.on('musicStateUpdate', (musicState) => {
             const duration = ytPlayer.getDuration();
             updateAnimatedTime(currentTime);
             const durationDisplay = document.getElementById('duration-display');
-            if(durationDisplay) durationDisplay.textContent = formatTime(duration);
+            if (durationDisplay) durationDisplay.textContent = formatTime(duration);
         }
     }
 });
@@ -586,7 +586,7 @@ socket.on('trackSuggested', ({ trackId, trackTitle, suggesterName }) => {
     if (!suggestionsList) return;
 
     const li = document.createElement('li');
-    
+
     const textDiv = document.createElement('div');
     textDiv.className = 'suggestion-text';
     textDiv.innerHTML = `${trackTitle}<br><small>від ${suggesterName}</small>`;
@@ -597,7 +597,7 @@ socket.on('trackSuggested', ({ trackId, trackTitle, suggesterName }) => {
     setBtn.onclick = () => {
         socket.emit('hostChangeTrack', { gameId, trackId, trackTitle });
     };
-    
+
     li.appendChild(textDiv);
     li.appendChild(setBtn);
     suggestionsList.prepend(li);

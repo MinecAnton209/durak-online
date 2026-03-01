@@ -1,6 +1,6 @@
 ﻿const prisma = require('../db/prisma');
 
-function logAdminAction(logData) {
+async function logAdminAction(logData) {
     const {
         adminId,
         adminUsername,
@@ -15,20 +15,21 @@ function logAdminAction(logData) {
         return;
     }
 
-    prisma.adminAuditLog.create({
-        data: {
-            admin_id: adminId,
-            admin_username: adminUsername,
-            action_type: actionType,
-            target_user_id: targetUserId,
-            target_username: targetUsername,
-            reason: reason
-        }
-    }).then(() => {
+    try {
+        await prisma.adminAuditLog.create({
+            data: {
+                admin_id: adminId,
+                admin_username: adminUsername,
+                action_type: actionType,
+                target_user_id: targetUserId,
+                target_username: targetUsername,
+                reason: reason
+            }
+        });
         console.log(`[AuditLog] Action '${actionType}' by admin '${adminUsername}' successfully recorded.`);
-    }).catch(err => {
+    } catch (err) {
         console.error(`[AuditLog] Error recording action '${actionType}' in audit log:`, err.message);
-    });
+    }
 }
 
 module.exports = {

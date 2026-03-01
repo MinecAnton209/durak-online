@@ -90,9 +90,18 @@ const formatEntry = (entry) => {
             {{ $t('chat_empty') }}
           </div>
 
-          <div v-for="(entry, index) in gameStore.chatLog" :key="index" class="text-sm break-words animate-message">
-            <span class="text-white/40 text-[10px] mr-1">[{{ entry.timestamp }}]</span>
-            <span v-html="formatEntry(entry)" class="align-middle"></span>
+          <div v-for="(entry, index) in gameStore.chatLog" :key="index" class="text-sm break-words animate-message flex items-baseline gap-1.5 py-0.5">
+            <span class="text-white/40 text-[10px] shrink-0 font-mono">[{{ entry.timestamp }}]</span>
+            <div class="flex-1">
+              <template v-if="entry.author">
+                <span class="message-author">
+                  {{ entry.author.name }}
+                  <span v-if="entry.author.isVerified" class="verified-badge" :title="$t('verified_label')">✓</span>:
+                </span>
+                <span class="message-text text-white/90">{{ entry.message }}</span>
+              </template>
+              <span v-else v-html="formatEntry(entry)" class="align-middle"></span>
+            </div>
           </div>
         </div>
 
