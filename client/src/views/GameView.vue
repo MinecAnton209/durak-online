@@ -373,7 +373,7 @@ const addBot = () => {
                         p.streak }}</span>
                   </div>
                   <span v-if="p.id === gameStore.playerId" class="text-[10px] text-gray-400">{{ $t('you_label')
-                    }}</span>
+                  }}</span>
                 </div>
               </div>
 
@@ -451,7 +451,7 @@ const addBot = () => {
                 <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span v-if="opp.streak > 3" class="text-[10px] text-orange-500 font-bold shrink-0">🔥{{ opp.streak
-                }}</span>
+              }}</span>
             </div>
             <transition-group tag="div" name="opp-cards"
               class="flex justify-center items-end relative w-full h-16 md:h-20 -mt-2">
@@ -510,15 +510,16 @@ const addBot = () => {
                     $t('btn_take') }}</button></transition>
             </div>
           </div>
-          <div class="w-full overflow-x-auto overflow-y-visible px-4 pb-2 pt-8 no-scrollbar touch-pan-x">
+          <div class="w-full overflow-x-auto overflow-y-visible px-4 pb-2 pt-12 no-scrollbar touch-pan-x">
             <div class="flex justify-center min-w-max mx-auto px-4"
               :class="gameStore.myCards.length > 5 ? '-space-x-8 sm:-space-x-12' : '-space-x-4 sm:-space-x-8'">
               <transition-group name="hand">
                 <div v-for="(card, index) in gameStore.myCards" :key="`${card.rank}-${card.suit}`"
-                  class="transition-all duration-300 transform origin-bottom cursor-pointer relative hover:-translate-y-4 hover:!z-50 hover:scale-110"
-                  :style="{ zIndex: index }" @click="onCardClick(card)">
-                  <Card :rank="card.rank" :suit="card.suit" :is-playable="gameStore.canPlayCard(card)"
-                    :class="{ 'brightness-50 grayscale-[0.5]': !gameStore.canPlayCard(card) && gameStore.isMyTurn }" />
+                  class="transition-all duration-300 transform origin-bottom cursor-pointer relative" :class="{
+                    'hover:-translate-y-6 hover:!z-50 hover:scale-110 active:scale-95': gameStore.canPlayCard(card),
+                    'cursor-default opacity-50': !gameStore.canPlayCard(card) && gameStore.isMyTurn
+                  }" :style="{ zIndex: index }" @click="onCardClick(card)">
+                  <Card :rank="card.rank" :suit="card.suit" :is-playable="gameStore.canPlayCard(card)" />
                 </div>
               </transition-group>
             </div>

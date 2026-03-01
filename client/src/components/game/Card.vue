@@ -36,9 +36,7 @@ const cardClasses = computed(() => [
     ? `bg-gradient-to-br ${getBackStyleClasses(props.cardStyle)}`
     : 'bg-white',
 
-  props.isPlayable && !props.isBack
-    ? 'cursor-pointer transition-transform duration-200 hover:-translate-y-2 md:hover:-translate-y-4 hover:shadow-xl hover:z-10'
-    : '',
+  props.isPlayable && !props.isBack ? 'cursor-pointer' : '',
 
   !props.isBack && isRed.value ? 'text-red-600' : 'text-slate-900'
 ]);
