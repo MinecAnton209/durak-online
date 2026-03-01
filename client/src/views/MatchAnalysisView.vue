@@ -84,22 +84,24 @@ const gameState = computed(() => {
         const uid = String(action.userId ?? action.playerId);
         if (!hands[uid]) hands[uid] = [];
 
-        if (action.action === 'attack' || action.action === 'toss') {
-            const idx = hands[uid].findIndex(c => c.rank === action.card?.rank && c.suit === action.card?.suit);
+        if (action.type === 'attack' || action.type === 'toss') {
+            const card = action.data?.card;
+            const idx = hands[uid].findIndex(c => c.rank === card?.rank && c.suit === card?.suit);
             if (idx !== -1) hands[uid].splice(idx, 1);
-            if (action.card) table.push({ attack: action.card, defense: null });
-        } else if (action.action === 'defend') {
-            const idx = hands[uid].findIndex(c => c.rank === action.card?.rank && c.suit === action.card?.suit);
+            if (card) table.push({ attack: card, defense: null });
+        } else if (action.type === 'defend') {
+            const card = action.data?.card;
+            const idx = hands[uid].findIndex(c => c.rank === card?.rank && c.suit === card?.suit);
             if (idx !== -1) hands[uid].splice(idx, 1);
             const pair = table.find(p => !p.defense);
-            if (pair && action.card) pair.defense = action.card;
-        } else if (action.action === 'take') {
+            if (pair && card) pair.defense = card;
+        } else if (action.type === 'take') {
             table.forEach(p => { hands[uid].push(p.attack); if (p.defense) hands[uid].push(p.defense); });
             table.length = 0;
-        } else if (action.action === 'pass') {
+        } else if (action.type === 'pass') {
             table.length = 0;
-        } else if (action.action === 'draw') {
-            if (Array.isArray(action.cards)) hands[uid].push(...action.cards);
+        } else if (action.type === 'draw') {
+            if (Array.isArray(action.data?.cards)) hands[uid].push(...action.data.cards);
         }
     }
 
@@ -239,9 +241,10 @@ const actionLabel = (action) => {
                         <!-- step number -->
                         <span class="text-[10px] text-white/30 w-5 shrink-0">{{ idx + 1 }}</span>
                         <!-- action icon + card -->
-                        <span class="text-xs text-white/60">{{ actionLabel(action.action) }}</span>
-                        <span v-if="action.card" class="text-xs font-bold shrink-0" :class="suitColor(action.card)">
-                            {{ action.card.rank }}{{ action.card.suit }}
+                        <span class="text-xs text-white/60">{{ actionLabel(action.type) }}</span>
+                        <span v-if="action.data?.card" class="text-xs font-bold shrink-0"
+                            :class="suitColor(action.data.card)">
+                            {{ action.data.card.rank }}{{ action.data.card.suit }}
                         </span>
                     </button>
                 </div>
@@ -270,7 +273,7 @@ const actionLabel = (action) => {
                         <div class="text-sm font-bold" :class="getEvalMeta(currentEval.label).color">{{
                             currentEval.label }}</div>
                         <div v-if="currentEval.reason" class="text-[11px] text-white/50 truncate">{{ currentEval.reason
-                            }}</div>
+                        }}</div>
                     </div>
                 </div>
 
@@ -399,7 +402,7 @@ const actionLabel = (action) => {
                                 <span class="text-xs text-white truncate">{{ p.username }}</span>
                             </div>
                             <span v-if="p.cardsTaken" class="text-[10px] text-white/30 shrink-0">+{{ p.cardsTaken
-                                }}</span>
+                            }}</span>
                         </div>
                     </div>
                 </div>
