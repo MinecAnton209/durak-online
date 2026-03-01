@@ -1,6 +1,6 @@
 {
   "name": "durak",
-  "version": "4.0.0-pre-RC.6",
+  "version": "4.0.0-RC.7",
   "main": "index.js",
   "scripts": {
     "db:prepare": "node scripts/preparePrisma.js",

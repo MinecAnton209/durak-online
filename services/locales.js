@@ -140,6 +140,20 @@ const locales = {
             admin_unban_content: "Ваш акаунт було розблоковано адміністратором.",
             admin_session_terminated_title: "🚪 Сесію завершено",
             admin_session_terminated_content: "Вашу сесію було примусово завершено адміністратором."
+        },
+        matches: {
+            btn_history: "📅 Історія матчів",
+            history_title: "📅 **Історія твоїх матчів**",
+            match_format: "{outcome} • {type} • {players} гравців\n📅 {date}",
+            win: "✅ Перемога",
+            loss: "❌ Поразка",
+            draw: "🤝 Нічия",
+            btn_details: "ℹ️ Деталі",
+            details_title: "📊 **Деталі матчу**",
+            details_content: "🏁 Результат: {outcome}\n⏱ Тривалість: {duration}с\n👤 Гравці: {players}\n💰 Взято карт: {cardsTaken}",
+            btn_analyze: "🧠 Аналіз (250 💰)",
+            error_no_history: "У вас ще немає зіграних матчів.",
+            error_analysis_unavailable: "Аналіз для цього матчу недоступний (макс. 15 останніх)."
         }
     },
 
@@ -284,6 +298,20 @@ const locales = {
             admin_unban_content: "Ваш аккаунт был разблокирован администратором.",
             admin_session_terminated_title: "🚪 Сессия завершена",
             admin_session_terminated_content: "Ваша сессия была принудительно завершена администратором."
+        },
+        matches: {
+            btn_history: "📅 История матчей",
+            history_title: "📅 **История твоих матчей**",
+            match_format: "{outcome} • {type} • {players} игроков\n📅 {date}",
+            win: "✅ Победа",
+            loss: "❌ Поражение",
+            draw: "🤝 Ничья",
+            btn_details: "ℹ️ Детали",
+            details_title: "📊 **Детали матча**",
+            details_content: "🏁 Результат: {outcome}\n⏱ Длительность: {duration}с\n👤 Игроки: {players}\n💰 Взято карт: {cardsTaken}",
+            btn_analyze: "🧠 Анализ (250 💰)",
+            error_no_history: "У вас еще нет сыгранных матчей.",
+            error_analysis_unavailable: "Анализ для этого матча недоступен (макс. 15 последних)."
         }
     },
 
@@ -428,6 +456,20 @@ const locales = {
             admin_unban_content: "Your account has been restored by an administrator.",
             admin_session_terminated_title: "🚪 Session Terminated",
             admin_session_terminated_content: "Your session was forcibly terminated by an administrator."
+        },
+        matches: {
+            btn_history: "📅 Match History",
+            history_title: "📅 **Your Match History**",
+            match_format: "{outcome} • {type} • {players} players\n📅 {date}",
+            win: "✅ Win",
+            loss: "❌ Loss",
+            draw: "🤝 Draw",
+            btn_details: "ℹ️ Details",
+            details_title: "📊 **Match Details**",
+            details_content: "🏁 Outcome: {outcome}\n⏱ Duration: {duration}s\n👤 Players: {players}\n💰 Cards taken: {cardsTaken}",
+            btn_analyze: "🧠 Analyze (250 💰)",
+            error_no_history: "You have no matches played yet.",
+            error_analysis_unavailable: "Analysis for this match is unavailable (max 15 recent)."
         }
     }
 };

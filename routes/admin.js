@@ -863,4 +863,25 @@ router.post('/inbox/send', ensureAdmin, async (req, res) => {
     }
 });
 
+// Admin match analysis (free for admins)
+router.get('/matches/:id/analyze', ensureAdmin, async (req, res) => {
+    try {
+        const game = await prisma.game.findUnique({ where: { id: req.params.id } });
+        if (!game || !game.history) return res.status(404).json({ error: 'Analysis unavailable' });
+
+        const participants = await prisma.gameParticipant.findMany({
+            where: { game_id: req.params.id }
+        });
+
+        res.json({
+            history: JSON.parse(game.history),
+            initialHands: Object.fromEntries(
+                participants.map(p => [p.user_id, JSON.parse(p.cards_at_start || '[]')])
+            )
+        });
+    } catch (e) {
+        res.status(500).json({ error: 'Error fetching analysis' });
+    }
+});
+
 module.exports = router;

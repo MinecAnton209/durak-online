@@ -17,6 +17,7 @@ const achievementRoutes = require('./routes/achievements.js');
 const adminRoutes = require('./routes/admin.js');
 const friendsRoutes = require('./routes/friends.js');
 const notificationsRoutes = require('./routes/notifications.js');
+const matchesRoutes = require('./routes/matches.js');
 const { seedAchievements } = require('./db/seed.js');
 const achievementService = require('./services/achievementService.js');
 const ratingService = require('./services/ratingService.js');
@@ -187,6 +188,7 @@ app.use('/api/achievements', achievementRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/friends', friendsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/matches', matchesRoutes);
 const inboxRoutes = require('./routes/inbox.js');
 app.use('/api/inbox', inboxRoutes);
 
@@ -770,6 +772,11 @@ setInterval(() => {
         gameService.broadcastPublicLobbies();
     }
 }, 30000);
+
+// Cleanup match history analysis every 12 hours
+setInterval(() => {
+    gameService.cleanupMatchesHistory();
+}, 12 * 60 * 60 * 1000);
 
 async function broadcastHealthStatus() {
     const stats = await systemService.getSystemStats(onlineUsers, games);

@@ -120,6 +120,7 @@ model Game {
   invite_code      String?           @unique
   max_players      Int               @default(2)
   game_settings    String?
+  history          String?           // JSON string of all moves for analysis
 
   participants     GameParticipant[]
 }
@@ -129,6 +130,7 @@ model GameParticipant {
   user_id           Int
   is_bot            Boolean @default(false)
   outcome           String?
+  cards_at_start    String? // JSON string of initial cards
   cards_at_end      Int?
   is_first_attacker Boolean @default(false)
   cards_taken_total Int     @default(0)

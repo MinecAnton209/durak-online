@@ -46,6 +46,25 @@ function logEvent(game, message, options = {}) {
     }
 }
 
+function recordAction(game, playerId, type, data = {}) {
+    if (!game.history) game.history = [];
+    const player = game.players[playerId];
+    game.history.push({
+        playerId,
+        type,
+        data,
+        playerName: player ? player.name : 'System',
+        timestamp: Date.now(),
+        // Store table state for easier reconstruction
+        table: [...game.table],
+        // Store how many cards everyone has
+        handsCount: Object.fromEntries(
+            Object.entries(game.players).map(([id, p]) => [id, p.cards.length])
+        ),
+        trumpSuit: game.trumpSuit
+    });
+}
+
 async function startGame(gameId) {
     const game = games[gameId];
     if (!game) return;
@@ -87,6 +106,7 @@ async function startGame(gameId) {
     game.playerOrder.forEach((playerId, index) => {
         const player = game.players[playerId];
         player.cards = game.deck.splice(0, 6);
+        player.cardsAtStart = [...player.cards]; // Store initial hand
         player.cards.forEach(card => {
             if (card.suit === game.trumpSuit && RANK_VALUES[card.rank] < minTrumpRank) {
                 minTrumpRank = RANK_VALUES[card.rank];
@@ -94,6 +114,7 @@ async function startGame(gameId) {
             }
         });
     });
+    game.history = []; // Initialize move history
     const gameType = `${game.playerOrder.length}_player`;
     const hostUserId = game.players[game.hostId]?.dbId || null;
     const isBotGame = Object.values(game.players).some(p => p.isGuest);
@@ -123,7 +144,8 @@ async function startGame(gameId) {
                         game_id: game.id,
                         user_id: player.dbId,
                         is_bot: player.isGuest,
-                        is_first_attacker: isFirstAttacker
+                        is_first_attacker: isFirstAttacker,
+                        cards_at_start: JSON.stringify(player.cardsAtStart)
                     }
                 });
             }
@@ -135,6 +157,11 @@ async function startGame(gameId) {
     logEvent(game, null, {
         i18nKey: 'log_game_start',
         options: { trump: game.trumpSuit, player: game.players[game.playerOrder[firstAttackerIndex]].name }
+    });
+    recordAction(game, null, 'start', {
+        trumpCard: game.trumpCard,
+        playerOrder: game.playerOrder,
+        firstAttacker: game.playerOrder[firstAttackerIndex]
     });
     updateTurn(game, firstAttackerIndex);
     broadcastGameState(gameId);
@@ -199,7 +226,8 @@ async function updateStatsAfterGame(game) {
                     end_time: endTime.toISOString(),
                     duration_seconds: durationSeconds,
                     winner_user_id: winnerDbIds.length > 0 ? winnerDbIds[0] : null,
-                    loser_user_id: loserDbId
+                    loser_user_id: loserDbId,
+                    history: game.history ? JSON.stringify(game.history) : null
                 }
             });
             await statsService.incrementDailyCounter('games_played');
@@ -703,6 +731,7 @@ function processBotTurn(game) {
                 game.lastAction = 'move';
                 game.turn = game.defenderId;
                 logEvent(game, null, { i18nKey: 'log_attack', options: { name: player.name, rank: card.rank, suit: card.suit } });
+                recordAction(game, activePlayerId, 'attack', { card });
             } else if (move.type === 'defend') {
                 const { card, targetIndex } = move;
                 player.cards = player.cards.filter(c => c !== card);
@@ -711,6 +740,7 @@ function processBotTurn(game) {
                 player.gameStats.successfulDefenses++;
                 player.gameStats.cardsBeatenInDefense++;
                 logEvent(game, null, { i18nKey: 'log_defend', options: { name: player.name, rank: card.rank, suit: card.suit } });
+                recordAction(game, activePlayerId, 'defend', { card, targetIndex });
 
                 const attackers = game.playerOrder.filter(id => id !== game.defenderId && game.players[id]?.cards.length > 0);
                 if (attackers.length > 0) {
@@ -718,6 +748,7 @@ function processBotTurn(game) {
                 }
             } else if (move.type === 'pass') {
                 logEvent(game, null, { i18nKey: 'log_pass', options: { name: player.name } });
+                recordAction(game, activePlayerId, 'pass');
                 const attackerIndex = game.playerOrder.indexOf(game.attackerId);
                 const nextAttackerIndex = getNextPlayerIndex(attackerIndex, game.playerOrder.length);
                 const nextAttackerId = game.playerOrder[nextAttackerIndex];
@@ -737,6 +768,7 @@ function processBotTurn(game) {
                 }
             } else if (move.type === 'take') {
                 logEvent(game, null, { i18nKey: 'log_take', options: { name: player.name } });
+                recordAction(game, activePlayerId, 'take');
                 player.gameStats.cardsTaken += game.table.length;
                 player.cards.push(...game.table);
                 game.table = [];
@@ -755,6 +787,34 @@ function processBotTurn(game) {
     }, delay);
 }
 
+async function cleanupMatchesHistory() {
+    try {
+        const threshold = new Date();
+        threshold.setDate(threshold.getDate() - 14);
+
+        const result = await prisma.game.updateMany({
+            where: {
+                end_time: { lt: threshold },
+                history: { not: null }
+            },
+            data: { history: null }
+        });
+
+        const participantsResult = await prisma.gameParticipant.updateMany({
+            where: {
+                cards_at_start: { not: null }
+            },
+            data: { cards_at_start: null }
+        });
+
+        if (result.count > 0) {
+            console.log(`[GC] Match history cleaned up: ${result.count} games.`);
+        }
+    } catch (e) {
+        console.error('[GC] Error cleaning up match history:', e);
+    }
+}
+
 module.exports = {
     init,
     addPlayerToGame,
@@ -764,9 +824,11 @@ module.exports = {
     updateStatsAfterGame,
     broadcastGameState,
     broadcastPublicLobbies,
+    recordAction,
     stopTurnTimer,
     startTurnTimer,
     handleTurnTimeout,
     processBotTurn,
-    handlePlayerDisconnect
+    handlePlayerDisconnect,
+    cleanupMatchesHistory
 };

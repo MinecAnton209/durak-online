@@ -124,6 +124,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
             const keyboard = {
                 inline_keyboard: [
                     [{ text: t(lang, 'profile.btn_edit_nick'), callback_data: 'edit_nick' }, { text: passBtnText, callback_data: 'edit_pass' }],
+                    [{ text: t(lang, 'matches.btn_history'), callback_data: 'match_history_0' }],
                     [{ text: t(lang, 'profile.btn_refresh'), callback_data: 'profile' }, { text: t(lang, 'buttons.back_to_menu'), callback_data: 'main_menu' }],
                     [{ text: t(lang, 'play_btn'), url: APP_URL }]
                 ]
@@ -670,6 +671,97 @@ ${t(lang, 'status.version', { version: stats.app.version })}
         } catch (e) {
             console.error('[TelegramBot] Inbox read error:', e);
         }
+    });
+
+    bot.action(/match_history_(\d+)/, async (ctx) => {
+        const skip = parseInt(ctx.match[1]);
+        const lang = ctx.from.language_code;
+        const telegramId = String(ctx.from.id);
+        await ctx.answerCbQuery();
+
+        try {
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId }, select: { id: true } });
+            if (!user) return;
+
+            const matches = await prisma.gameParticipant.findMany({
+                where: { user_id: user.id },
+                include: {
+                    game: {
+                        include: {
+                            participants: { select: { is_bot: true, user: { select: { username: true } } } }
+                        }
+                    }
+                },
+                orderBy: { game: { start_time: 'desc' } },
+                skip: skip,
+                take: 5
+            });
+
+            if (matches.length === 0 && skip === 0) {
+                return ctx.reply(t(lang, 'matches.error_no_history'));
+            }
+
+            let text = t(lang, 'matches.history_title') + "\n\n";
+            const keyboard = [];
+
+            matches.forEach(m => {
+                const g = m.game;
+                const outcomeKey = m.outcome === 'win' ? 'win' : (m.outcome === 'loss' ? 'loss' : 'draw');
+                const outcome = t(lang, `matches.${outcomeKey}`);
+                const date = new Date(g.start_time).toLocaleString(lang === 'uk' ? 'uk-UA' : (lang === 'ru' ? 'ru-RU' : 'en-US'), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const players = g.participants.length;
+
+                text += t(lang, 'matches.match_format', { outcome, type: g.game_type || 'Game', players, date }) + "\n\n";
+                keyboard.push([{ text: t(lang, 'matches.btn_details') + ` #${g.id.substr(0, 4)}`, callback_data: `match_details_${g.id}` }]);
+            });
+
+            const navRow = [];
+            if (skip > 0) navRow.push({ text: "⬅️", callback_data: `match_history_${Math.max(0, skip - 5)}` });
+            if (matches.length === 5 && skip < 45) navRow.push({ text: "➡️", callback_data: `match_history_${skip + 5}` });
+            if (navRow.length > 0) keyboard.push(navRow);
+
+            keyboard.push([{ text: t(lang, 'buttons.back_to_menu'), callback_data: 'main_menu' }]);
+
+            await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } }).catch(() => { });
+        } catch (e) { console.error('[TelegramBot] History error:', e); }
+    });
+
+    bot.action(/match_details_(.+)/, async (ctx) => {
+        const matchId = ctx.match[1];
+        const lang = ctx.from.language_code;
+        const telegramId = String(ctx.from.id);
+        await ctx.answerCbQuery();
+
+        try {
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId }, select: { id: true } });
+            if (!user) return;
+
+            const match = await prisma.game.findUnique({
+                where: { id: matchId },
+                include: { participants: { include: { user: { select: { username: true } } } } }
+            });
+
+            if (!match) return;
+
+            const p = match.participants.find(part => part.user_id === user.id);
+            const outcomeKey = p.outcome === 'win' ? 'win' : (p.outcome === 'loss' ? 'loss' : 'draw');
+            const playersStr = match.participants.map(part => part.user?.username || (part.is_bot ? 'Bot' : 'Unknown')).join(', ');
+
+            const text = t(lang, 'matches.details_title') + "\n\n" +
+                t(lang, 'matches.details_content', {
+                    outcome: t(lang, `matches.${outcomeKey}`),
+                    duration: match.duration_seconds || 0,
+                    players: playersStr,
+                    cardsTaken: p.cards_taken_total || 0
+                });
+
+            const keyboard = [
+                [{ text: t(lang, 'matches.btn_analyze'), url: `${APP_URL}?startapp=match_${matchId}` }],
+                [{ text: "⬅️ " + t(lang, 'matches.btn_history'), callback_data: 'match_history_0' }]
+            ];
+
+            await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } }).catch(() => { });
+        } catch (e) { console.error('[TelegramBot] Detail error:', e); }
     });
 
     bot.launch({ dropPendingUpdates: true })

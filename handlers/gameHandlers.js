@@ -124,6 +124,7 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
                     game.defenderId = nextPlayerId;
                     game.turn = nextPlayerId;
                     game.lastAction = 'transfer';
+                    gameService.recordAction(game, socket.id, 'transfer', { card, nextPlayerId });
 
                     gameService.broadcastGameState(gameId);
                     return;
@@ -138,6 +139,7 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
                 i18nKey: 'log_defend',
                 options: { name: player.name, rank: card.rank, suit: card.suit }
             });
+            gameService.recordAction(game, socket.id, 'defend', { card });
             game.turn = game.attackerId;
 
         } else {
@@ -156,6 +158,7 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
             }
 
             gameService.logEvent(game, null, { i18nKey: logKey, options: { name: player.name, rank: card.rank, suit: card.suit } });
+            gameService.recordAction(game, socket.id, isAttacking ? 'attack' : 'toss', { card });
             game.turn = game.defenderId;
         }
 
@@ -180,6 +183,7 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
             defenderStats.cardsBeatenInDefense += game.table.length / 2;
             achievementService.checkInGameAchievements(game, defenderIdBeforeRefill, 'passTurn');
             gameService.logEvent(game, null, { i18nKey: 'log_pass', options: { name: defender.name } });
+            gameService.recordAction(game, socket.id, 'pass');
         }
         game.discardPile.push(...game.table);
         game.table = [];
@@ -212,6 +216,7 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
                 }).catch(err => console.error(`[Game] Error updating cards_taken_total:`, err.message));
             }
             gameService.logEvent(game, null, { i18nKey: 'log_take', options: { name: defender.name } });
+            gameService.recordAction(game, socket.id, 'take');
             defender.cards.push(...game.table);
         }
         game.table = [];
