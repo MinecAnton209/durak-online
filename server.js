@@ -37,6 +37,12 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const registerLobbyHandlers = require('./handlers/lobbyHandlers');
 const registerGameHandlers = require('./handlers/gameHandlers');
+const rouletteService = require('./services/rouletteService');
+const registerRouletteHandlers = require('./handlers/rouletteHandlers');
+const maintenanceService = require('./services/maintenanceService');
+const maintenanceMiddleware = require('./middlewares/maintenanceMiddleware');
+const chatService = require('./services/chatService');
+const registerChatHandlers = require('./handlers/chatHandlers');
 
 prisma.game.updateMany({
     where: { status: 'waiting' },
@@ -76,100 +82,16 @@ const io = socketIo(server, {
 });
 
 io.use(socketAttachUser);
-const onlineUsers = new Map();
-app.set('onlineUsers', onlineUsers);
+chatService.loadChatFilters();
+setTimeout(chatService.loadChatFilters, 3000); // Initial load fallback
 
-// Rate Limiter for Chat
-const chatSpamTracker = new Map();
-const CHAT_HISTORY_LIMIT = 50;
-const CHAT_PAGE_SIZE = 50;
-const globalChatHistory = [];
-
-global.globalChatSettings = {
-    slowModeInterval: 0 // in seconds
-};
-
-global.chatFilters = {
-    badWords: [],
-    linkRegex: null
-};
-
-async function loadChatFilters() {
-    try {
-        const filters = await prisma.chatFilter.findMany({
-            where: { is_enabled: true },
-            select: { type: true, content: true }
-        });
-
-        // Auto-seed default link regex if missing
-        const defaultLinkRegex = '(http:\\/\\/|https:\\/\\/|www\\.)';
-        const hasLinkRegex = filters.some(f => f.type === 'regex' && f.content === defaultLinkRegex);
-
-        if (!hasLinkRegex) {
-            console.log('Autoseeding default link regex...');
-            try {
-                await prisma.chatFilter.create({ data: { type: 'regex', content: defaultLinkRegex } });
-                filters.push({ type: 'regex', content: defaultLinkRegex });
-            } catch (seedErr) {
-                console.error('Error autoseeding link regex:', seedErr);
-            }
-        }
-
-        const words = [];
-        const regexes = [];
-
-        filters.forEach(f => {
-            if (f.type === 'word') words.push(f.content.toLowerCase());
-            if (f.type === 'regex') {
-                try {
-                    regexes.push(new RegExp(f.content, 'i'));
-                } catch (e) {
-                    console.error(`Invalid regex in DB: ${f.content}`, e);
-                }
-            }
-        });
-
-        global.chatFilters.badWords = words;
-        global.chatFilters.regexes = regexes;
-
-        console.log(`✅ Loaded ${words.length} bad words and ${regexes.length} regex filters.`);
-
-    } catch (error) {
-        console.error('❌ Failed to load chat filters:', error);
-    }
-}
-
-global.loadChatFilters = loadChatFilters;
-
-// Initial load
-setTimeout(loadChatFilters, 3000); // Wait for DB connection
+// Chat filters moved to services/chatService.js
 
 
 let games = {};
 
-let rouletteState = {
-    phase: 'waiting',
-    timer: 0,
-    history: [],
-    winningNumber: null,
-    bets: {}
-};
-const BETTING_TIME = 20;
-const RESULTS_TIME = 10;
-const ROULETTE_INTERVAL = (BETTING_TIME + RESULTS_TIME) * 1000;
-const ROULETTE_RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
-
-let isMaintenanceScheduled = false;
-
-let maintenanceMode = {
-    enabled: false,
-    message: "The site is undergoing maintenance. Please come back later.",
-    timer: null,
-    startTime: null,
-    warningMessage: ""
-};
-
-app.set('maintenanceMode', maintenanceMode);
+const onlineUsers = new Map();
+app.set('onlineUsers', onlineUsers);
 
 app.set('socketio', io);
 app.set('activeGames', games);
@@ -177,7 +99,7 @@ app.set('onlineUsers', onlineUsers);
 app.set('logEvent', logEvent);
 app.set('broadcastGameState', broadcastGameState);
 app.set('i18next', i18next);
-app.set('globalChatHistory', globalChatHistory);
+app.set('globalChatHistory', chatService.getChatHistory());
 
 i18next
     .use(Backend)
@@ -195,41 +117,18 @@ const PORT = process.env.PORT || 3000;
 setTimeout(seedAchievements, 1000);
 achievementService.init(io);
 inboxService.init(io);
+rouletteService.init(io, onlineUsers);
+maintenanceService.init(io);
 
 app.set('trust proxy', 1);
 
 app.use((req, res, next) => {
     res.set('Accept-CH', 'Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version, Sec-CH-UA-Model');
     res.set('Critical-CH', 'Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version, Sec-CH-UA-Model');
-
-    const maintenanceMode = req.app.get('maintenanceMode');
-
-    if (maintenanceMode.enabled) {
-        if (req.originalUrl.startsWith('/api/admin') ||
-            req.user?.is_admin ||
-            req.originalUrl.startsWith('/maintenance') ||
-            req.originalUrl.startsWith('/css') ||
-            req.originalUrl.startsWith('/js') ||
-            req.originalUrl.startsWith('/locales')) {
-            return next();
-        }
-
-        if (req.originalUrl.startsWith('/api/')) {
-            return res.status(503).json({ i18nKey: 'error_maintenance_mode' });
-        }
-
-        const msg = encodeURIComponent(maintenanceMode.message);
-        const eta = maintenanceMode.endTime || null;
-
-        let redirectUrl = `/maintenance?msg=${msg}`;
-        if (eta) {
-            redirectUrl += `&eta=${eta}`;
-        }
-        return res.redirect(redirectUrl);
-    }
-
     next();
 });
+
+app.use(maintenanceMiddleware);
 
 app.use(cookieParser());
 
@@ -748,101 +647,9 @@ function broadcastGameState(gameId) {
     }
 }
 
-function rouletteTick() {
-    if (rouletteState.phase === 'spinning') {
-        rouletteState.phase = 'results';
-        rouletteState.timer = RESULTS_TIME;
+// Roulette logic moved to services/rouletteService.js
 
-        const winningNumber = rouletteState.winningNumber;
-
-        const payoutPromises = [];
-
-        for (const userId in rouletteState.bets) {
-            const userBets = rouletteState.bets[userId];
-            let totalPayout = 0;
-
-            userBets.forEach(bet => {
-                if (checkWin(winningNumber, bet)) {
-                    let payout = 0;
-                    if (bet.type === 'number') {
-                        payout = bet.amount * 36;
-                    } else {
-                        payout = bet.amount * 2;
-                    }
-                    totalPayout += payout;
-                }
-            });
-
-            if (totalPayout > 0) {
-                console.log(`[Roulette] User ${userId} won ${totalPayout} coins.`);
-                const userIdNum = parseInt(userId, 10);
-
-                const promise = prisma.user.update({
-                    where: { id: userIdNum },
-                    data: { coins: { increment: totalPayout } }
-                })
-                    .then(() => prisma.user.findUnique({ where: { id: userIdNum }, select: { coins: true } }))
-                    .then(user => {
-                        const userSocketId = onlineUsers.get(userIdNum);
-                        if (userSocketId && user) {
-                            io.to(userSocketId).emit('updateBalance', { coins: user.coins });
-                            io.to(userSocketId).emit('roulette:win', { amount: totalPayout });
-
-                            const userSocket = io.sockets.sockets.get(userSocketId);
-                            if (userSocket?.request?.session?.user) {
-                                userSocket.request.session.user.coins = user.coins;
-                                userSocket.request.session.save();
-                            }
-                        }
-                    });
-                payoutPromises.push(promise);
-            }
-        }
-
-        Promise.all(payoutPromises)
-            .catch(err => console.error('[Roulette] Error processing payouts:', err));
-
-        io.emit('roulette:updateState', rouletteState);
-        return;
-    }
-
-    rouletteState.phase = 'betting';
-    rouletteState.timer = BETTING_TIME;
-    rouletteState.winningNumber = null;
-    rouletteState.bets = {};
-    io.emit('roulette:updateState', rouletteState);
-
-    setTimeout(() => {
-        rouletteState.phase = 'spinning';
-        rouletteState.winningNumber = crypto.randomInt(0, 37);
-
-        rouletteState.history.unshift(rouletteState.winningNumber);
-        if (rouletteState.history.length > 15) rouletteState.history.pop();
-
-        io.emit('roulette:updateState', rouletteState);
-    }, BETTING_TIME * 1000);
-}
-
-function checkWin(winningNumber, bet) {
-    const wn = parseInt(winningNumber, 10);
-    const betValue = bet.value;
-
-    switch (bet.type) {
-        case 'number':
-            return wn === parseInt(betValue, 10);
-        case 'color':
-            if (betValue === 'red') return ROULETTE_RED_NUMBERS.includes(wn);
-            if (betValue === 'black') return wn !== 0 && !ROULETTE_RED_NUMBERS.includes(wn);
-            return false;
-        case 'even-odd':
-            if (wn === 0) return false;
-            if (betValue === 'even') return wn % 2 === 0;
-            if (betValue === 'odd') return wn % 2 !== 0;
-            return false;
-        default:
-            return false;
-    }
-}
+// Roulette win check moved to services/rouletteService.js
 
 function broadcastPublicLobbies() {
     const publicLobbies = Object.values(games)
@@ -1114,6 +921,8 @@ io.on('connection', (socket) => {
         console.log(`Client connected: ${socket.id} (guest)`);
     }
     registerLobbyHandlers(io, socket, { games, addPlayerToGame, broadcastPublicLobbies, checkBanStatus });
+    registerRouletteHandlers(io, socket);
+    registerChatHandlers(io, socket);
     socket.on('reconnectAttempt', async ({ gameId }) => {
         console.log(`[Reconnect] Attempt from socket ${socket.id} for game ${gameId}`);
 
@@ -1455,52 +1264,7 @@ io.on('connection', (socket) => {
             hostSocket.emit('trackSuggested', { trackId, trackTitle, suggesterName: suggester.name });
         }
     });
-    let maintenanceCountdownInterval = null;
-
-    socket.on('maintenanceWarning', ({ message, startTime }) => {
-        isMaintenanceScheduled = true;
-
-        const maintenanceBanner = document.getElementById('maintenance-banner');
-        const maintenanceBannerMessage = document.getElementById('maintenance-banner-message');
-        const maintenanceBannerCountdown = document.getElementById('maintenance-banner-countdown');
-
-        if (!maintenanceBanner || !maintenanceBannerMessage || !maintenanceBannerCountdown) return;
-
-        maintenanceBannerMessage.textContent = message;
-        maintenanceBanner.style.display = 'block';
-
-        if (maintenanceCountdownInterval) clearInterval(maintenanceCountdownInterval);
-
-        const updateCountdown = () => {
-            const timeLeft = startTime - Date.now();
-            if (timeLeft <= 0) {
-                maintenanceBannerCountdown.textContent = "Maintenance started!";
-                clearInterval(maintenanceCountdownInterval);
-                setTimeout(() => window.location.reload(), 2000);
-                return;
-            }
-            const minutes = Math.floor((timeLeft / 1000 / 60) % 60);
-            const seconds = Math.floor((timeLeft / 1000) % 60);
-            maintenanceBannerCountdown.textContent = `Until start: ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        };
-
-        maintenanceCountdownInterval = setInterval(updateCountdown, 1000);
-        updateCountdown();
-
-        if (createGameBtn) createGameBtn.disabled = true;
-        if (joinGameBtn) joinGameBtn.disabled = true;
-    });
-
-    socket.on('maintenanceCancelled', () => {
-        isMaintenanceScheduled = false;
-
-        const maintenanceBanner = document.getElementById('maintenance-banner');
-        if (maintenanceBanner) maintenanceBanner.style.display = 'none';
-        if (maintenanceCountdownInterval) clearInterval(maintenanceCountdownInterval);
-
-        if (createGameBtn) createGameBtn.disabled = false;
-        if (joinGameBtn) joinGameBtn.disabled = false;
-    });
+    // Maintenance socket listeners removed (deprecated/handled by service)
     socket.on('friend:invite', async ({ toUserId, gameId }) => {
         const sessionUser = socket.request.session?.user;
         if (!sessionUser || !sessionUser.id) {
@@ -1561,62 +1325,7 @@ io.on('connection', (socket) => {
             console.error(`[Invites] Failed to send push/inbox notification for user ${targetUserId}:`, error);
         }
     });
-    socket.on('roulette:getState', () => {
-        socket.emit('roulette:updateState', rouletteState);
-        if (socket.request.session.user) {
-            prisma.user.findUnique({
-                where: { id: socket.request.session.user.id },
-                select: { coins: true }
-            }).then(user => {
-                if (user) socket.emit('updateBalance', { coins: user.coins });
-            }).catch(err => console.error('[Roulette] Error getting balance:', err.message));
-        }
-    });
-
-    socket.on('roulette:placeBet', async (bet) => {
-        const sessionUser = socket.request.session?.user;
-
-        if (!sessionUser) return;
-        if (rouletteState.phase !== 'betting') {
-            return socket.emit('roulette:betError', { messageKey: 'roulette_error_bets_closed' });
-        }
-        if (!bet || !bet.type || !bet.value || !bet.amount || parseInt(bet.amount, 10) <= 0) {
-            return socket.emit('roulette:betError', { messageKey: 'roulette_error_invalid_bet' });
-        }
-
-        const amount = parseInt(bet.amount, 10);
-        const userId = parseInt(sessionUser.id, 10);
-
-        try {
-            const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { coins: true } });
-            if (!dbUser || dbUser.coins < amount) {
-                return socket.emit('roulette:betError', { messageKey: 'error_not_enough_coins' });
-            }
-
-            await prisma.user.update({ where: { id: userId }, data: { coins: { decrement: amount } } });
-
-            socket.request.session.user.coins -= amount;
-            socket.request.session.save();
-
-            if (!rouletteState.bets[userId]) {
-                rouletteState.bets[userId] = [];
-            }
-            rouletteState.bets[userId].push({
-                type: bet.type,
-                value: bet.value,
-                amount: amount
-            });
-
-            console.log(`[Roulette] User ${userId} placed a bet: ${bet.type} on ${bet.value} for ${amount} coins.`);
-
-            socket.emit('updateBalance', { coins: socket.request.session.user.coins });
-            socket.emit('roulette:betAccepted', bet);
-
-        } catch (error) {
-            console.error(`[Roulette] Bet error for user ${userId}:`, error);
-            socket.emit('roulette:betError', { messageKey: 'error_database' });
-        }
-    });
+    // Roulette handlers moved to handlers/rouletteHandlers.js
     socket.on('startGame', async ({ gameId }) => {
         const sessionUser = socket.request.session?.user;
         const game = games[gameId];
@@ -1924,311 +1633,8 @@ io.on('connection', (socket) => {
         });
         broadcastPublicLobbies();
     });
-    socket.on('chat:joinGlobal', () => {
-        socket.join('global_chat');
-
-        const lastPage = globalChatHistory.slice(-CHAT_PAGE_SIZE);
-        socket.emit('chat:history', {
-            messages: lastPage,
-            hasMore: globalChatHistory.length > CHAT_PAGE_SIZE
-        });
-    });
-
-    socket.on('chat:leaveGlobal', () => {
-        socket.leave('global_chat');
-    });
-
-    socket.on('chat:sendGlobal', (message) => {
-        const sessionUser = socket.request.session?.user;
-        if (!sessionUser) return socket.emit('systemMessage', { i18nKey: 'error_chat_auth_required', type: 'error' });
-
-        if (sessionUser.is_muted) {
-            if (sessionUser.mute_until && new Date(sessionUser.mute_until) < new Date()) {
-                // Mute expired
-                sessionUser.is_muted = false;
-                sessionUser.mute_until = null;
-                prisma.user.update({
-                    where: { id: sessionUser.id },
-                    data: { is_muted: false, mute_until: null }
-                }).catch(err => console.error('[Mute] Error unmuting user:', err.message));
-            } else {
-                return socket.emit('systemMessage', { i18nKey: 'error_chat_muted', type: 'error' });
-            }
-        }
-
-        const now = Date.now();
-        const userData = chatSpamTracker.get(sessionUser.id) || { lastTime: 0, violations: 0 };
-
-        if (now - userData.lastTime > 60000) {
-            userData.violations = 0;
-        }
-
-        const BASE_COOLDOWN = 3000;
-        const PENALTY_PER_VIOLATION = 5000;
-        const requiredCooldown = BASE_COOLDOWN + (userData.violations * PENALTY_PER_VIOLATION);
-
-        if (now - userData.lastTime < requiredCooldown) {
-            userData.violations++;
-            chatSpamTracker.set(sessionUser.id, userData);
-
-            const timeLeft = Math.ceil((requiredCooldown - (now - userData.lastTime)) / 1000);
-
-            return socket.emit('chat:error', {
-                i18nKey: 'error_chat_spam_wait',
-                options: { seconds: timeLeft }
-            });
-
-            return socket.emit('systemMessage', { i18nKey: 'error_chat_spam_wait', options: { seconds: timeLeft }, type: 'warning' });
-        }
-
-        // Global Chat Settings (Simple in-memory for now, could move to DB)
-        const slowModeInterval = global.globalChatSettings?.slowModeInterval || 0;
-
-        // Slow Mode Check
-        if (slowModeInterval > 0 && !sessionUser.is_admin) {
-            const lastTime = userData.lastTime || 0;
-            if (now - lastTime < slowModeInterval * 1000) {
-                return socket.emit('chat:error', {
-                    i18nKey: 'error_chat_slow_mode',
-                    options: { seconds: Math.ceil((slowModeInterval * 1000 - (now - lastTime)) / 1000) }
-                });
-            }
-        }
-
-        const trimmedMessage = message.trim();
-        if (trimmedMessage.length === 0 || trimmedMessage.length > 255) {
-            return;
-        }
-
-        // Content Filtering (Blacklist & Links from DB)
-        const filters = global.chatFilters || { badWords: [], regexes: [] };
-        // Default link regex if none in DB, or combine?
-        // User asked to load linkRegex from DB too. 
-        // If DB has regexes, use them. If we want a fallback hardcoded link regex, we can keep it or add it to DB.
-        // Assuming we rely on DB or updated global variable.
-
-        let isSpam = false;
-
-        // Check Regexes (including links if added to DB)
-        if (filters.regexes && filters.regexes.length > 0) {
-            isSpam = filters.regexes.some(r => r.test(trimmedMessage));
-        }
-
-        // Fallback hardcoded link check if requested, OR assume it's in DB.
-        // Let's keep a hardcoded fallback for links ONLY if not in DB? 
-        // User said "linkRegex too from db", implying we should NOT hardcode it if possible, 
-        // or the DB should contain it. 
-        // But for safety, I will keep a basic link check if `global.chatFilters.linkRegex` is not set?
-        // Wait, I defined `linkRegex: null` in the global object init.
-        // The previous code had `const linkRegex = /(http:\/\/|https:\/\/|www\.)/i;`
-
-        if (!isSpam && filters.badWords && filters.badWords.length > 0) {
-            const lowerMsg = trimmedMessage.toLowerCase();
-            isSpam = filters.badWords.some(w => lowerMsg.includes(w));
-        }
-
-        const messageObject = {
-            id: `msg_${now}_${sessionUser.id}`,
-            author: {
-                id: sessionUser.id,
-                username: sessionUser.username,
-                isAdmin: sessionUser.is_admin,
-                isVerified: sessionUser.isVerified,
-                isMuted: sessionUser.is_muted,
-                muteUntil: sessionUser.mute_until
-            },
-            text: trimmedMessage,
-            timestamp: now
-        };
-
-        // Shadowban Logic
-        if (sessionUser.is_shadow_banned || isSpam) {
-            // Only emit to sender, do not add to global history
-            socket.emit('chat:newMessage', messageObject);
-            return;
-        }
-
-        // Update spam tracker only if message actually sent
-        userData.lastTime = now;
-        chatSpamTracker.set(sessionUser.id, userData);
-
-        // Save to Persistent History (Async, don't block)
-        prisma.chatMessage.create({
-            data: {
-                user_id: sessionUser.id,
-                username: sessionUser.username,
-                content: trimmedMessage,
-                created_at: new Date(now)
-            }
-        }).catch(err => console.error('Failed to save chat message:', err));
-
-        globalChatHistory.push(messageObject);
-        if (globalChatHistory.length > CHAT_HISTORY_LIMIT) {
-            globalChatHistory.splice(0, globalChatHistory.length - CHAT_HISTORY_LIMIT);
-        }
-
-        io.to('global_chat').emit('chat:newMessage', messageObject);
-    });
-
-    socket.on('chat:muteUser', async ({ userId, durationMinutes, permanent }) => {
-        const sessionUser = socket.request.session?.user;
-        if (!sessionUser || !sessionUser.is_admin) return;
-
-        let muteUntil = null;
-        if (!permanent) {
-            const duration = parseInt(durationMinutes, 10) || 60;
-            muteUntil = new Date(Date.now() + duration * 60000).toISOString();
-        }
-
-        await prisma.user.update({
-            where: { id: parseInt(userId, 10) },
-            data: { is_muted: true, mute_until: muteUntil ? new Date(muteUntil) : null }
-        });
-
-        // Update existing messages in history to reflect mute status immediately
-        globalChatHistory.forEach(msg => {
-            if (msg.author.id === userId) {
-                msg.author.isMuted = true;
-                msg.author.muteUntil = muteUntil;
-                io.to('global_chat').emit('chat:updateMessage', msg);
-            }
-        });
-
-        // Log admin action
-        const targetUser = await prisma.user.findUnique({ where: { id: parseInt(userId, 10) }, select: { username: true } });
-        logAdminAction({
-            adminId: sessionUser.id,
-            adminUsername: sessionUser.username,
-            actionType: permanent ? 'MUTE_USER_PERMANENT' : 'MUTE_USER_TEMPORARY',
-            targetUserId: userId,
-            targetUsername: targetUser ? targetUser.username : 'Unknown',
-            reason: permanent ? 'Permanent mute from global chat quick actions' : `Temporary mute (${durationMinutes}min) from global chat quick actions`
-        });
-    });
-
-    socket.on('chat:banUser', async ({ userId, durationMinutes, permanent }) => {
-        const sessionUser = socket.request.session?.user;
-        if (!sessionUser || !sessionUser.is_admin) return;
-
-        let banUntil = null;
-        if (!permanent) {
-            const duration = parseInt(durationMinutes, 10) || 60;
-            banUntil = new Date(Date.now() + duration * 60000).toISOString();
-        }
-
-        await prisma.user.update({
-            where: { id: parseInt(userId, 10) },
-            data: {
-                is_banned: true,
-                ban_until: banUntil ? new Date(banUntil) : null,
-                ban_reason: permanent ? 'Permanent ban from global chat' : 'Temporary ban from global chat'
-            }
-        });
-
-        // Log admin action
-        const targetUser = await prisma.user.findUnique({ where: { id: parseInt(userId, 10) }, select: { username: true } });
-        logAdminAction({
-            adminId: sessionUser.id,
-            adminUsername: sessionUser.username,
-            actionType: permanent ? 'BAN_USER_PERMANENT' : 'BAN_USER_TEMPORARY',
-            targetUserId: userId,
-            targetUsername: targetUser ? targetUser.username : 'Unknown',
-            reason: permanent ? 'Permanent ban from global chat quick actions' : `Temporary ban (${durationMinutes}min) from global chat quick actions`
-        });
-
-        // Force disconnect the banned user if they are online
-        io.sockets.sockets.forEach((s) => {
-            if (s.request.session?.user?.id === parseInt(userId, 10)) {
-                const options = { reason: permanent ? 'Permanent ban from global chat' : 'Temporary ban from global chat' };
-                if (banUntil) {
-                    options.until = new Date(banUntil).toLocaleString();
-                }
-                s.emit('forceDisconnect', {
-                    i18nKey: banUntil ? 'error_account_temp_banned_with_reason' : 'error_account_banned_with_reason',
-                    options: options
-                });
-                s.disconnect(true);
-            }
-        });
-    });
-
-    socket.on('chat:deleteMessage', async ({ messageId }) => {
-        const sessionUser = socket.request.session?.user;
-        if (!sessionUser || !sessionUser.is_admin) return;
-
-        const messageIndex = globalChatHistory.findIndex(msg => msg.id === messageId);
-        if (messageIndex > -1) {
-            globalChatHistory[messageIndex].text = '[deleted by admin]';
-            globalChatHistory[messageIndex].deleted = true;
-
-            io.to('global_chat').emit('chat:updateMessage', globalChatHistory[messageIndex]);
-        }
-    });
-
-    socket.on('chat:loadMore', ({ beforeTimestamp }) => {
-        if (!beforeTimestamp) return;
-
-        const lastIndex = globalChatHistory.findIndex(msg => msg.timestamp < beforeTimestamp);
-
-        if (lastIndex > -1) {
-            const startIndex = Math.max(0, lastIndex - CHAT_PAGE_SIZE);
-            const page = globalChatHistory.slice(startIndex, lastIndex);
-
-            socket.emit('chat:historyPage', {
-                messages: page,
-                hasMore: startIndex > 0
-            });
-        }
-    });
-
-    socket.on('chat:editMessage', ({ messageId, newText }) => {
-        const sessionUser = socket.request.session?.user;
-        if (!sessionUser) return;
-
-        const trimmedText = newText.trim();
-        if (trimmedText.length === 0 || trimmedText.length > 255) return;
-
-        const message = globalChatHistory.find(msg => msg.id === messageId);
-
-        if (message && message.author.id === sessionUser.id) {
-
-            const TIME_LIMIT = 5 * 60 * 1000;
-            if (Date.now() - message.timestamp > TIME_LIMIT) {
-                return socket.emit('chat:error', { i18nKey: 'error_edit_time_expired' });
-            }
-
-            message.text = trimmedText;
-            message.edited = true;
-            message.editedAt = Date.now();
-
-            io.to('global_chat').emit('chat:updateMessage', message);
-        }
-    });
-
-    socket.on('chat:deleteOwnMessage', ({ messageId }) => {
-        const sessionUser = socket.request.session?.user;
-        if (!sessionUser) return;
-
-        const messageIndex = globalChatHistory.findIndex(msg => msg.id === messageId);
-
-        if (messageIndex > -1) {
-            const message = globalChatHistory[messageIndex];
-
-            if (message.author.id === sessionUser.id) {
-
-                const TIME_LIMIT = 5 * 60 * 1000;
-                if (Date.now() - message.timestamp > TIME_LIMIT) {
-                    return socket.emit('chat:error', { i18nKey: 'error_delete_time_expired' });
-                }
-
-                message.text = '[message deleted]';
-                message.deleted = true;
-
-                io.to('global_chat').emit('chat:updateMessage', message);
-            }
-        }
-    });
-
+    // Global chat events moved to handlers/chatHandlers.js
+    // Health status events kept for now
     socket.on('health:subscribe', () => {
         socket.join('health_status');
         console.log(`[Health] Socket ${socket.id} subscribed to health updates`);
@@ -2240,15 +1646,7 @@ io.on('connection', (socket) => {
     });
 });
 
-rouletteTick();
-setInterval(rouletteTick, ROULETTE_INTERVAL);
-
-setInterval(() => {
-    if (rouletteState.timer > 0) {
-        rouletteState.timer--;
-        io.emit('roulette:timer', { timer: rouletteState.timer, phase: rouletteState.phase });
-    }
-}, 1000);
+// Legcy roulette intervals removed, handled by rouletteService
 
 setInterval(() => {
     let hasChanges = false;

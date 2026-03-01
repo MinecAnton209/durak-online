@@ -4,6 +4,7 @@ const prisma = require('../db/prisma');
 const { ensureAdmin } = require('../middlewares/authMiddleware');
 const { logAdminAction } = require('../services/auditLogService');
 const notificationService = require('../services/notificationService.js');
+const maintenanceService = require('../services/maintenanceService');
 
 const isAdmin = (req, res, next) => {
     if (req.session?.user?.is_admin) return next();
@@ -668,7 +669,7 @@ router.post('/chat/settings', ensureAdmin, (req, res) => {
 });
 
 router.get('/maintenance/status', ensureAdmin, (req, res) => {
-    const mm = req.app.get('maintenanceMode');
+    const mm = maintenanceService.getMaintenanceMode();
     res.json({ enabled: mm.enabled, message: mm.enabled ? mm.message : mm.warningMessage, startTime: mm.startTime });
 });
 
@@ -694,11 +695,8 @@ router.post('/maintenance/enable', ensureAdmin, (req, res) => {
 });
 
 router.post('/maintenance/disable', ensureAdmin, (req, res) => {
-    const mm = req.app.get('maintenanceMode');
-    const io = req.app.get('socketio');
-    mm.enabled = false; mm.startTime = null; mm.warningMessage = "";
-    if (mm.timer) { clearTimeout(mm.timer); mm.timer = null; }
-    io.emit('maintenanceCancelled');
+    maintenanceService.setMaintenanceMode({ enabled: false });
+    maintenanceService.cancelMaintenance();
     console.log('[Admin] Maintenance mode disabled.');
     res.json({ status: 'disabled', message: 'Maintenance mode disabled.' });
 });
