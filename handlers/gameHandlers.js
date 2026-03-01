@@ -139,7 +139,6 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
                 i18nKey: 'log_defend',
                 options: { name: player.name, rank: card.rank, suit: card.suit }
             });
-            gameService.recordAction(game, socket.id, 'defend', { card });
             game.turn = game.attackerId;
 
         } else {
@@ -158,12 +157,20 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
             }
 
             gameService.logEvent(game, null, { i18nKey: logKey, options: { name: player.name, rank: card.rank, suit: card.suit } });
-            gameService.recordAction(game, socket.id, isAttacking ? 'attack' : 'toss', { card });
             game.turn = game.defenderId;
         }
 
         player.cards = player.cards.filter(c => !(c.rank === card.rank && c.suit === card.suit));
         game.table.push(card);
+
+        if (isDefender) {
+            const targetIndex = game.table.length - 2;
+            gameService.recordAction(game, socket.id, 'defend', { card, targetIndex });
+        } else {
+            const type = game.attackerId === socket.id ? 'attack' : 'toss';
+            gameService.recordAction(game, socket.id, type, { card });
+        }
+
         gameService.broadcastGameState(gameId);
     });
 

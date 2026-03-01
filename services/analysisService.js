@@ -165,35 +165,40 @@ function analyzeMatch(history, initialHands) {
 
     history.forEach((action) => {
         const uid = String(action.userId);
-        const handBefore = hands[uid] ? [...hands[uid]] : [];
+
+        // Find best possible hand key (numeric ID or player name)
+        let handKey = uid;
+        if (!hands[handKey] && action.playerName) {
+            handKey = action.playerName;
+        }
+
+        const handBefore = hands[handKey] ? [...hands[handKey]] : [];
 
         // Evaluate with the hand the player had BEFORE this move
         const evaluation = evaluateAction(action, handBefore);
-        analysis.push({ evaluation });
+        analysis.push({ evaluation, userId: uid, playerId: uid, playerName: action.playerName });
 
         // Mutate hand to keep future evaluations accurate
         const { type, data } = action;
 
         if (type === 'attack' || type === 'toss') {
             const card = data?.card;
-            if (card && hands[uid]) {
-                const idx = hands[uid].findIndex(c => c.rank === card.rank && c.suit === card.suit);
-                if (idx !== -1) hands[uid].splice(idx, 1);
+            if (card && hands[handKey]) {
+                const idx = hands[handKey].findIndex(c => c.rank === card.rank && c.suit === card.suit);
+                if (idx !== -1) hands[handKey].splice(idx, 1);
             }
         } else if (type === 'defend') {
             const card = data?.card;
-            if (card && hands[uid]) {
-                const idx = hands[uid].findIndex(c => c.rank === card.rank && c.suit === card.suit);
-                if (idx !== -1) hands[uid].splice(idx, 1);
+            if (card && hands[handKey]) {
+                const idx = hands[handKey].findIndex(c => c.rank === card.rank && c.suit === card.suit);
+                if (idx !== -1) hands[handKey].splice(idx, 1);
             }
         } else if (type === 'take') {
-            // Player takes all cards from table
             const tableCards = Array.isArray(action.table) ? action.table : [];
-            if (hands[uid]) hands[uid].push(...tableCards.filter(c => c && typeof c === 'object'));
+            if (hands[handKey]) hands[handKey].push(...tableCards.filter(c => c && typeof c === 'object'));
         } else if (type === 'draw') {
-            // Player draws cards from deck
             const cards = data?.cards;
-            if (Array.isArray(cards) && hands[uid]) hands[uid].push(...cards);
+            if (Array.isArray(cards) && hands[handKey]) hands[handKey].push(...cards);
         }
     });
 

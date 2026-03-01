@@ -82,26 +82,32 @@ const gameState = computed(() => {
         if (action.trumpSuit) trumpSuit = action.trumpSuit;
 
         const uid = String(action.userId ?? action.playerId);
-        if (!hands[uid]) hands[uid] = [];
+
+        // Find best possible hand key (numeric ID or player name)
+        let handKey = uid;
+        if (!hands[handKey] && action.playerName && hands[action.playerName]) {
+            handKey = action.playerName;
+        }
+        if (!hands[handKey]) hands[handKey] = [];
 
         if (action.type === 'attack' || action.type === 'toss') {
             const card = action.data?.card;
-            const idx = hands[uid].findIndex(c => c.rank === card?.rank && c.suit === card?.suit);
-            if (idx !== -1) hands[uid].splice(idx, 1);
+            const idx = hands[handKey].findIndex(c => c.rank === card?.rank && c.suit === card?.suit);
+            if (idx !== -1) hands[handKey].splice(idx, 1);
             if (card) table.push({ attack: card, defense: null });
         } else if (action.type === 'defend') {
             const card = action.data?.card;
-            const idx = hands[uid].findIndex(c => c.rank === card?.rank && c.suit === card?.suit);
-            if (idx !== -1) hands[uid].splice(idx, 1);
+            const idx = hands[handKey].findIndex(c => c.rank === card?.rank && c.suit === card?.suit);
+            if (idx !== -1) hands[handKey].splice(idx, 1);
             const pair = table.find(p => !p.defense);
             if (pair && card) pair.defense = card;
         } else if (action.type === 'take') {
-            table.forEach(p => { hands[uid].push(p.attack); if (p.defense) hands[uid].push(p.defense); });
+            table.forEach(p => { hands[handKey].push(p.attack); if (p.defense) hands[handKey].push(p.defense); });
             table.length = 0;
         } else if (action.type === 'pass') {
             table.length = 0;
         } else if (action.type === 'draw') {
-            if (Array.isArray(action.data?.cards)) hands[uid].push(...action.data.cards);
+            if (Array.isArray(action.data?.cards)) hands[handKey].push(...action.data.cards);
         }
     }
 
@@ -126,20 +132,27 @@ const playerStats = computed(() => {
     const { analysis, participants } = analysisData.value;
     const stats = {};
     participants?.forEach(p => {
-        const uid = String(p.user_id ?? p.bot_name);
-        stats[uid] = { best: 0, good: 0, ok: 0, mistake: 0, blunder: 0 };
+        const uid = String(p.user_id ?? p.username);
+        stats[uid] = { name: p.username, best: 0, good: 0, ok: 0, mistake: 0, blunder: 0 };
     });
-    analysis?.forEach(a => {
-        const uid = String(a.userId ?? a.playerId);
+    analysis?.forEach((a, idx) => {
+        const historyAction = analysisData.value.history?.[idx];
+        const uid = String(a.userId ?? historyAction?.userId);
+        const name = historyAction?.playerName;
+
+        // Find bucket by ID or name
+        let key = uid;
+        if (!stats[key] && name && stats[name]) key = name;
+        if (!stats[key]) stats[key] = { name: name || uid, best: 0, good: 0, ok: 0, mistake: 0, blunder: 0 };
+
         const label = a.evaluation?.label || '';
-        if (!stats[uid]) stats[uid] = { best: 0, good: 0, ok: 0, mistake: 0, blunder: 0 };
-        if (label.startsWith('Best')) stats[uid].best++;
-        else if (label === 'Excellent' || label === 'Good') stats[uid].good++;
-        else if (label === 'Inaccuracy') stats[uid].ok++;
-        else if (label === 'Mistake') stats[uid].mistake++;
-        else if (label === 'Blunder') stats[uid].blunder++;
+        if (label.startsWith('Best')) stats[key].best++;
+        else if (label === 'Excellent' || label === 'Good') stats[key].good++;
+        else if (label === 'Inaccuracy') stats[key].ok++;
+        else if (label === 'Mistake') stats[key].mistake++;
+        else if (label === 'Blunder') stats[key].blunder++;
     });
-    return Object.entries(stats).map(([uid, s]) => ({ uid, ...s }));
+    return Object.entries(stats).map(([id, s]) => ({ id, ...s }));
 });
 
 const myUserId = computed(() => String(authStore.user?.id));
@@ -148,7 +161,7 @@ const nav = (step) => {
     currentStep.value = Math.max(0, Math.min(totalSteps.value - 1, step));
 };
 
-const myStat = computed(() => playerStats.value.find(s => s.uid === myUserId.value) ?? null);
+const myStat = computed(() => playerStats.value.find(s => String(s.id) === String(myUserId.value)) ?? null);
 
 const goBack = () => router.push('/history');
 
@@ -273,7 +286,7 @@ const actionLabel = (action) => {
                         <div class="text-sm font-bold" :class="getEvalMeta(currentEval.label).color">{{
                             currentEval.label }}</div>
                         <div v-if="currentEval.reason" class="text-[11px] text-white/50 truncate">{{ currentEval.reason
-                        }}</div>
+                            }}</div>
                     </div>
                 </div>
 
@@ -402,7 +415,7 @@ const actionLabel = (action) => {
                                 <span class="text-xs text-white truncate">{{ p.username }}</span>
                             </div>
                             <span v-if="p.cardsTaken" class="text-[10px] text-white/30 shrink-0">+{{ p.cardsTaken
-                            }}</span>
+                                }}</span>
                         </div>
                     </div>
                 </div>

@@ -160,19 +160,30 @@ router.post('/:id/analyze', async (req, res) => {
                 });
             }
 
-            const initialHands = Object.fromEntries(
-                game.participants.map(p => [p.user_id, JSON.parse(p.cards_at_start || '[]')])
-            );
-            const rawHistory = JSON.parse(game.history);
+            const initialHands = {};
+            const rawHistory = JSON.parse(game.history || '[]');
 
-            // Enhance history with evaluations
+            game.participants.forEach(p => {
+                // Bots in history use their temporary ID (bot_...) or their name
+                // In GameParticipant they have no user_id, only bot_name
+                // We'll use the user_id as string key, or bot_name if bot
+                const key = p.is_bot ? (p.bot_name || 'Bot') : String(p.user_id);
+                initialHands[key] = JSON.parse(p.cards_at_start || '[]');
+            });
+
+            // Re-map analysis labels if needed (not needed yet)
+            // But let's refine analysis call to handle history IDs correctly
+            // Actually, analysisService needs to know which history ID is which DB user
+            // Let's pass a mapping if we have multiple bots, but usually 1 is fine.
+
             return {
                 history: rawHistory,
                 analysis: analysisService.analyzeMatch(rawHistory, initialHands),
                 initialHands: initialHands,
                 participants: game.participants.map(p => ({
                     user_id: p.user_id,
-                    is_bot: p.is_bot
+                    is_bot: p.is_bot,
+                    username: p.user?.username || p.bot_name || 'Bot'
                 }))
             };
         });
