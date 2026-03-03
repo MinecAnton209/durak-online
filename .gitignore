@@ -137,6 +137,7 @@ dist
 
 .history/
 data/database.sqlite
+*.sqlite
 .vscode/
 .idea/
 /public/
@@ -144,4 +145,3 @@ data/database.sqlite
 # Capacitor
 android/
 ios/
-
