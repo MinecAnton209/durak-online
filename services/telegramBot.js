@@ -37,10 +37,17 @@ async function showMainMenu(ctx, isEdit = false) {
             { text: t(lang, 'btn_friends'), callback_data: 'friends_menu' }
         ],
         [
+            { text: t(lang, 'btn_achievements'), callback_data: 'achievements_1' },
+            { text: t(lang, 'btn_daily_bonus'), callback_data: 'daily_bonus' }
+        ],
+        [
             { text: t(lang, 'btn_leaderboard'), callback_data: 'leaderboard_rating' },
             { text: t(lang, 'inbox.title'), callback_data: 'inbox_1' }
         ],
-        [{ text: t(lang, 'btn_donate'), callback_data: 'donate_start' }],
+        [
+            { text: t(lang, 'btn_settings'), callback_data: 'settings' },
+            { text: t(lang, 'btn_donate'), callback_data: 'donate_start' }
+        ],
         [{ text: t(lang, 'add_group_btn'), url: `https://t.me/${ctx.botInfo.username}?startgroup=true` }]
     ];
 
@@ -103,6 +110,50 @@ ${t(lang, 'status.version', { version: stats.app.version })}
         const page = parseInt(ctx.match[1]);
         await ctx.answerCbQuery();
         await showInbox(ctx, page, true);
+    });
+
+    bot.action(/achievements_(\d+)/, async (ctx) => {
+        const page = parseInt(ctx.match[1]);
+        await ctx.answerCbQuery();
+        await showAchievements(ctx, page, true);
+    });
+
+    bot.action('daily_bonus', async (ctx) => {
+        await ctx.answerCbQuery();
+        await showDailyBonus(ctx, true);
+    });
+
+    bot.action('claim_daily_bonus', async (ctx) => {
+        await claimDailyBonus(ctx);
+    });
+
+    bot.action('settings', async (ctx) => {
+        await ctx.answerCbQuery();
+        await showSettings(ctx, true);
+    });
+
+    bot.action('settings_card_back', async (ctx) => {
+        await ctx.answerCbQuery();
+        await showCardBacks(ctx, true);
+    });
+
+    bot.action(/set_card_back_(.+)/, async (ctx) => {
+        const style = ctx.match[1];
+        await setCardBack(ctx, style);
+    });
+
+    bot.action('settings_quick_game', async (ctx) => {
+        await ctx.answerCbQuery();
+        await showQuickGameSettings(ctx, true);
+    });
+
+    bot.action('settings_sessions', async (ctx) => {
+        await ctx.answerCbQuery();
+        await showSessions(ctx, true);
+    });
+
+    bot.action('terminate_all_sessions', async (ctx) => {
+        await terminateAllSessions(ctx);
     });
 
     async function showProfile(ctx, isEdit = false) {
@@ -340,6 +391,220 @@ ${t(lang, 'status.version', { version: stats.app.version })}
             reply_markup: { inline_keyboard: [[{ text: t(lang, 'buttons.cancel'), callback_data: 'cancel_input' }]] }
         });
     };
+
+    async function showAchievements(ctx, page = 1, isEdit = false) {
+        const lang = ctx.from.language_code;
+        const telegramId = String(ctx.from.id);
+        const limit = 5;
+        try {
+            const user = await prisma.user.findFirst({
+                where: { telegram_id: telegramId },
+                include: { user_achievements: { include: { achievement: true } } }
+            });
+            if (!user) return ctx.reply(t(lang, 'errors.no_account'));
+
+            const allAchievements = await prisma.achievement.findMany();
+            const unlocked = user.user_achievements;
+            const text = t(lang, 'achievements.title', { count: unlocked.length, total: allAchievements.length });
+
+            const totalPages = Math.ceil(unlocked.length / limit) || 1;
+            const currentPage = Math.min(page, totalPages);
+            const start = (currentPage - 1) * limit;
+            const pageItems = unlocked.slice(start, start + limit);
+
+            let listText = "";
+            if (unlocked.length === 0) {
+                listText = "\n\n" + t(lang, 'achievements.empty');
+            } else {
+                listText = "\n\n" + pageItems.map(ua => {
+                    const ach = ua.achievement;
+                    const rarityIcon = t(lang, `achievements.rarity_${ach.rarity}`);
+                    return t(lang, 'achievements.list_item', {
+                        icon: rarityIcon,
+                        name: t(lang, ach.name_key),
+                        desc: t(lang, ach.description_key)
+                    });
+                }).join('\n\n');
+            }
+
+            const keyboard = [];
+            const navRow = [];
+            if (currentPage > 1) navRow.push({ text: "⬅️", callback_data: `achievements_${currentPage - 1}` });
+            if (currentPage < totalPages) navRow.push({ text: "➡️", callback_data: `achievements_${currentPage + 1}` });
+            if (navRow.length > 0) keyboard.push(navRow);
+            keyboard.push([{ text: t(lang, 'buttons.back_to_menu'), callback_data: 'main_menu' }]);
+
+            if (isEdit) await ctx.editMessageText(text + listText, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } }).catch(() => { });
+            else await ctx.reply(text + listText, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } });
+        } catch (e) { console.error('[TelegramBot] showAchievements error:', e); }
+    }
+
+    async function showDailyBonus(ctx, isEdit = false) {
+        const lang = ctx.from.language_code;
+        const telegramId = String(ctx.from.id);
+        try {
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId } });
+            if (!user) return ctx.reply(t(lang, 'errors.no_account'));
+
+            const lastClaim = user.last_daily_bonus_claim;
+            const today = new Date().toDateString();
+            const isClaimed = lastClaim && new Date(lastClaim).toDateString() === today;
+
+            const bonusAmount = 200; // Match economyService.js
+            const text = isClaimed ? t(lang, 'daily_bonus.claimed') : t(lang, 'daily_bonus.available', { amount: bonusAmount });
+
+            const keyboard = [];
+            if (!isClaimed) keyboard.push([{ text: t(lang, 'daily_bonus.btn_claim'), callback_data: 'claim_daily_bonus' }]);
+            keyboard.push([{ text: t(lang, 'buttons.back_to_menu'), callback_data: 'main_menu' }]);
+
+            if (isEdit) await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } }).catch(() => { });
+            else await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } });
+        } catch (e) { console.error('[TelegramBot] showDailyBonus error:', e); }
+    }
+
+    async function claimDailyBonus(ctx) {
+        const lang = ctx.from.language_code;
+        const telegramId = String(ctx.from.id);
+        try {
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId } });
+            if (!user) return ctx.answerCbQuery(t(lang, 'errors.no_account'));
+
+            const lastClaim = user.last_daily_bonus_claim;
+            const today = new Date().toDateString();
+            if (lastClaim && new Date(lastClaim).toDateString() === today) {
+                return ctx.answerCbQuery(t(lang, 'daily_bonus.claimed'), { show_alert: true });
+            }
+
+            const bonusAmount = 200;
+            await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    coins: { increment: bonusAmount },
+                    last_daily_bonus_claim: new Date()
+                }
+            });
+
+            await ctx.answerCbQuery(t(lang, 'daily_bonus.success', { amount: bonusAmount }), { show_alert: true });
+            await showDailyBonus(ctx, true);
+        } catch (e) { console.error('[TelegramBot] claimDailyBonus error:', e); ctx.answerCbQuery('Error'); }
+    }
+
+    async function showSettings(ctx, isEdit = false) {
+        const lang = ctx.from.language_code;
+        const text = t(lang, 'settings.title');
+        const keyboard = {
+            inline_keyboard: [
+                [{ text: t(lang, 'settings.btn_card_back'), callback_data: 'settings_card_back' }],
+                [{ text: t(lang, 'settings.btn_quick_game'), callback_data: 'settings_quick_game' }],
+                [{ text: t(lang, 'settings.btn_sessions'), callback_data: 'settings_sessions' }],
+                [{ text: t(lang, 'buttons.back_to_menu'), callback_data: 'main_menu' }]
+            ]
+        };
+        if (isEdit) await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard }).catch(() => { });
+        else await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
+
+    async function showCardBacks(ctx, isEdit = false) {
+        const lang = ctx.from.language_code;
+        const telegramId = String(ctx.from.id);
+        const styles = ['default', 'red', 'blue', 'green', 'purple', 'gold'];
+        try {
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId } });
+            const currentStyle = user ? user.card_back_style : 'default';
+            const text = t(lang, 'settings.card_back_title') + '\n' + t(lang, 'settings.card_back_current', { style: currentStyle });
+
+            const keyboard = styles.map(s => ([{ text: (s === currentStyle ? '✅ ' : '') + s.toUpperCase(), callback_data: `set_card_back_${s}` }]));
+            keyboard.push([{ text: t(lang, 'buttons.back_to_settings'), callback_data: 'settings' }]);
+
+            if (isEdit) await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } }).catch(() => { });
+            else await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } });
+        } catch (e) { console.error('[TelegramBot] showCardBacks error:', e); }
+    }
+
+    async function setCardBack(ctx, style) {
+        const lang = ctx.from.language_code;
+        const telegramId = String(ctx.from.id);
+        try {
+            await prisma.user.update({ where: { telegram_id: telegramId }, data: { card_back_style: style } });
+            await ctx.answerCbQuery('✅ ' + style);
+            await showCardBacks(ctx, true);
+        } catch (e) { console.error('[TelegramBot] setCardBack error:', e); ctx.answerCbQuery('Error'); }
+    }
+
+    async function showQuickGameSettings(ctx, isEdit = false) {
+        const lang = ctx.from.language_code;
+        const telegramId = String(ctx.from.id);
+        try {
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId } });
+            if (!user) return ctx.reply(t(lang, 'errors.no_account'));
+
+            const text = t(lang, 'settings.quick_game_title') + '\n\n' +
+                t(lang, 'settings.quick_game_desc') + '\n\n' +
+                t(lang, 'settings.deck_size', { value: user.pref_quick_deck_size }) + '\n' +
+                t(lang, 'settings.max_players', { value: user.pref_quick_max_players }) + '\n' +
+                t(lang, 'settings.game_mode', { value: t(lang, `game_mode_${user.pref_quick_game_mode}`) }) + '\n' +
+                t(lang, 'settings.betting', { value: user.pref_quick_is_betting ? '✅' : '❌' }) + '\n' +
+                (user.pref_quick_is_betting ? t(lang, 'settings.bet_amount', { value: user.pref_quick_bet_amount }) : '');
+
+            const keyboard = [
+                [{ text: t(lang, 'buttons.back_to_settings'), callback_data: 'settings' }]
+            ];
+
+            if (isEdit) await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } }).catch(() => { });
+            else await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } });
+        } catch (e) { console.error('[TelegramBot] showQuickGameSettings error:', e); }
+    }
+
+    async function showSessions(ctx, isEdit = false) {
+        const lang = ctx.from.language_code;
+        const telegramId = String(ctx.from.id);
+        try {
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId }, include: { active_sessions: true } });
+            if (!user) return ctx.reply(t(lang, 'errors.no_account'));
+
+            let text = t(lang, 'settings.sessions_title') + '\n\n' + t(lang, 'settings.sessions_desc') + '\n\n';
+            text += t(lang, 'settings.sessions_current') + '\n\n';
+
+            const otherSessions = user.active_sessions.filter(s => !s.id.startsWith('tg_')); // Simple heuristic
+            if (otherSessions.length > 0) {
+                text += otherSessions.map(s => {
+                    return t(lang, 'settings.sessions_item', {
+                        os: s.device_info || 'Unknown',
+                        browser: '',
+                        ip: s.ip_address || '?',
+                        location: s.location || '?',
+                        active: new Date(s.last_active).toLocaleString(lang)
+                    });
+                }).join('\n\n');
+            } else {
+                text += "_No other active sessions_";
+            }
+
+            const keyboard = [];
+            if (otherSessions.length > 0) keyboard.push([{ text: t(lang, 'settings.btn_terminate_all'), callback_data: 'terminate_all_sessions' }]);
+            keyboard.push([{ text: t(lang, 'buttons.back_to_settings'), callback_data: 'settings' }]);
+
+            if (isEdit) await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } }).catch(() => { });
+            else await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } });
+        } catch (e) { console.error('[TelegramBot] showSessions error:', e); }
+    }
+
+    async function terminateAllSessions(ctx) {
+        const lang = ctx.from.language_code;
+        const telegramId = String(ctx.from.id);
+        try {
+            const user = await prisma.user.findFirst({ where: { telegram_id: telegramId } });
+            await prisma.activeSession.deleteMany({
+                where: {
+                    user_id: user.id,
+                    NOT: { id: { startsWith: 'tg_' } }
+                }
+            });
+            await ctx.answerCbQuery(t(lang, 'settings.terminated_all'), { show_alert: true });
+            await showSessions(ctx, true);
+        } catch (e) { console.error('[TelegramBot] terminateAllSessions error:', e); ctx.answerCbQuery('Error'); }
+    }
+
     bot.command('donate', askForDonation);
     bot.action('donate_start', async (ctx) => {
         await ctx.answerCbQuery();

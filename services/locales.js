@@ -7,11 +7,15 @@ const locales = {
 
         btn_friends: "👥 Друзі",
         btn_leaderboard: "🏆 Топ гравців",
+        btn_achievements: "🏅 Досягнення",
+        btn_daily_bonus: "💰 Щоденний бонус",
+        btn_settings: "⚙️ Налаштування",
         btn_donate: "✨ Пожертвувати (Stars)",
 
         buttons: {
             cancel: "🔙 Скасувати",
-            back_to_menu: "⬅️ Головне меню"
+            back_to_menu: "⬅️ Головне меню",
+            back_to_settings: "⬅️ До налаштувань"
         },
 
         profile: {
@@ -140,6 +144,43 @@ const locales = {
             admin_unban_content: "Ваш акаунт було розблоковано адміністратором.",
             admin_session_terminated_title: "🚪 Сесію завершено",
             admin_session_terminated_content: "Вашу сесію було примусово завершено адміністратором."
+        },
+        achievements: {
+            title: "🏅 **Твої досягнення**\n\nВідкрито: **{count}** з **{total}**",
+            empty: "Ви ще не відкрили жодного досягнення. Грайте більше!",
+            list_item: "{icon} **{name}**\n_{desc}_",
+            rarity_common: "⚪️", rarity_uncommon: "🟢", rarity_rare: "🔵", rarity_epic: "🟣", rarity_legendary: "🟠"
+        },
+        daily_bonus: {
+            available: "💰 **Щоденний бонус доступний!**\n\nВи можете отримати **{amount}** монет.",
+            claimed: "✅ Ви вже отримали бонус сьогодні. Приходьте завтра!",
+            success: "🎁 **Вітаємо!**\nВи отримали **{amount}** монет!",
+            btn_claim: "🎁 Отримати бонус"
+        },
+        settings: {
+            title: "⚙️ **Налаштування**",
+            btn_card_back: "🃏 Стиль карт",
+            btn_quick_game: "⚡️ Швидка гра",
+            btn_sessions: "🛡 Сесії",
+            btn_security: "🔑 Безпека",
+
+            card_back_title: "🃏 **Оберіть стиль карт**",
+            card_back_current: "Поточний: **{style}**",
+
+            quick_game_title: "⚡️ **Налаштування швидкої гри**",
+            quick_game_desc: "Ці налаштування будуть використовуватися при натисканні 'Швидка гра' у веб-додатку.",
+            deck_size: "🎴 Карт у колоді: **{value}**",
+            max_players: "👥 Гравців: **{value}**",
+            game_mode: "🎮 Режим: **{value}**",
+            betting: "💰 Ставки: **{value}**",
+            bet_amount: "💵 Сума ставки: **{value}**",
+
+            sessions_title: "🛡 **Активні сесії**",
+            sessions_desc: "Список пристроїв, на яких ви авторизовані.",
+            sessions_current: "📌 Ваша поточна сесія (ТГ)",
+            sessions_item: "📱 {os}, {browser}\n📍 {ip} ({location})\n🕒 {active}",
+            btn_terminate_all: "🚫 Завершити всі інші сесії",
+            terminated_all: "✅ Всі інші сесії завершено."
         }
     },
 
@@ -151,11 +192,15 @@ const locales = {
 
         btn_friends: "👥 Друзья",
         btn_leaderboard: "🏆 Топ игроков",
+        btn_achievements: "🏅 Достижения",
+        btn_daily_bonus: "💰 Ежедневный бонус",
+        btn_settings: "⚙️ Настройки",
         btn_donate: "✨ Пожертвовать (Stars)",
 
         buttons: {
             cancel: "🔙 Отмена",
-            back_to_menu: "⬅️ Главное меню"
+            back_to_menu: "⬅️ Главное меню",
+            back_to_settings: "⬅️ К настройкам"
         },
 
         profile: {
@@ -284,6 +329,43 @@ const locales = {
             admin_unban_content: "Ваш аккаунт был разблокирован администратором.",
             admin_session_terminated_title: "🚪 Сессия завершена",
             admin_session_terminated_content: "Ваша сессия была принудительно завершена администратором."
+        },
+        achievements: {
+            title: "🏅 **Твои достижения**\n\nОткрыто: **{count}** из **{total}**",
+            empty: "Вы еще не открыли ни одного достижения. Играйте больше!",
+            list_item: "{icon} **{name}**\n_{desc}_",
+            rarity_common: "⚪️", rarity_uncommon: "🟢", rarity_rare: "🔵", rarity_epic: "🟣", rarity_legendary: "🟠"
+        },
+        daily_bonus: {
+            available: "💰 **Ежедневный бонус доступен!**\n\nВы можете получить **{amount}** монет.",
+            claimed: "✅ Вы уже получили бонус сегодня. Приходите завтра!",
+            success: "🎁 **Поздравляем!**\nВы получили **{amount}** монет!",
+            btn_claim: "🎁 Получить бонус"
+        },
+        settings: {
+            title: "⚙️ **Настройки**",
+            btn_card_back: "🃏 Стиль карт",
+            btn_quick_game: "⚡️ Быстрая игра",
+            btn_sessions: "🛡 Сессии",
+            btn_security: "🔑 Безопасность",
+
+            card_back_title: "🃏 **Выберите стиль карт**",
+            card_back_current: "Текущий: **{style}**",
+
+            quick_game_title: "⚡️ **Настройки быстрой игры**",
+            quick_game_desc: "Эти настройки будут использоваться при нажатии 'Быстрая игра' в веб-приложении.",
+            deck_size: "🎴 Карт в колоде: **{value}**",
+            max_players: "👥 Игроков: **{value}**",
+            game_mode: "🎮 Режим: **{value}**",
+            betting: "💰 Ставки: **{value}**",
+            bet_amount: "💵 Сумма ставки: **{value}**",
+
+            sessions_title: "🛡 **Активные сессии**",
+            sessions_desc: "Список устройств, на которых вы авторизованы.",
+            sessions_current: "📌 Ваша текущая сессия (ТГ)",
+            sessions_item: "📱 {os}, {browser}\n📍 {ip} ({location})\n🕒 {active}",
+            btn_terminate_all: "🚫 Завершить все остальные сессии",
+            terminated_all: "✅ Все остальные сессии завершены."
         }
     },
 
@@ -295,11 +377,15 @@ const locales = {
 
         btn_friends: "👥 Friends",
         btn_leaderboard: "🏆 Leaderboard",
+        btn_achievements: "🏅 Achievements",
+        btn_daily_bonus: "💰 Daily Bonus",
+        btn_settings: "⚙️ Settings",
         btn_donate: "✨ Donate (Stars)",
 
         buttons: {
             cancel: "🔙 Cancel",
-            back_to_menu: "⬅️ Main Menu"
+            back_to_menu: "⬅️ Main Menu",
+            back_to_settings: "⬅️ To Settings"
         },
 
         profile: {
@@ -428,6 +514,43 @@ const locales = {
             admin_unban_content: "Your account has been restored by an administrator.",
             admin_session_terminated_title: "🚪 Session Terminated",
             admin_session_terminated_content: "Your session was forcibly terminated by an administrator."
+        },
+        achievements: {
+            title: "🏅 **Your Achievements**\n\nUnlocked: **{count}** of **{total}**",
+            empty: "You haven't unlocked any achievements yet. Play more!",
+            list_item: "{icon} **{name}**\n_{desc}_",
+            rarity_common: "⚪️", rarity_uncommon: "🟢", rarity_rare: "🔵", rarity_epic: "🟣", rarity_legendary: "🟠"
+        },
+        daily_bonus: {
+            available: "💰 **Daily bonus available!**\n\nYou can claim **{amount}** coins.",
+            claimed: "✅ You've already claimed your bonus today. Come back tomorrow!",
+            success: "🎁 **Congratulations!**\nYou received **{amount}** coins!",
+            btn_claim: "🎁 Claim Bonus"
+        },
+        settings: {
+            title: "⚙️ **Settings**",
+            btn_card_back: "🃏 Card Backs",
+            btn_quick_game: "⚡️ Quick Game",
+            btn_sessions: "🛡 Sessions",
+            btn_security: "🔑 Security",
+
+            card_back_title: "🃏 **Choose Card Back**",
+            card_back_current: "Current: **{style}**",
+
+            quick_game_title: "⚡️ **Quick Game Settings**",
+            quick_game_desc: "These settings will be used when you click 'Quick Play' in the web app.",
+            deck_size: "🎴 Deck size: **{value}**",
+            max_players: "👥 Players: **{value}**",
+            game_mode: "🎮 Mode: **{value}**",
+            betting: "💰 Betting: **{value}**",
+            bet_amount: "💵 Bet amount: **{value}**",
+
+            sessions_title: "🛡 **Active Sessions**",
+            sessions_desc: "List of devices where you are logged in.",
+            sessions_current: "📌 Your current session (TG)",
+            sessions_item: "📱 {os}, {browser}\n📍 {ip} ({location})\n🕒 {active}",
+            btn_terminate_all: "🚫 Terminate other sessions",
+            terminated_all: "✅ All other sessions terminated."
         }
     }
 };
