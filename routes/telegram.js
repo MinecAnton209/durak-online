@@ -1,26 +1,29 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const db = require('../db');
+const prisma = require('../db/prisma');
 const { authMiddleware, signToken, setAuthCookie, clearAuthCookie } = require('../middlewares/jwtAuth');
-
-const util = require('util');
-const dbGet = db.get.constructor.name === 'AsyncFunction' ? db.get : util.promisify(db.get.bind(db));
-const dbRun = db.run.constructor.name === 'AsyncFunction' ? db.run : util.promisify(db.run.bind(db));
 
 async function createSession(req, userId) {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
     const ua = req.headers['user-agent'] || 'Unknown';
 
     // Check if there's already an active session from this device/IP
-    const existingSession = await dbGet(
-        'SELECT id FROM active_sessions WHERE user_id = ? AND ip_address = ? AND device_info = ? ORDER BY created_at DESC LIMIT 1',
-        [userId, ip, ua]
-    );
+    const existingSession = await prisma.activeSession.findFirst({
+        where: {
+            user_id: userId,
+            ip_address: ip,
+            device_info: ua
+        },
+        orderBy: { created_at: 'desc' }
+    });
 
     if (existingSession) {
         // Update last_active timestamp
-        await dbRun('UPDATE active_sessions SET last_active = ? WHERE id = ?', [new Date().toISOString(), existingSession.id]);
+        await prisma.activeSession.update({
+            where: { id: existingSession.id },
+            data: { last_active: new Date() }
+        });
         return existingSession.id;
     }
 
@@ -35,11 +38,17 @@ async function createSession(req, userId) {
         }
     } catch (e) { }
 
-    await dbRun('INSERT INTO active_sessions (id, user_id, device_info, ip_address, location) VALUES (?, ?, ?, ?, ?)',
-        [sessionId, userId, ua, ip, location]);
+    await prisma.activeSession.create({
+        data: {
+            id: sessionId,
+            user_id: userId,
+            device_info: ua,
+            ip_address: ip,
+            location: location
+        }
+    });
     return sessionId;
 }
-
 
 function verifyTelegramWebAppData(telegramInitData) {
     const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -60,7 +69,6 @@ function verifyTelegramWebAppData(telegramInitData) {
     return hmac === hash;
 }
 
-
 router.post('/auth', async (req, res) => {
     const { initData, deviceId } = req.body;
     if (!initData) return res.status(400).json({ message: "initData is required" });
@@ -78,36 +86,41 @@ router.post('/auth', async (req, res) => {
         const tgUser = JSON.parse(urlParams.get('user'));
         const telegramId = tgUser.id.toString();
 
-        let user = await dbGet('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+        let user = await prisma.user.findUnique({ where: { telegram_id: telegramId } });
 
         if (!user) {
             const baseUsername = tgUser.username || `${tgUser.first_name || 'user'}${tgUser.id.toString().slice(-4)}`;
             let finalUsername = baseUsername;
             let attempts = 0;
 
-            while (await dbGet('SELECT id FROM users WHERE username = ?', [finalUsername])) {
+            while (await prisma.user.findUnique({ where: { username: finalUsername } })) {
                 attempts++;
                 finalUsername = `${baseUsername}_${attempts}`;
             }
 
-            await dbRun(
-                'INSERT INTO users (username, password, telegram_id, device_id) VALUES (?, ?, ?, ?)',
-                [finalUsername, 'telegram_user', telegramId, deviceId || null]
-            );
-
-            user = await dbGet('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+            user = await prisma.user.create({
+                data: {
+                    username: finalUsername,
+                    password: 'telegram_user',
+                    telegram_id: telegramId,
+                    device_id: deviceId || null
+                }
+            });
         } else {
             if (deviceId) {
-                await dbRun('UPDATE users SET device_id = ? WHERE id = ?', [deviceId, user.id]);
+                user = await prisma.user.update({
+                    where: { id: user.id },
+                    data: { device_id: deviceId }
+                });
             }
         }
 
         if (user.is_banned) {
             if (user.ban_until && new Date(user.ban_until) < new Date()) {
-                await dbRun('UPDATE users SET is_banned = false, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
-                user.is_banned = false;
-                user.ban_until = null;
-                user.ban_reason = null;
+                user = await prisma.user.update({
+                    where: { id: user.id },
+                    data: { is_banned: false, ban_until: null, ban_reason: null }
+                });
             } else {
                 return res.status(403).json({
                     i18nKey: user.ban_until ? 'error_account_temp_banned_with_reason' : 'error_account_banned_with_reason',
@@ -121,7 +134,6 @@ router.post('/auth', async (req, res) => {
 
         const sessionId = await createSession(req, user.id);
 
-        delete user.password;
         const jwtToken = signToken({
             id: user.id,
             username: user.username,
@@ -130,14 +142,15 @@ router.post('/auth', async (req, res) => {
         });
         setAuthCookie(req, res, jwtToken);
 
-        res.json({ user });
+        const responseUser = { ...user };
+        delete responseUser.password;
+        res.json({ user: responseUser });
 
     } catch (e) {
         console.error("Telegram auth error:", e);
         res.status(500).json({ message: "Internal Server Error" });
     }
 });
-
 
 router.post('/link', authMiddleware, async (req, res) => {
     if (!req.user) return res.status(401).json({ i18nKey: 'error_unauthorized' });
@@ -159,7 +172,7 @@ router.post('/link', authMiddleware, async (req, res) => {
         const telegramId = tgUser.id.toString();
         const currentUserId = req.user.id;
 
-        const existingUser = await dbGet('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+        const existingUser = await prisma.user.findUnique({ where: { telegram_id: telegramId } });
 
         if (existingUser) {
             if (existingUser.id === currentUserId) {
@@ -173,18 +186,21 @@ router.post('/link', authMiddleware, async (req, res) => {
 
             if (isDummy) {
                 console.log(`Deleting dummy account ID ${existingUser.id} to free Telegram ID ${telegramId}`);
-                await dbRun('DELETE FROM users WHERE id = ?', [existingUser.id]);
+                await prisma.user.delete({ where: { id: existingUser.id } });
             } else {
                 return res.status(409).json({ message: "This Telegram is already linked to another active account." });
             }
         }
 
-        await dbRun('UPDATE users SET telegram_id = ? WHERE id = ?', [telegramId, currentUserId]);
+        const updatedUser = await prisma.user.update({
+            where: { id: currentUserId },
+            data: { telegram_id: telegramId }
+        });
 
-        const updatedUser = await dbGet('SELECT * FROM users WHERE id = ?', [currentUserId]);
-        delete updatedUser.password;
+        const responseUser = { ...updatedUser };
+        delete responseUser.password;
 
-        res.json({ success: true, user: updatedUser });
+        res.json({ success: true, user: responseUser });
 
     } catch (e) {
         console.error("Telegram link error:", e);
@@ -192,30 +208,32 @@ router.post('/link', authMiddleware, async (req, res) => {
     }
 });
 
-
 router.post('/unlink', authMiddleware, async (req, res) => {
     if (!req.user) return res.status(401).json({ i18nKey: 'error_unauthorized' });
 
     try {
-        const user = await dbGet('SELECT * FROM users WHERE id = ?', [req.user.id]);
+        const user = await prisma.user.findUnique({ where: { id: req.user.id } });
         if (!user) return res.status(404).json({ message: "User not found" });
 
         const isTelegramOnly = user.password === 'telegram_user' || user.password === 'telegram_user_widget';
 
         if (isTelegramOnly) {
             console.log(`Deleting account ${user.username} because Telegram unlinked and no password.`);
-            await dbRun('DELETE FROM users WHERE id = ?', [user.id]);
+            await prisma.user.delete({ where: { id: user.id } });
 
             clearAuthCookie(req, res);
 
             return res.json({ success: true, deleted: true, message: "Account deleted (no password)" });
         } else {
-            await dbRun('UPDATE users SET telegram_id = NULL WHERE id = ?', [user.id]);
+            const updatedUser = await prisma.user.update({
+                where: { id: user.id },
+                data: { telegram_id: null }
+            });
 
-            const updatedUser = await dbGet('SELECT * FROM users WHERE id = ?', [user.id]);
-            delete updatedUser.password;
+            const responseUser = { ...updatedUser };
+            delete responseUser.password;
 
-            res.json({ success: true, user: updatedUser, deleted: false });
+            res.json({ success: true, user: responseUser, deleted: false });
         }
 
     } catch (e) {
@@ -223,7 +241,6 @@ router.post('/unlink', authMiddleware, async (req, res) => {
         res.status(500).json({ message: "Database error" });
     }
 });
-
 
 router.post('/widget-auth', async (req, res) => {
     const authData = req.body;
@@ -248,35 +265,40 @@ router.post('/widget-auth', async (req, res) => {
 
     try {
         const telegramId = authData.id.toString();
-        let user = await dbGet('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+        let user = await prisma.user.findUnique({ where: { telegram_id: telegramId } });
 
         if (!user) {
             const baseUsername = authData.username || `${authData.first_name || 'user'}${authData.id.toString().slice(-4)}`;
             let finalUsername = baseUsername;
             let attempts = 0;
-            while (await dbGet('SELECT id FROM users WHERE username = ?', [finalUsername])) {
+            while (await prisma.user.findUnique({ where: { username: finalUsername } })) {
                 attempts++;
                 finalUsername = `${baseUsername}_${attempts}`;
             }
 
-            await dbRun(
-                'INSERT INTO users (username, password, telegram_id, device_id) VALUES (?, ?, ?, ?)',
-                [finalUsername, 'telegram_user_widget', telegramId, deviceId || null]
-            );
-
-            user = await dbGet('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+            user = await prisma.user.create({
+                data: {
+                    username: finalUsername,
+                    password: 'telegram_user_widget',
+                    telegram_id: telegramId,
+                    device_id: deviceId || null
+                }
+            });
         } else {
             if (deviceId) {
-                await dbRun('UPDATE users SET device_id = ? WHERE id = ?', [deviceId, user.id]);
+                user = await prisma.user.update({
+                    where: { id: user.id },
+                    data: { device_id: deviceId }
+                });
             }
         }
 
         if (user.is_banned) {
             if (user.ban_until && new Date(user.ban_until) < new Date()) {
-                await dbRun('UPDATE users SET is_banned = false, ban_until = NULL, ban_reason = NULL WHERE id = ?', [user.id]);
-                user.is_banned = false;
-                user.ban_until = null;
-                user.ban_reason = null;
+                user = await prisma.user.update({
+                    where: { id: user.id },
+                    data: { is_banned: false, ban_until: null, ban_reason: null }
+                });
             } else {
                 return res.status(403).json({
                     i18nKey: user.ban_until ? 'error_account_temp_banned_with_reason' : 'error_account_banned_with_reason',
@@ -290,7 +312,6 @@ router.post('/widget-auth', async (req, res) => {
 
         const sessionId = await createSession(req, user.id);
 
-        delete user.password;
         const jwtToken = signToken({
             id: user.id,
             username: user.username,
@@ -299,7 +320,9 @@ router.post('/widget-auth', async (req, res) => {
         });
         setAuthCookie(req, res, jwtToken);
 
-        res.json({ user });
+        const responseUser = { ...user };
+        delete responseUser.password;
+        res.json({ user: responseUser });
 
     } catch (e) {
         console.error("Widget auth error:", e);

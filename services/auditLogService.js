@@ -1,6 +1,6 @@
-﻿const db = require('../db');
+﻿const prisma = require('../db/prisma');
 
-function logAdminAction(logData) {
+async function logAdminAction(logData) {
     const {
         adminId,
         adminUsername,
@@ -15,22 +15,21 @@ function logAdminAction(logData) {
         return;
     }
 
-    const sql = `
-        INSERT INTO admin_audit_log 
-        (admin_id, admin_username, action_type, target_user_id, target_username, reason) 
-        VALUES (?, ?, ?, ?, ?, ?)
-    `;
-
-    const params = [adminId, adminUsername, actionType, targetUserId, targetUsername, reason];
-
-    db.run(sql, params, (err) => {
-        if (err) {
-            console.error(`[AuditLog] Error recording action '${actionType}' in audit log:`, err.message);
-        } else {
-            console.log(`[AuditLog] Action '${actionType}' by admin '${adminUsername}' successfully recorded.`);
-        }
-    });
-
+    try {
+        await prisma.adminAuditLog.create({
+            data: {
+                admin_id: adminId,
+                admin_username: adminUsername,
+                action_type: actionType,
+                target_user_id: targetUserId,
+                target_username: targetUsername,
+                reason: reason
+            }
+        });
+        console.log(`[AuditLog] Action '${actionType}' by admin '${adminUsername}' successfully recorded.`);
+    } catch (err) {
+        console.error(`[AuditLog] Error recording action '${actionType}' in audit log:`, err.message);
+    }
 }
 
 module.exports = {

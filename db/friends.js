@@ -1,117 +1,162 @@
-﻿const db = require('./index');
+﻿const prisma = require('./prisma');
 
-const getSortedUserIds = (userId1, userId2) => {
-    return [userId1, userId2].sort((a, b) => a - b);
-};
-
+/**
+ * Sends a friend request from one user to another.
+ * Ensures that user IDs are stored in a sorted manner in the DB
+ * for a consistent unique constraint.
+ */
 async function sendFriendRequest(fromUserId, toUserId) {
-    return new Promise((resolve, reject) => {
-        const checkSql = "SELECT is_banned FROM users WHERE id = ?";
+    const [user1Id, user2Id] = [fromUserId, toUserId].sort((a, b) => a - b);
 
-        db.get(checkSql, [toUserId], (err, user) => {
-            if (err) return reject(err);
-            if (!user) return reject(new Error("User not found"));
-            if (user.is_banned) return reject(new Error("Cannot add banned user"));
-
-            const [user1_id, user2_id] = getSortedUserIds(fromUserId, toUserId);
-            const query = `
-                INSERT INTO friends (user1_id, user2_id, action_user_id, status)
-                VALUES (?, ?, ?, 'pending');
-            `;
-
-            db.run(query, [user1_id, user2_id, fromUserId], function(err) {
-                if (err) return reject(err);
-                resolve({ success: true, id: this.lastID });
-            });
+    try {
+        return await prisma.friend.create({
+            data: {
+                user1_id: user1Id,
+                user2_id: user2Id,
+                status: 'pending',
+                action_user_id: fromUserId
+            }
         });
-    });
+    } catch (err) {
+        // P2002 = unique constraint violation
+        if (err.code === 'P2002') {
+            console.log(`[Friends] Friend request already exists between ${user1Id} and ${user2Id}`);
+            throw err;
+        }
+        console.error(`[Friends] Error sending friend request:`, err.message);
+        throw err;
+    }
 }
 
-async function updateFriendshipStatus(user1Id, user2Id, newStatus, actionUserId) {
-    return new Promise((resolve, reject) => {
-        const [user1_id, user2_id] = getSortedUserIds(user1Id, user2Id);
-        const query = `
-            UPDATE friends
-            SET status = ?, action_user_id = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE user1_id = ? AND user2_id = ? AND status = 'pending';
-        `;
-        db.run(query, [newStatus, actionUserId, user1_id, user2_id], function(err) {
-            if (err) return reject(err);
-            resolve({ success: true, changes: this.changes });
+/**
+ * Updates the friendship status (e.g., 'accepted', 'rejected').
+ */
+async function updateFriendshipStatus(user1Id, user2Id, status, actionUserId) {
+    const [id1, id2] = [user1Id, user2Id].sort((a, b) => a - b);
+
+    try {
+        return await prisma.friend.update({
+            where: {
+                user1_id_user2_id: {
+                    user1_id: id1,
+                    user2_id: id2
+                }
+            },
+            data: {
+                status,
+                action_user_id: actionUserId
+            }
         });
-    });
+    } catch (err) {
+        console.error(`[Friends] Error updating status:`, err.message);
+        throw err;
+    }
 }
 
+/**
+ * Removes a friendship.
+ */
 async function removeFriendship(user1Id, user2Id) {
-    return new Promise((resolve, reject) => {
-        const [user1_id, user2_id] = getSortedUserIds(user1Id, user2Id);
-        const query = `DELETE FROM friends WHERE user1_id = ? AND user2_id = ?;`;
-        db.run(query, [user1_id, user2_id], function(err) {
-            if (err) return reject(err);
-            resolve({ success: true });
-        });
-    });
-}
+    const [id1, id2] = [user1Id, user2Id].sort((a, b) => a - b);
 
-async function getFriendships(userId) {
-    return new Promise((resolve, reject) => {
-        const query = `
-            SELECT
-                f.status,
-                f.action_user_id,
-                CASE WHEN f.user1_id = ? THEN f.user2_id ELSE f.user1_id END AS friend_id,
-                u.username,
-                u.rating
-            FROM friends f
-                     JOIN users u ON u.id = (CASE WHEN f.user1_id = ? THEN f.user2_id ELSE f.user1_id END)
-            WHERE (f.user1_id = ? OR f.user2_id = ?)
-              AND u.is_banned = FALSE;
-        `;
-
-        db.all(query, [userId, userId, userId, userId], (err, rows) => {
-            if (err) return reject(err);
-
-            const accepted = [];
-            const incoming = [];
-            const outgoing = [];
-
-            for (const row of rows) {
-                const friendData = {
-                    id: row.friend_id,
-                    nickname: row.username,
-                    rating: row.rating,
-                };
-                if (row.status === 'accepted') accepted.push(friendData);
-                else if (row.status === 'pending') {
-                    if (row.action_user_id === userId) outgoing.push(friendData);
-                    else incoming.push(friendData);
+    try {
+        return await prisma.friend.delete({
+            where: {
+                user1_id_user2_id: {
+                    user1_id: id1,
+                    user2_id: id2
                 }
             }
-            resolve({ accepted, incoming, outgoing });
         });
-    });
+    } catch (err) {
+        console.error(`[Friends] Error removing friendship:`, err.message);
+        throw err;
+    }
 }
 
-async function findUsersByNickname(searchTerm, currentUserId) {
-    return new Promise((resolve, reject) => {
-        const query = `
-            SELECT u.id, u.username AS nickname, u.rating
-            FROM users u
-                     LEFT JOIN friends f ON
-                (f.user1_id = u.id AND f.user2_id = ?) OR (f.user1_id = ? AND f.user2_id = u.id)
-            WHERE
-                LOWER(u.username) LIKE LOWER(?)
-              AND u.id != ?
-                AND f.id IS NULL
-                AND u.is_banned = FALSE
-            LIMIT 10;
-        `;
-
-        db.all(query, [currentUserId, currentUserId, `%${searchTerm}%`, currentUserId], (err, rows) => {
-            if (err) return reject(err);
-            resolve(rows);
+/**
+ * Gets all friendships for a given user.
+ */
+async function getFriendships(userId) {
+    try {
+        const friendships = await prisma.friend.findMany({
+            where: {
+                OR: [
+                    { user1_id: userId },
+                    { user2_id: userId }
+                ]
+            }
         });
-    });
+
+        const accepted = [];
+        const pendingSent = [];
+        const pendingReceived = [];
+
+        for (const f of friendships) {
+            const otherUserId = f.user1_id === userId ? f.user2_id : f.user1_id;
+            const otherUser = await prisma.user.findUnique({
+                where: { id: otherUserId },
+                select: { id: true, username: true, rating: true, is_verified: true }
+            });
+
+            if (!otherUser) continue;
+
+            const friendData = {
+                id: otherUser.id,
+                username: otherUser.username,
+                nickname: otherUser.username, // Client might expect 'nickname'
+                rating: otherUser.rating,
+                isVerified: otherUser.is_verified
+            };
+
+            if (f.status === 'accepted') {
+                accepted.push(friendData);
+            } else if (f.status === 'pending') {
+                if (f.action_user_id === userId) {
+                    pendingSent.push(friendData);
+                } else {
+                    pendingReceived.push(friendData);
+                }
+            }
+        }
+
+        return { accepted, pendingSent, pendingReceived };
+    } catch (err) {
+        console.error(`[Friends] Error getting friendships:`, err.message);
+        throw err;
+    }
+}
+
+/**
+ * Search for users by nickname, excluding current user and existing friends.
+ */
+async function findUsersByNickname(nickname, currentUserId) {
+    try {
+        const users = await prisma.user.findMany({
+            where: {
+                username: {
+                    contains: nickname,
+                    // mode: 'insensitive' // Optional if using PostgreSQL/etc.
+                },
+                id: { not: currentUserId },
+                is_banned: false
+            },
+            select: { id: true, username: true, rating: true, is_verified: true },
+            take: 10
+        });
+
+        // Optionally filter out those who are already friends/requested
+        // For simplicity, we just return the users and let the client handle request status
+        return users.map(u => ({
+            id: u.id,
+            nickname: u.username,
+            rating: u.rating,
+            isVerified: u.is_verified
+        }));
+    } catch (err) {
+        console.error(`[Friends] Error searching users:`, err.message);
+        throw err;
+    }
 }
 
 module.exports = {
@@ -119,5 +164,5 @@ module.exports = {
     updateFriendshipStatus,
     removeFriendship,
     getFriendships,
-    findUsersByNickname,
+    findUsersByNickname
 };

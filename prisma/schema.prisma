@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      Int       @id @default(autoincrement())
+  username                String    @unique
+  password                String
+  wins                    Int     @default(0)
+  losses                  Int     @default(0)
+  streak_count            Int     @default(0)
+  last_played_date        String?
+  card_back_style         String  @default("default")
+  is_verified             Boolean @default(false)
+  win_streak              Int     @default(0)
+  is_admin                Boolean @default(false)
+  is_banned               Boolean @default(false)
+  ban_reason              String?
+  ban_until               DateTime?
+  is_muted                Boolean @default(false)
+  mute_until              DateTime?
+  rating                  Float   @default(1500.0)
+  rd                      Float   @default(350.0)
+  vol                     Float   @default(0.06)
+  last_game_timestamp     String?
+  telegram_id             String? @unique
+  is_shadow_banned        Boolean @default(false)
+  pref_quick_deck_size    Int     @default(36)
+  pref_quick_max_players  Int     @default(2)
+  pref_quick_game_mode    String  @default("podkidnoy")
+  pref_quick_is_betting   Boolean @default(false)
+  pref_quick_bet_amount   Int     @default(10)
+  created_at              DateTime @default(now())
+
+  // Migrated fields
+  coins                   Int     @default(1000)
+  last_daily_bonus_claim  DateTime?
+  device_id               String?
+
+  // Relations
+  user_achievements       UserAchievement[]
+  game_participants       GameParticipant[]
+  admin_logs              AdminAuditLog[]   @relation("AdminLogs")
+  target_logs             AdminAuditLog[]   @relation("TargetLogs")
+  friends_user1           Friend[]          @relation("FriendUser1")
+  friends_user2           Friend[]          @relation("FriendUser2")
+  friends_action          Friend[]          @relation("FriendAction")
+  push_subscriptions      PushSubscription[]
+  donations               Donation[]
+  active_sessions         ActiveSession[]
+  devices                 UserDevice[]
+  inbox_messages          InboxMessage[]
+}
+
+model ChatFilter {
+  id         Int      @id @default(autoincrement())
+  type       String   // 'word' or 'regex'
+  content    String
+  is_enabled Boolean  @default(true)
+  created_at DateTime @default(now())
+}
+
+model Achievement {
+  code            String             @id
+  name_key        String
+  description_key String
+  rarity          String             @default("common")
+  icon_url        String?
+  users           UserAchievement[]
+}
+
+model UserAchievement {
+  user_id          Int
+  achievement_code String
+  unlocked_at      DateTime @default(now())
+
+  user             User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  achievement      Achievement @relation(fields: [achievement_code], references: [code], onDelete: Cascade)
+
+  @@id([user_id, achievement_code])
+}
+
+model BannedDevice {
+  id         Int       @id @default(autoincrement())
+  device_id  String    @unique
+  reason     String?
+  admin_id   Int?
+  ban_until  DateTime?
+  created_at DateTime  @default(now())
+}
+
+model ChatMessage {
+  id         Int      @id @default(autoincrement())
+  user_id    Int?
+  username   String?
+  content    String?
+  is_deleted Boolean  @default(false)
+  created_at DateTime @default(now())
+}
+
+model Game {
+  id               String            @id
+  start_time       String
+  end_time         String?
+  duration_seconds Int?
+  game_type        String?
+  winner_user_id   Int?
+  loser_user_id    Int?
+  host_user_id     Int?
+  is_bot_game      Boolean           @default(false)
+  
+  // Migrated fields
+  status           String            @default("waiting")
+  lobby_type       String            @default("public")
+  invite_code      String?           @unique
+  max_players      Int               @default(2)
+  game_settings    String?
+
+  participants     GameParticipant[]
+}
+
+model GameParticipant {
+  game_id           String
+  user_id           Int
+  is_bot            Boolean @default(false)
+  outcome           String?
+  cards_at_end      Int?
+  is_first_attacker Boolean @default(false)
+  cards_taken_total Int     @default(0)
+
+  game              Game    @relation(fields: [game_id], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([game_id, user_id])
+}
+
+model SystemStatsDaily {
+  date              String @id
+  new_registrations Int    @default(0)
+  games_played      Int    @default(0)
+}
+
+model AdminAuditLog {
+  id              Int      @id @default(autoincrement())
+  timestamp       DateTime @default(now())
+  admin_id        Int
+  admin_username  String
+  action_type     String
+  target_user_id  Int?
+  target_username String?
+  reason          String?
+
+  admin           User     @relation("AdminLogs", fields: [admin_id], references: [id], onDelete: Cascade)
+  target          User?    @relation("TargetLogs", fields: [target_user_id], references: [id], onDelete: SetNull)
+}
+
+model Friend {
+  id             Int      @id @default(autoincrement())
+  user1_id       Int
+  user2_id       Int
+  action_user_id Int
+  status         String   @default("pending")
+  created_at     DateTime @default(now())
+  updated_at     DateTime @default(now())
+
+  user1          User     @relation("FriendUser1", fields: [user1_id], references: [id], onDelete: Cascade)
+  user2          User     @relation("FriendUser2", fields: [user2_id], references: [id], onDelete: Cascade)
+  action_user    User     @relation("FriendAction", fields: [action_user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user1_id, user2_id])
+}
+
+model PushSubscription {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  endpoint   String   @unique
+  keys       String
+  updated_at DateTime @default(now())
+  created_at DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model Donation {
+  id                         Int      @id @default(autoincrement())
+  user_id                    Int?
+  telegram_payment_charge_id String?
+  amount                     Int?
+  created_at                 DateTime @default(now())
+
+  user                       User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+}
+
+model ActiveSession {
+  id          String   @id
+  user_id     Int
+  device_info String?
+  ip_address  String?
+  location    String?
+  last_active DateTime @default(now())
+  created_at  DateTime @default(now())
+
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model KnownDevice {
+  id               String       @id
+  user_agent       String?
+  parsed_os        String?
+  parsed_browser   String?
+  device_model     String?
+  platform_version String?
+  is_mobile        Boolean      @default(false)
+  first_seen       DateTime     @default(now())
+  last_seen        DateTime     @default(now())
+  login_count      Int          @default(1)
+
+  users            UserDevice[]
+}
+
+model UserDevice {
+  user_id   Int
+  device_id String
+  last_used DateTime @default(now())
+
+  user      User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  device    KnownDevice @relation(fields: [device_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, device_id])
+}
+
+model InboxMessage {
+  id                  Int      @id @default(autoincrement())
+  user_id             Int
+  type                String   @default("system")
+  title_key           String?
+  content_key         String
+  content_params      String?
+  is_read             Boolean  @default(false)
+  created_at          DateTime @default(now())
+  telegram_message_id Int?
+
+  user                User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}

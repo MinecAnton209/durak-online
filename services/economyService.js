@@ -1,14 +1,14 @@
-﻿const db = require('../db');
-const util = require('util');
-
-const dbGet = util.promisify(db.get.bind(db));
-const dbRun = util.promisify(db.run.bind(db));
+﻿const util = require('util');
+const prisma = require('../db/prisma');
 
 const DAILY_BONUS_AMOUNT = 200;
 
 async function checkAndAwardDailyBonus(userId, io, userSocketId) {
     try {
-        const user = await dbGet('SELECT last_daily_bonus_claim, coins FROM users WHERE id = ?', [userId]);
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { last_daily_bonus_claim: true, coins: true }
+        });
         if (!user) return;
 
         const todayStr = new Date().toISOString().slice(0, 10);
@@ -26,7 +26,10 @@ async function checkAndAwardDailyBonus(userId, io, userSocketId) {
         const currentBalance = parseInt(user.coins || 0, 10);
         const newBalance = currentBalance + DAILY_BONUS_AMOUNT;
 
-        await dbRun('UPDATE users SET coins = ?, last_daily_bonus_claim = ? WHERE id = ?', [newBalance, todayStr, userId]);
+        await prisma.user.update({
+            where: { id: userId },
+            data: { coins: newBalance, last_daily_bonus_claim: new Date() }
+        });
 
         console.log(`[Economy] Daily bonus awarded to user ${userId}. New balance: ${newBalance}`);
 

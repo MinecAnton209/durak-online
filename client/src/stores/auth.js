@@ -33,7 +33,7 @@ export const useAuthStore = defineStore('auth', () => {
         }
       }
     } catch (e) {
-      console.error('Ошибка проверки сессии:', e);
+      console.error('Session check error:', e);
     } finally {
       isAuthChecking.value = false;
     }
