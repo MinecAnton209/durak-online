@@ -5,7 +5,7 @@ const MIN_RD = 50;
 
 const settings = {
     tau: 0.5,
-    rating: 1500,
+    rating: 0,
     rd: 150,
     vol: 0.1
 };

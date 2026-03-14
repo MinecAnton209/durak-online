@@ -180,7 +180,7 @@ router.post('/link', authMiddleware, async (req, res) => {
             }
 
             const totalGames = (existingUser.wins || 0) + (existingUser.losses || 0);
-            const isLowRank = (existingUser.rating || 1500) < 1550;
+            const isLowRank = (existingUser.rating || 0) < 100;
             const isDummy = totalGames < 5 && isLowRank &&
                 (existingUser.password === 'telegram_user' || existingUser.password === 'telegram_user_widget');
 

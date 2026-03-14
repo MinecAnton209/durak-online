@@ -358,7 +358,7 @@ module.exports = function registerLobbyHandlers(io, socket, sharedContext) {
             gameStats: { cardsTaken: 0, successfulDefenses: 0, cardsBeatenInDefense: 0 },
             afkStrikes: 0,
             isVerified: true,
-            rating: 1500
+            rating: 0
         };
         game.playerOrder.push(botId);
 

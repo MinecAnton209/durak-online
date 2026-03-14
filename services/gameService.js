@@ -22,7 +22,7 @@ function addPlayerToGame(socket, game, playerName) {
         isGuest: !sessionUser,
         cardBackStyle: sessionUser ? sessionUser.card_back_style : 'default',
         streak: sessionUser ? sessionUser.streak : 0,
-        rating: sessionUser ? Math.round(sessionUser.rating) : 1500,
+        rating: sessionUser ? Math.round(sessionUser.rating) : 0,
         isVerified: sessionUser ? sessionUser.isVerified : false,
         is_muted: sessionUser ? sessionUser.is_muted : false,
         cards: [],

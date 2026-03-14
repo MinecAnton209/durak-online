@@ -16,7 +16,7 @@ CREATE TABLE "User" (
     "ban_until" TIMESTAMP(3),
     "is_muted" BOOLEAN NOT NULL DEFAULT false,
     "mute_until" TIMESTAMP(3),
-    "rating" DOUBLE PRECISION NOT NULL DEFAULT 1500.0,
+    "rating" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
     "rd" DOUBLE PRECISION NOT NULL DEFAULT 350.0,
     "vol" DOUBLE PRECISION NOT NULL DEFAULT 0.06,
     "last_game_timestamp" TEXT,

@@ -25,7 +25,7 @@ model User {
   ban_until               DateTime?
   is_muted                Boolean @default(false)
   mute_until              DateTime?
-  rating                  Float   @default(1500.0)
+  rating                  Float   @default(0.0)
   rd                      Float   @default(350.0)
   vol                     Float   @default(0.06)
   last_game_timestamp     String?

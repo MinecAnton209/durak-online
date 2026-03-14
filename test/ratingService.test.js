@@ -14,10 +14,10 @@ let winnerUser, loserUser;
 
 beforeAll(async () => {
     winnerUser = await prisma.user.create({
-        data: { username: `rat_win_${ts}`, password: 'hashed', rating: 1500, rd: 150, vol: 0.06 }
+        data: { username: `rat_win_${ts}`, password: 'hashed', rating: 0, rd: 150, vol: 0.06 }
     });
     loserUser = await prisma.user.create({
-        data: { username: `rat_los_${ts}`, password: 'hashed', rating: 1500, rd: 150, vol: 0.06 }
+        data: { username: `rat_los_${ts}`, password: 'hashed', rating: 0, rd: 150, vol: 0.06 }
     });
 });
 
@@ -26,8 +26,8 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-    await prisma.user.update({ where: { id: winnerUser.id }, data: { rating: 1500, rd: 150, vol: 0.06 } });
-    await prisma.user.update({ where: { id: loserUser.id }, data: { rating: 1500, rd: 150, vol: 0.06 } });
+    await prisma.user.update({ where: { id: winnerUser.id }, data: { rating: 0, rd: 150, vol: 0.06 } });
+    await prisma.user.update({ where: { id: loserUser.id }, data: { rating: 0, rd: 150, vol: 0.06 } });
 });
 
 // Helper to build a valid game object with registered (non-guest) players
@@ -53,8 +53,8 @@ describe('updateRatingsAfterGame', () => {
         const [l] = await prisma.$queryRawUnsafe(
             `SELECT id, rating FROM "User" WHERE id = ?`, loserUser.id
         );
-        expect(w.rating).toBeGreaterThan(1500);
-        expect(l.rating).toBeLessThan(1500);
+        expect(w.rating).toBeGreaterThan(0);
+        expect(l.rating).toBeLessThan(0);
     });
 
     it('winner gains rating and loser loses roughly symmetrically', async () => {
@@ -63,8 +63,8 @@ describe('updateRatingsAfterGame', () => {
 
         const w = await prisma.user.findUnique({ where: { id: winnerUser.id } });
         const l = await prisma.user.findUnique({ where: { id: loserUser.id } });
-        const wGain = w.rating - 1500;
-        const lLoss = 1500 - l.rating;
+        const wGain = w.rating - 0;
+        const lLoss = 0 - l.rating;
         // Glicko-2 is not exactly symmetric but should be within 30%
         expect(Math.abs(wGain - lLoss) / Math.max(lLoss, 1)).toBeLessThan(0.3);
     });
@@ -79,7 +79,7 @@ describe('updateRatingsAfterGame', () => {
         };
         await updateRatingsAfterGame(guestGame);
         const w = await prisma.user.findUnique({ where: { id: winnerUser.id } });
-        expect(w.rating).toBe(1500); // unchanged
+        expect(w.rating).toBe(0); // unchanged
     });
 
     it('returns early for null or incomplete game data', async () => {

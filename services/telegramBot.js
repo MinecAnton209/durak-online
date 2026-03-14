@@ -169,7 +169,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
             const text = t(lang, 'profile.caption', {
                 id: user.id, username: user.username, account_status: statusText,
-                wins: user.wins || 0, losses: user.losses || 0, rating: user.rating || 1500, coins: user.coins || 0
+                wins: user.wins || 0, losses: user.losses || 0, rating: user.rating || 0, coins: user.coins || 0
             });
 
             const keyboard = {
