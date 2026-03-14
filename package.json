@@ -1,6 +1,6 @@
 {
   "name": "durak",
-  "version": "4.0.0-RC.1",
+  "version": "4.0.0",
   "main": "index.js",
   "scripts": {
     "db:prepare": "node scripts/preparePrisma.js",
@@ -20,6 +20,7 @@
     "@prisma/pg-worker": "6.9.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
+    "chess.js": "^1.4.0",
     "connect-pg-simple": "^10.0.0",
     "connect-sqlite3": "^0.9.16",
     "cookie-parser": "^1.4.7",

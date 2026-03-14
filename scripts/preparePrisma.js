@@ -14,7 +14,7 @@ try {
     console.log(`[Prisma Prepare] Resetting test database at: ${url}`);
 
     execSync('npx prisma db push --skip-generate --force-reset', {
-        env: { ...process.env, DATABASE_URL: url },
+        env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url },
         stdio: 'inherit'
     });
 

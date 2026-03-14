@@ -197,6 +197,10 @@ const goToLobbyBrowser = () => {
             class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
             <span>🎰</span> {{ $t('roulette_button') }}
           </button>
+          <button @click="router.push('/chess')"
+            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
+            <span>♟️</span> {{ $t('chess_button') }}
+          </button>
         </div>
 
         <div class="relative flex py-1 items-center">

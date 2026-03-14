@@ -8,7 +8,8 @@ export default defineConfig({
         hookTimeout: 30000,
         // Force SQLite URL for all tests, overriding any PostgreSQL URL from .env
         env: {
-            DATABASE_URL: 'file:./test/test.db'
+            DATABASE_URL: 'file:./test/test.db',
+            DIRECT_URL: 'file:./test/test.db'
         },
         poolOptions: {
             threads: {
