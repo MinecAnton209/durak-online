@@ -9,6 +9,7 @@ const bcrypt = require('bcrypt');
 const cors = require('cors');
 const i18next = require('i18next');
 const Backend = require('i18next-fs-backend');
+const expressStaticGzip = require('express-static-gzip');
 
 const authRoutes = require('./routes/auth.js');
 const telegramRoutes = require('./routes/telegram.js');
@@ -191,7 +192,14 @@ const inboxRoutes = require('./routes/inbox.js');
 app.use('/api/inbox', inboxRoutes);
 
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(expressStaticGzip(path.join(__dirname, 'public'), {
+  enableBrotli: true,
+  enableGzip: true,
+  customCompressions: [{
+    encodingName: 'gzip',
+    fileExtension: '.gz',
+  }],
+}));
 
 app.get(/.*/, (req, res) => {
     if (req.originalUrl.startsWith('/api')) {

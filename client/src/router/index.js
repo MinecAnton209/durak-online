@@ -1,12 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
-import GameView from '../views/GameView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import TermsView from '../views/TermsView.vue'
-import RouletteView from '../views/RouletteView.vue'
 import ErrorView from '../views/ErrorView.vue'
 import MaintenanceView from '../views/MaintenanceView.vue'
-import LobbyBrowser from "@/views/LobbyBrowser.vue";
 import StatusView from '../views/StatusView.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -21,26 +18,21 @@ const router = createRouter({
     {
       path: '/lobbies',
       name: 'lobbies',
-      component: LobbyBrowser
+      component: () => import('../views/LobbyBrowser.vue'),
     },
     {
       path: '/game/:id',
       name: 'game',
-      component: GameView
+      component: () => import('../views/GameView.vue')
     },
     {
       path: '/lobby/:id',
-      component: GameView
+      component: () => import('../views/GameView.vue')
     },
     {
       path: '/terms',
       name: 'terms',
       component: TermsView
-    },
-    {
-      path: '/game/:id',
-      name: 'game',
-      component: GameView
     },
     {
       path: '/settings',
@@ -50,7 +42,7 @@ const router = createRouter({
     {
       path: '/roulette',
       name: 'roulette',
-      component: RouletteView
+      component: () => import('../views/RouletteView.vue'),
     },
     {
       path: '/status',

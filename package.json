@@ -1,6 +1,6 @@
 {
   "name": "durak",
-  "version": "4.0.0-pre-RC.7",
+  "version": "4.0.0-RC.1",
   "main": "index.js",
   "scripts": {
     "db:prepare": "node scripts/preparePrisma.js",
@@ -28,6 +28,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "express-session": "^1.19.0",
+    "express-static-gzip": "^3.0.0",
     "glicko2": "^1.2.1",
     "helmet": "^8.1.0",
     "i18next": "^25.8.13",

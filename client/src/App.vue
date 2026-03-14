@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, onUnmounted, ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
@@ -143,6 +143,18 @@ onMounted(async () => {
     if (!startParam.startsWith('invite_')) {
       router.replace(`/lobby/${startParam}`);
     }
+  }
+});
+
+onUnmounted(() => {
+  if (socketStore.socket) {
+    socketStore.socket.off('forceDisconnect');
+    socketStore.socket.off('maintenanceWarning');
+    socketStore.socket.off('systemMessage');
+    socketStore.socket.off('sessionTerminated');
+    socketStore.socket.off('newInboxMessage');
+    socketStore.socket.off('lobbyExpired');
+    socketStore.socket.off('lobbyStarted');
   }
 });
 
