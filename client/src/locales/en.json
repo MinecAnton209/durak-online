@@ -106,6 +106,8 @@
   "lose_subtitle": "Better luck next time!",
   "win_subtitle": "Great game!",
   "draw_subtitle": "Friendship won.",
+  "winners_label": "Winners",
+  "loser_label": "Loser",
   "rematch_label": "Rematch:",
   "waiting_for_others": "Waiting for others...",
   "rematch_button": "Rematch",

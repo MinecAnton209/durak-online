@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useGameStore } from '@/stores/game';
 import BaseModal from '@/components/ui/BaseModal.vue';
+import ProfileModal from '@/components/ui/ProfileModal.vue';
 
 const props = defineProps({
   isOpen: Boolean
@@ -12,6 +13,13 @@ const emit = defineEmits(['close']);
 
 const gameStore = useGameStore();
 const voted = ref(false);
+const showProfile = ref(false);
+const profileUserId = ref(null);
+
+function openProfile(userId) {
+  profileUserId.value = userId;
+  showProfile.value = true;
+}
 
 const winnerData = computed(() => gameStore.winnerData);
 const rematchInfo = computed(() => gameStore.rematchStatus);
@@ -62,6 +70,26 @@ const handleRematch = () => {
 
       <p class="text-on-surface-variant mb-6">{{ message }}</p>
 
+      <div v-if="winnerData" class="mb-6 space-y-2">
+        <div v-if="winnerData.winners && winnerData.winners.length" class="text-sm text-on-surface-variant">
+          <template v-for="(winner, index) in winnerData.winners" :key="winner.id">
+            <span class="font-semibold text-white cursor-pointer hover:text-primary transition-colors"
+                  @click="openProfile(winner.dbId)">
+              {{ winner.name }}
+            </span>
+            <span v-if="index < winnerData.winners.length - 1">, </span>
+          </template>
+          <span class="text-on-surface-variant"> — {{ $t('winners_label') }}</span>
+        </div>
+        <div v-if="winnerData.loser" class="text-sm text-on-surface-variant">
+          <span class="font-semibold text-white cursor-pointer hover:text-primary transition-colors"
+                @click="openProfile(winnerData.loser.dbId)">
+            {{ winnerData.loser.name }}
+          </span>
+          <span class="text-on-surface-variant"> — {{ $t('loser_label') }}</span>
+        </div>
+      </div>
+
       <div v-if="rematchInfo" class="mb-4 bg-white/10 rounded-lg p-2 text-sm text-white animate-pulse">
         {{ $t('rematch_label') }} {{ rematchInfo.votes }} / {{ rematchInfo.total }}
       </div>
@@ -80,4 +108,5 @@ const handleRematch = () => {
       </div>
     </div>
   </BaseModal>
+  <ProfileModal :is-open="showProfile" :user-id="profileUserId" @close="showProfile = false" />
 </template>

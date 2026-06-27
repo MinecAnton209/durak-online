@@ -106,6 +106,8 @@
   "lose_subtitle": "Пощастить наступного разу!",
   "win_subtitle": "Чудова гра!",
   "draw_subtitle": "Перемогла дружба.",
+  "winners_label": "Переможці",
+  "loser_label": "Програв",
   "rematch_label": "Реванш:",
   "waiting_for_others": "Очікуємо інших...",
   "rematch_button": "Реванш",
