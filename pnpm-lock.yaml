@@ -32,9 +32,6 @@ importers:
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
-      chess.js:
-        specifier: ^1.4.0
-        version: 1.4.0
       connect-pg-simple:
         specifier: ^10.0.0
         version: 10.0.0
@@ -141,9 +138,6 @@ importers:
       vue-router:
         specifier: ^4.6.3
         version: 4.6.4(vue@3.5.39)
-      vue3-chessboard:
-        specifier: ^1.3.3
-        version: 1.3.3(vue@3.5.39)
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.1
@@ -1324,13 +1318,6 @@ packages:
   chalk@4.1.2:
     resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
     engines: {node: '>=10'}
-
-  chess.js@1.4.0:
-    resolution: {integrity: sha512-BBJgrrtKQOzFLonR0l+k64A98NLemPwNsCskwb+29bRwobUa4iTm51E1kwGPbWXAcfdDa18nad6vpPPKPWarqw==}
-
-  chessground@9.2.1:
-    resolution: {integrity: sha512-KIdxm0zD69e62XRwdnFB0XUNYSzn5HM3pMazRCwpfruRUowFI8y+1OAK5YSyBff29myeV1/4o5Q8T191+Irbog==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   chokidar@4.0.3:
     resolution: {integrity: sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA==}
@@ -3348,11 +3335,6 @@ packages:
     peerDependencies:
       vue: ^3.5.0
 
-  vue3-chessboard@1.3.3:
-    resolution: {integrity: sha512-bCAxzZESnRkmI3dlAS9U5v4OrCA8bvMO8p5FI9bJezcramZenmfhTjlSDZeCZds08OYDMAuXt3qPlUh9G7ShXg==}
-    peerDependencies:
-      vue: ^3.2.47
-
   vue@3.5.39:
     resolution: {integrity: sha512-xmZCYabFGcirU8r0fTuvl/LICc1OU620rnqepaJDL/a141ZigkG7AyaxQLdqJ02ZRYzWe6YPaDHeQx7MfknQfA==}
     peerDependencies:
@@ -4651,10 +4633,6 @@ snapshots:
     dependencies:
       ansi-styles: 4.3.0
       supports-color: 7.2.0
-
-  chess.js@1.4.0: {}
-
-  chessground@9.2.1: {}
 
   chokidar@4.0.3:
     dependencies:
@@ -6713,12 +6691,6 @@ snapshots:
   vue-router@4.6.4(vue@3.5.39):
     dependencies:
       '@vue/devtools-api': 6.6.4
-      vue: 3.5.39
-
-  vue3-chessboard@1.3.3(vue@3.5.39):
-    dependencies:
-      chess.js: 1.4.0
-      chessground: 9.2.1
       vue: 3.5.39
 
   vue@3.5.39:

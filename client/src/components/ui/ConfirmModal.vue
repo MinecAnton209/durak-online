@@ -25,7 +25,7 @@ export default {
 </script>
 
 <script setup>
-import { watch, defineEmits } from 'vue';
+import { watch } from 'vue';
 
 const props = defineProps();
 const emit = defineEmits(['confirm', 'cancel']);

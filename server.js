@@ -48,8 +48,6 @@ const gameService = require('./services/gameService');
 const systemService = require('./services/systemService');
 const registerFriendHandlers = require('./handlers/friendHandlers');
 const registerHealthHandlers = require('./handlers/healthHandlers');
-const chessService = require('./services/chessService');
-const registerChessHandlers = require('./handlers/chessHandlers');
 
 prisma.game.updateMany({
     where: { status: 'waiting' },
@@ -96,14 +94,12 @@ setTimeout(chatService.loadChatFilters, 3000); // Initial load fallback
 
 
 let games = {};
-let chessGames = {};
 
 const onlineUsers = new Map();
 app.set('onlineUsers', onlineUsers);
 
 app.set('socketio', io);
 app.set('activeGames', games);
-app.set('activeChessGames', chessGames);
 app.set('onlineUsers', onlineUsers);
 app.set('i18next', i18next);
 app.set('globalChatHistory', chatService.getChatHistory());
@@ -127,7 +123,6 @@ inboxService.init(io);
 rouletteService.init(io, onlineUsers);
 maintenanceService.init(io);
 gameService.init(io, games);
-chessService.init(io, chessGames);
 
 app.set('trust proxy', 1);
 
@@ -300,7 +295,6 @@ io.on('connection', (socket) => {
     registerGameHandlers(io, socket, { games, gameService, achievementService, escapeHtml });
     registerFriendHandlers(io, socket, { games, onlineUsers });
     registerHealthHandlers(io, socket, { onlineUsers, games });
-    registerChessHandlers(io, socket, { chessGames, chessService, escapeHtml });
 
     socket.on('disconnect', () => {
         let disconnectedUserId = null;
@@ -334,18 +328,6 @@ io.on('connection', (socket) => {
             }
         }
 
-        for (const gameId in chessGames) {
-            const game = chessGames[gameId];
-
-            if (game.spectators && game.spectators.includes(socket.id)) {
-                game.spectators = game.spectators.filter(id => id !== socket.id);
-                console.log(`[Chess Spectator] Spectator left game ${gameId}`);
-            }
-
-            if (game.players && game.players[socket.id]) {
-                chessService.handleChessPlayerDisconnect(socket, game);
-            }
-        }
     });
     socket.on('adminSpectateGame', ({ gameId }) => {
         const sessionUser = socket.request.session.user;
