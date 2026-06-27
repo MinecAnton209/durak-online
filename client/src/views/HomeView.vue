@@ -120,16 +120,16 @@ const goToLobbyBrowser = () => {
     </div>
 
     <div
-      class="w-full max-w-md bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 flex flex-col max-h-[90vh] overflow-y-auto animate-fade-in">
+      class="w-full max-w-md bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 flex flex-col max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto animate-fade-in">
 
-      <div class="p-6 md:p-8 pb-0 text-center">
-        <h1 class="text-3xl md:text-4xl font-bold text-white mb-2 tracking-wide drop-shadow-md">
+      <div class="p-4 sm:p-6 md:p-8 pb-0 text-center">
+        <h1 class="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 tracking-wide drop-shadow-md">
           {{ $t('welcome_title') }}
         </h1>
-        <p class="text-on-surface-variant text-sm">{{ $t('tagline_online') }}</p>
+        <p class="text-on-surface-variant text-xs sm:text-sm">{{ $t('tagline_online') }}</p>
       </div>
 
-      <div class="p-6 md:p-8 flex flex-col gap-5">
+      <div class="p-4 sm:p-6 md:p-8 flex flex-col gap-3 sm:gap-5">
 
         <div v-if="authStore.isAuthChecking" class="flex justify-center py-3">
           <svg class="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none"
@@ -139,23 +139,23 @@ const goToLobbyBrowser = () => {
           </svg>
         </div>
 
-        <div v-else-if="!authStore.isAuthenticated" class="flex gap-3 md:gap-4">
+        <div v-else-if="!authStore.isAuthenticated" class="flex gap-2 sm:gap-3">
           <button @click="openAuth('login')"
-            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center group">
+            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2 px-3 min-h-[44px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center text-sm">
             <span>{{ $t('login_button') }}</span>
           </button>
           <button @click="openAuth('register')"
-            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center">
+            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2 px-3 min-h-[44px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center text-sm">
             {{ $t('register_button') }}
           </button>
         </div>
 
         <div v-else class="flex gap-2 animate-fade-in">
           <div
-            class="flex-1 bg-primary/10 rounded-xl p-2.5 border border-primary/30 flex items-center justify-center gap-2 relative min-w-0">
+            class="flex-1 bg-primary/10 rounded-xl p-2 border border-primary/30 flex items-center justify-center gap-2 relative min-w-0">
             <div class="flex items-center justify-center gap-1.5 w-full">
-              <span class="text-xl shrink-0">👤</span>
-              <span class="text-primary font-bold truncate text-sm md:text-base">{{ authStore.user?.username }}</span>
+              <span class="text-lg shrink-0">👤</span>
+              <span class="text-primary font-bold truncate text-xs sm:text-sm md:text-base">{{ authStore.user?.username }}</span>
               <svg v-if="authStore.user?.isVerified" class="w-4 h-4 text-blue-400 shrink-0" viewBox="0 0 24 24"
                 fill="currentColor">
                 <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -168,7 +168,7 @@ const goToLobbyBrowser = () => {
             </div>
           </div>
           <button @click="isInboxOpen = true"
-            class="px-3 bg-transparent border border-outline/30 text-outline hover:bg-white/5 hover:border-outline hover:text-white min-h-[48px] rounded-xl transition-all active:scale-95 shrink-0 relative"
+            class="px-2 sm:px-3 bg-transparent border border-outline/30 text-outline hover:bg-white/5 hover:border-outline hover:text-white min-h-[44px] rounded-xl transition-all active:scale-95 shrink-0 relative"
             title="Inbox">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -181,7 +181,7 @@ const goToLobbyBrowser = () => {
             </span>
           </button>
           <button @click="handleLogout"
-            class="px-4 bg-transparent border border-error/30 text-error hover:bg-error/10 hover:border-error min-h-[48px] rounded-xl transition-colors active:scale-95 shrink-0"
+            class="px-3 sm:px-4 bg-transparent border border-error/30 text-error hover:bg-error/10 hover:border-error min-h-[44px] rounded-xl transition-colors active:scale-95 shrink-0"
             :title="$t('logout_title')">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -190,34 +190,35 @@ const goToLobbyBrowser = () => {
           </button>
         </div>
 
-        <div class="flex gap-3 md:gap-4">
+        <div class="flex gap-2 sm:gap-3">
           <button @click="isLeaderboardOpen = true"
-            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
+            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2 px-3 sm:px-4 min-h-[44px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm">
             <span>🏆</span> {{ $t('leaderboard_button') }}
           </button>
-          <button v-if="authStore.isAuthenticated" @click="isMyGamesOpen = true"
-            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
-            <span>🎮</span> {{ $t('my_games_button') }}
-          </button>
           <button @click="router.push('/roulette')"
-            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
+            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2 px-3 sm:px-4 min-h-[44px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm">
             <span>🎰</span> {{ $t('roulette_button') }}
           </button>
         </div>
 
-        <div class="relative flex py-1 items-center">
+        <button v-if="authStore.isAuthenticated" @click="isMyGamesOpen = true"
+          class="w-full bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 min-h-[44px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2 text-sm">
+          <span>🎮</span> {{ $t('my_games_button') }}
+        </button>
+
+        <div class="relative flex py-0.5 items-center">
           <div class="flex-grow border-t border-outline/30"></div>
-          <span class="flex-shrink-0 mx-4 text-outline text-xs uppercase tracking-widest font-semibold">{{
+          <span class="flex-shrink-0 mx-3 text-outline text-[10px] uppercase tracking-widest font-semibold">{{
             $t('or_separator') }}</span>
           <div class="flex-grow border-t border-outline/30"></div>
         </div>
 
-        <div v-if="!authStore.isAuthenticated" class="space-y-1.5">
-          <label class="text-xs font-bold text-on-surface-variant uppercase tracking-wider ml-1">{{
+        <div v-if="!authStore.isAuthenticated" class="space-y-1">
+          <label class="text-[10px] sm:text-xs font-bold text-on-surface-variant uppercase tracking-wider ml-1">{{
             $t('guest_name_label') }}</label>
           <div class="relative">
             <input type="text" v-model="playerName"
-              class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-3 text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all pl-10"
+              class="w-full bg-black/20 border border-outline/50 rounded-xl px-3 py-2 sm:py-3 text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all pl-9 text-sm"
               :placeholder="$t('placeholder_name')">
             <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-outline" fill="none" stroke="currentColor"
               viewBox="0 0 24 24">
@@ -227,13 +228,13 @@ const goToLobbyBrowser = () => {
           </div>
         </div>
 
-        <div class="flex flex-col gap-3 md:gap-4" :class="{ 'mt-4': authStore.isAuthenticated }">
+        <div class="flex flex-col gap-2 sm:gap-3" :class="{ 'mt-2': authStore.isAuthenticated }">
           <button @click="quickPlay"
-            class="w-full bg-primary hover:bg-[#00A891] text-on-primary font-bold text-lg py-4 min-h-[48px] rounded-2xl shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">
+            class="w-full bg-primary hover:bg-[#00A891] text-on-primary font-bold text-base sm:text-lg py-3 min-h-[48px] rounded-2xl shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">
             ⚡️ {{ $t('quick_play_button') }}
           </button>
           <button @click="goToLobbyBrowser"
-            class="w-full bg-transparent border border-outline/50 text-on-surface font-medium py-3 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95">
+            class="w-full bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 min-h-[44px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95">
             🚪 {{ $t('lobby_browser_button') }}
           </button>
         </div>

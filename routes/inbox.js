@@ -82,7 +82,7 @@ router.post('/:id/action', async (req, res) => {
             if (action === 'not_me' || action === 'terminate_legacy') {
                 if (targetSessionId) {
                     try {
-                        await prisma.activeSession.delete({ where: { id: targetSessionId } });
+                        await prisma.activeSession.deleteMany({ where: { id: targetSessionId } });
                         msg.content_params.action_result = 'terminated';
 
                         const io = req.app.get('socketio');
