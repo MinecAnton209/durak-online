@@ -55,6 +55,7 @@ model User {
   active_sessions         ActiveSession[]
   devices                 UserDevice[]
   inbox_messages          InboxMessage[]
+  profile                 Profile?
 }
 
 model ChatFilter {
@@ -246,4 +247,12 @@ model InboxMessage {
   telegram_message_id Int?
 
   user                User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model Profile {
+  id       Int    @id @default(autoincrement())
+  userId   Int    @unique
+  bio      String @default("")
+  avatarId String @default("default")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
