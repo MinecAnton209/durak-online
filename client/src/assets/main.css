@@ -84,6 +84,48 @@ body {
     }
 }
 
+/* Interactive elements: cursor + hover/active feedback */
+button,
+[role="button"],
+a,
+.cursor-pointer {
+    cursor: pointer;
+}
+
+button:not(:disabled):not([disabled]),
+[role="button"]:not(:disabled) {
+    transition: all 0.15s ease;
+}
+
+button:not(:disabled):not([disabled]):hover,
+[role="button"]:not(:disabled):hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+button:not(:disabled):not([disabled]):active,
+[role="button"]:not(:disabled):active {
+    transform: translateY(0) scale(0.97);
+    filter: brightness(0.95);
+    box-shadow: none;
+    transition-duration: 0.05s;
+}
+
+/* Primary buttons get a glow on hover */
+.bg-primary:not(:disabled):hover {
+    box-shadow: 0 4px 20px rgba(0, 191, 165, 0.4);
+}
+
+/* Links */
+a {
+    transition: color 0.15s ease;
+}
+
+a:hover {
+    filter: brightness(1.2);
+}
+
 body {
     user-select: none;
     -webkit-user-select: none;
