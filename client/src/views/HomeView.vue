@@ -92,28 +92,28 @@ const goToLobbyBrowser = () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-background">
+  <div class="min-h-screen flex items-center justify-center p-4 md:p-6 relative overflow-hidden bg-background">
 
     <button v-if="authStore.isAuthenticated" @click="router.push('/settings')"
-      class="absolute top-4 left-4 z-10 text-2xl p-2 bg-surface/50 rounded-full hover:bg-surface text-on-surface transition-all active:scale-95 border border-white/10 shadow-lg"
+      class="absolute top-4 left-4 z-10 text-2xl p-2 min-h-[48px] bg-surface/50 rounded-full hover:bg-surface text-on-surface transition-all active:scale-95 border border-white/10 shadow-lg"
       :title="$t('settings_tooltip')">
       ⚙️
     </button>
     <button v-if="authStore.user?.is_admin" @click="router.push('/admin')"
-      class="absolute top-4 left-16 z-10 text-2xl p-2 bg-surface/50 rounded-full hover:bg-surface text-on-surface transition-all active:scale-95 border border-white/10 shadow-lg"
+      class="absolute top-4 left-16 z-10 text-2xl p-2 min-h-[48px] bg-surface/50 rounded-full hover:bg-surface text-on-surface transition-all active:scale-95 border border-white/10 shadow-lg"
       title="Admin Panel">
       🛠️
     </button>
 
     <div class="absolute top-4 right-4 flex gap-2 z-10">
       <button @click="setLang('uk')" :class="{ 'grayscale-0 scale-110 drop-shadow-lg': locale === 'uk' }"
-        class="text-2xl hover:scale-110 transition-transform cursor-pointer grayscale-[0.5] hover:grayscale-0"
+        class="text-2xl min-h-[48px] hover:scale-110 transition-transform cursor-pointer grayscale-[0.5] hover:grayscale-0"
         :title="$t('lang_uk')">🇺🇦</button>
       <button @click="setLang('en')" :class="{ 'grayscale-0 scale-110 drop-shadow-lg': locale === 'en' }"
-        class="text-2xl hover:scale-110 transition-transform cursor-pointer grayscale-[0.5] hover:grayscale-0"
+        class="text-2xl min-h-[48px] hover:scale-110 transition-transform cursor-pointer grayscale-[0.5] hover:grayscale-0"
         :title="$t('lang_en')">🇬🇧</button>
       <button @click="setLang('ru')" :class="{ 'grayscale-0 scale-110 drop-shadow-lg': locale === 'ru' }"
-        class="text-2xl hover:scale-110 transition-transform cursor-pointer grayscale-[0.5] hover:grayscale-0"
+        class="text-2xl min-h-[48px] hover:scale-110 transition-transform cursor-pointer grayscale-[0.5] hover:grayscale-0"
         :title="$t('lang_ru')">🇷🇺</button>
     </div>
 
@@ -137,13 +137,13 @@ const goToLobbyBrowser = () => {
           </svg>
         </div>
 
-        <div v-else-if="!authStore.isAuthenticated" class="flex gap-3">
+        <div v-else-if="!authStore.isAuthenticated" class="flex gap-3 md:gap-4">
           <button @click="openAuth('login')"
-            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center group">
+            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center group">
             <span>{{ $t('login_button') }}</span>
           </button>
           <button @click="openAuth('register')"
-            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center">
+            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center">
             {{ $t('register_button') }}
           </button>
         </div>
@@ -166,7 +166,7 @@ const goToLobbyBrowser = () => {
             </div>
           </div>
           <button @click="isInboxOpen = true"
-            class="px-3 bg-transparent border border-outline/30 text-outline hover:bg-white/5 hover:border-outline hover:text-white rounded-xl transition-all active:scale-95 shrink-0 relative"
+            class="px-3 bg-transparent border border-outline/30 text-outline hover:bg-white/5 hover:border-outline hover:text-white min-h-[48px] rounded-xl transition-all active:scale-95 shrink-0 relative"
             title="Inbox">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -179,7 +179,7 @@ const goToLobbyBrowser = () => {
             </span>
           </button>
           <button @click="handleLogout"
-            class="px-4 bg-transparent border border-error/30 text-error hover:bg-error/10 hover:border-error rounded-xl transition-colors active:scale-95 shrink-0"
+            class="px-4 bg-transparent border border-error/30 text-error hover:bg-error/10 hover:border-error min-h-[48px] rounded-xl transition-colors active:scale-95 shrink-0"
             :title="$t('logout_title')">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -188,13 +188,13 @@ const goToLobbyBrowser = () => {
           </button>
         </div>
 
-        <div class="flex gap-3">
+        <div class="flex gap-3 md:gap-4">
           <button @click="isLeaderboardOpen = true"
-            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
+            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
             <span>🏆</span> {{ $t('leaderboard_button') }}
           </button>
           <button @click="router.push('/roulette')"
-            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
+            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
             <span>🎰</span> {{ $t('roulette_button') }}
           </button>
         </div>
@@ -221,13 +221,13 @@ const goToLobbyBrowser = () => {
           </div>
         </div>
 
-        <div class="flex flex-col gap-3" :class="{ 'mt-4': authStore.isAuthenticated }">
+        <div class="flex flex-col gap-3 md:gap-4" :class="{ 'mt-4': authStore.isAuthenticated }">
           <button @click="quickPlay"
-            class="w-full bg-primary hover:bg-[#00A891] text-on-primary font-bold text-lg py-4 rounded-2xl shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">
+            class="w-full bg-primary hover:bg-[#00A891] text-on-primary font-bold text-lg py-4 min-h-[48px] rounded-2xl shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">
             ⚡️ {{ $t('quick_play_button') }}
           </button>
           <button @click="goToLobbyBrowser"
-            class="w-full bg-transparent border border-outline/50 text-on-surface font-medium py-3 rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95">
+            class="w-full bg-transparent border border-outline/50 text-on-surface font-medium py-3 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95">
             🚪 {{ $t('lobby_browser_button') }}
           </button>
         </div>
