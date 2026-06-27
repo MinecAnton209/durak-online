@@ -192,6 +192,8 @@ const inboxRoutes = require('./routes/inbox.js');
 app.use('/api/inbox', inboxRoutes);
 const myGamesRoutes = require('./routes/myGames.js');
 app.use('/api/my-games', myGamesRoutes);
+const profileRoutes = require('./routes/profile.js');
+app.use('/api/profile', profileRoutes);
 
 
 app.use(expressStaticGzip(path.join(__dirname, 'public'), {
