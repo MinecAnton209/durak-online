@@ -5,15 +5,15 @@
   "scripts": {
     "db:prepare": "node scripts/preparePrisma.js",
     "test": "npm run db:prepare && vitest run --exclude test/stress.test.js",
-    "build": "cd client && npm install && npm run build"
+    "build": "pnpm install && cd client && pnpm run build"
   },
   "keywords": [],
   "author": "MinecAnton209",
   "license": "MIT",
   "description": "",
   "dependencies": {
-    "@capacitor/android": "^8.1.0",
-    "@capacitor/ios": "^8.1.0",
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/ios": "^8.4.1",
     "@prisma/adapter-pg": "7.4.2",
     "@prisma/client": "6.4.1",
     "@prisma/config": "7.4.2",
@@ -25,29 +25,29 @@
     "connect-sqlite3": "^0.9.16",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
-    "dotenv": "^17.3.1",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.2.1",
+    "express-rate-limit": "^8.5.2",
     "express-session": "^1.19.0",
-    "express-static-gzip": "^3.0.0",
+    "express-static-gzip": "^3.0.1",
     "glicko2": "^1.2.1",
-    "helmet": "^8.1.0",
-    "i18next": "^25.8.13",
-    "i18next-fs-backend": "^2.6.1",
+    "helmet": "^8.2.0",
+    "i18next": "^25.10.10",
+    "i18next-fs-backend": "^2.6.6",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.19.0",
+    "pg": "^8.22.0",
     "pg-mem": "^3.0.14",
     "socket.io": "^4.8.3",
     "sqlite3": "^5.1.7",
     "telegraf": "^4.16.3",
     "web-push": "^3.6.7",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.1.0",
-    "@capacitor/core": "^8.1.0",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
     "prisma": "6.4.1",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.9"
   },
   "pnpm": {
     "updateConfig": {
@@ -68,5 +68,5 @@
       "sqlite3"
     ]
   },
-  "packageManager": "pnpm@10.30.3+sha512.c961d1e0a2d8e354ecaa5166b822516668b7f44cb5bd95122d590dd81922f606f5473b6d23ec4a5be05e7fcd18e8488d47d978bbe981872f1145d06e9a740017"
+  "packageManager": "pnpm@11.9.0+sha512.bd682d5d03fe525ef7c9fd6780c6884d1e756ac4c9c9fe00c538782824310dcf90e3ddc4f53835f06dfaebd5085e41855e0bcbb3b60de2ac5bbab89e5036f03b"
 }
