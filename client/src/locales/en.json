@@ -538,6 +538,16 @@
     "waiting": "Waiting",
     "host": "Host",
     "link_copied": "Link copied",
-    "back_to_home": "Back to Home"
+    "back_to_home": "Back to Home",
+    "my_games_title": "My Games",
+    "my_games_button": "My Games",
+    "my_games_empty": "No games in the last week",
+    "my_games_win": "Win",
+    "my_games_loss": "Loss",
+    "my_games_draw": "Draw",
+    "my_games_bot": "Bot",
+    "my_games_just_now": "just now",
+    "my_games_minutes_ago": "{n} min ago",
+    "my_games_hours_ago": "{n}h ago"
   }
 }

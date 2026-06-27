@@ -9,6 +9,7 @@ import { useI18n } from 'vue-i18n';
 import AuthModal from '@/components/ui/AuthModal.vue';
 import LeaderboardModal from '@/components/ui/LeaderboardModal.vue';
 import InboxModal from '@/components/ui/InboxModal.vue';
+import MyGamesModal from '@/components/ui/MyGamesModal.vue';
 
 const { t, locale } = useI18n();
 const router = useRouter();
@@ -23,6 +24,7 @@ const isAuthModalOpen = ref(false);
 const authMode = ref('login');
 const isLeaderboardOpen = ref(false);
 const isInboxOpen = ref(false);
+const isMyGamesOpen = ref(false);
 
 onMounted(() => {
   if (route.query.gameId) {
@@ -193,6 +195,10 @@ const goToLobbyBrowser = () => {
             class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
             <span>🏆</span> {{ $t('leaderboard_button') }}
           </button>
+          <button v-if="authStore.isAuthenticated" @click="isMyGamesOpen = true"
+            class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
+            <span>🎮</span> {{ $t('my_games_button') }}
+          </button>
           <button @click="router.push('/roulette')"
             class="flex-1 bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 px-4 min-h-[48px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
             <span>🎰</span> {{ $t('roulette_button') }}
@@ -238,6 +244,7 @@ const goToLobbyBrowser = () => {
       @submit="handleAuthSubmit" />
     <LeaderboardModal :is-open="isLeaderboardOpen" @close="isLeaderboardOpen = false" />
     <InboxModal :is-open="isInboxOpen" @close="isInboxOpen = false" />
+    <MyGamesModal :is-open="isMyGamesOpen" @close="isMyGamesOpen = false" />
   </div>
 </template>
 

@@ -539,6 +539,16 @@
     "waiting": "Очікування",
     "host": "Хост",
     "link_copied": "Посилання скопійовано",
-    "back_to_home": "На головну"
+    "back_to_home": "На головну",
+    "my_games_title": "Мої ігри",
+    "my_games_button": "Мої ігри",
+    "my_games_empty": "Ще немає ігор за останній тиждень",
+    "my_games_win": "Перемога",
+    "my_games_loss": "Поразка",
+    "my_games_draw": "Нічия",
+    "my_games_bot": "Бот",
+    "my_games_just_now": "щойно",
+    "my_games_minutes_ago": "{n} хв. тому",
+    "my_games_hours_ago": "{n} год. тому"
   }
 }

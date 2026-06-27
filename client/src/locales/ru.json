@@ -539,6 +539,16 @@
     "waiting": "Ожидание",
     "host": "Хост",
     "link_copied": "Ссылка скопирована",
-    "back_to_home": "На главную"
+    "back_to_home": "На главную",
+    "my_games_title": "Мои игры",
+    "my_games_button": "Мои игры",
+    "my_games_empty": "Пока нет игр за последнюю неделю",
+    "my_games_win": "Победа",
+    "my_games_loss": "Поражение",
+    "my_games_draw": "Ничья",
+    "my_games_bot": "Бот",
+    "my_games_just_now": "только что",
+    "my_games_minutes_ago": "{n} мин. назад",
+    "my_games_hours_ago": "{n} ч. назад"
   }
 }

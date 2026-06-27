@@ -190,6 +190,8 @@ app.use('/api/friends', friendsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 const inboxRoutes = require('./routes/inbox.js');
 app.use('/api/inbox', inboxRoutes);
+const myGamesRoutes = require('./routes/myGames.js');
+app.use('/api/my-games', myGamesRoutes);
 
 
 app.use(expressStaticGzip(path.join(__dirname, 'public'), {
