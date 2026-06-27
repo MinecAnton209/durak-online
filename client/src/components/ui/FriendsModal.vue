@@ -4,6 +4,7 @@ import { useFriendsStore } from '@/stores/friends';
 import { useGameStore } from '@/stores/game';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '@/components/ui/BaseModal.vue';
+import ProfileModal from './ProfileModal.vue';
 
 const props = defineProps({
   isOpen: Boolean,
@@ -17,6 +18,13 @@ const gameStore = useGameStore();
 const { t } = useI18n();
 
 const activeTab = ref('friends');
+const showProfile = ref(false);
+const profileUserId = ref(null);
+
+function openProfile(userId) {
+    profileUserId.value = userId;
+    showProfile.value = true;
+}
 
 watch(() => props.isOpen, (val) => {
   if (val) {
@@ -71,7 +79,7 @@ const invite = (id) => {
               {{ user.nickname[0] }}</div>
             <div>
               <div class="font-bold text-white flex items-center gap-2">
-                {{ user.nickname }}
+                <span @click="openProfile(user.id)" class="cursor-pointer hover:underline">{{ user.nickname }}</span>
                 <span v-if="user.isOnline"
                       class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_5px_lime]"></span>
               </div>
@@ -94,7 +102,7 @@ const invite = (id) => {
         <h3 v-if="friendsStore.incoming.length" class="text-xs text-white/50 uppercase mb-2">{{ $t('friends_incoming_label') }}</h3>
         <div v-for="user in friendsStore.incoming" :key="user.id"
              class="flex items-center justify-between bg-white/5 p-3 rounded-xl mb-2">
-          <span class="text-white font-bold">{{ user.nickname }}</span>
+          <span @click="openProfile(user.id)" class="text-white font-bold cursor-pointer hover:underline">{{ user.nickname }}</span>
           <div class="flex gap-2">
             <button @click="friendsStore.acceptRequest(user.id)"
                     class="min-h-[36px] px-3 py-1 bg-primary text-on-primary rounded-lg text-sm active:scale-95">{{ $t('friends_accept') }}</button>
@@ -120,7 +128,7 @@ const invite = (id) => {
 
         <div v-for="user in friendsStore.searchResults" :key="user.id"
              class="flex items-center justify-between bg-white/5 p-3 rounded-xl">
-          <span class="text-white font-bold">{{ user.nickname }}</span>
+          <span @click="openProfile(user.id)" class="text-white font-bold cursor-pointer hover:underline">{{ user.nickname }}</span>
           <span v-if="friendsStore.friends.some(f => f.id === user.id)"
                 class="text-xs text-green-400">{{ $t('friends_already_friend') }}</span>
           <button v-else @click="friendsStore.sendRequest(user.id)"
@@ -130,6 +138,7 @@ const invite = (id) => {
 
     </div>
   </BaseModal>
+  <ProfileModal :is-open="showProfile" :user-id="profileUserId" @close="showProfile = false" />
 </template>
 
 <style scoped>
