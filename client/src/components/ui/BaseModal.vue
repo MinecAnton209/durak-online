@@ -43,6 +43,9 @@ onUnmounted(() => {
       <div
         v-if="isOpen"
         class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="title ? 'modal-title' : undefined"
         @click.self="handleBackdrop"
       >
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" @click="handleBackdrop"></div>
@@ -55,10 +58,11 @@ onUnmounted(() => {
           ]"
         >
           <div v-if="title" class="flex items-center justify-between sticky top-0 bg-surface/95 backdrop-blur-sm z-10 -mx-4 sm:-mx-6 md:-mx-8 px-4 sm:px-6 md:px-8 py-3 sm:py-4 border-b border-white/5 sm:rounded-t-3xl">
-            <h2 class="text-lg sm:text-xl font-bold text-white tracking-wide">{{ title }}</h2>
+            <h2 id="modal-title" class="text-lg sm:text-xl font-bold text-white tracking-wide">{{ title }}</h2>
             <button
               @click="emit('close')"
               class="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:text-white transition-colors bg-white/5 hover:bg-white/10 rounded-full shrink-0 active:scale-95"
+              aria-label="Close"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
