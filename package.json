@@ -62,9 +62,9 @@
       "tar": "^7.5.3"
     },
     "onlyBuiltDependencies": [
-      "@prisma/client",
+      "@prisma/engines",
       "bcrypt",
-      "esbuild",
+      "prisma",
       "sqlite3"
     ]
   },

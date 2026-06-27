@@ -288,7 +288,7 @@ async function updateStatsAfterGame(game) {
             } else {
                 await ratingService.updateRatingsAfterGame(game);
             }
-        });
+        }, { timeout: 30000 });
 
     } catch (error) {
         console.error(`[GAME END ${game.id}] FATAL ERROR during stats update. Rolling back.`, error);
@@ -694,17 +694,19 @@ function processBotTurn(game) {
             return;
         }
 
-        const move = botLogic.decideMove(game, activePlayerId);
+        const result = botLogic.getBotMove(game, player);
+        const move = result.action || result;
         if (move) {
-            if (move.type === 'attack') {
+            if (move.type === 'attack' || (move.type === 'move' && game.defenderId !== activePlayerId)) {
                 const card = move.card;
                 player.cards = player.cards.filter(c => c !== card);
                 game.table.push(card);
                 game.lastAction = 'move';
                 game.turn = game.defenderId;
                 logEvent(game, null, { i18nKey: 'log_attack', options: { name: player.name, rank: card.rank, suit: card.suit } });
-            } else if (move.type === 'defend') {
-                const { card, targetIndex } = move;
+            } else if (move.type === 'defend' || (move.type === 'move' && game.defenderId === activePlayerId)) {
+                const card = move.card;
+                const targetIndex = game.table.length - 1;
                 player.cards = player.cards.filter(c => c !== card);
                 game.table[targetIndex + 1] = card;
                 game.lastAction = 'move';
