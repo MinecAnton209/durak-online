@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '@/components/ui/BaseModal.vue';
+import ProfileModal from './ProfileModal.vue';
 
 const props = defineProps({
   isOpen: Boolean
@@ -12,7 +13,14 @@ const emit = defineEmits(['close']);
 const activeTab = ref('rating');
 const leaders = ref([]);
 const isLoading = ref(false);
+const showProfile = ref(false);
+const profileUserId = ref(null);
 const { t } = useI18n();
+
+function openProfile(userId) {
+  profileUserId.value = userId;
+  showProfile.value = true;
+}
 
 const tabs = [
   { id: 'rating', label: t('leaderboard_rating') },
@@ -67,7 +75,8 @@ watch([() => props.isOpen, activeTab], ([isOpen]) => {
         <div
           v-for="(player, idx) in leaders"
           :key="idx"
-          class="border-b border-white/5 hover:bg-white/5 px-3 py-3 flex items-center"
+          @click="openProfile(player.id)"
+          class="border-b border-white/5 hover:bg-white/5 px-3 py-3 flex items-center cursor-pointer"
         >
           <span class="w-10 font-mono text-primary font-bold">
             <span v-if="idx === 0">🥇</span>
@@ -90,6 +99,7 @@ watch([() => props.isOpen, activeTab], ([isOpen]) => {
       </div>
     </div>
   </BaseModal>
+  <ProfileModal :is-open="showProfile" :user-id="profileUserId" @close="showProfile = false" />
 </template>
 
 <style scoped>
