@@ -139,7 +139,7 @@ watch(() => authStore.isAuthenticated, (val) => {
 
 <template>
   <div v-if="authStore.isAuthenticated"
-    class="min-h-screen flex flex-col items-center justify-center p-4 bg-background relative overflow-hidden font-sans">
+    class="min-h-screen flex flex-col items-center justify-center p-4 md:p-6 bg-background relative overflow-hidden font-sans">
 
     <div
       class="w-full max-w-2xl bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 p-6 md:p-8 animate-fade-in my-auto">
@@ -175,17 +175,17 @@ watch(() => authStore.isAuthenticated, (val) => {
           </div>
           <p class="text-xs text-white/50 mt-2">{{ $t('telegram_linked_info') }}</p>
           <button @click="handleUnlinkTelegram"
-            class="mt-3 text-xs text-error/70 hover:text-error underline transition-colors">{{ $t('unlink_button')
+            class="mt-3 text-xs text-error/70 hover:text-error underline transition-colors min-h-[48px]">{{ $t('unlink_button')
             }}</button>
         </div>
 
         <div v-else-if="tgStore.isTelegram && authStore.isAuthenticated" class="flex flex-col items-center gap-2">
           <button @click="handleLinkTelegram"
-            class="w-full max-w-sm py-3 px-6 rounded-xl font-bold transition-all bg-[#24A1DE] text-white hover:bg-[#1b8bbf] shadow-lg flex items-center justify-center gap-2">
+            class="w-full max-w-sm py-3 px-6 rounded-xl font-bold transition-all bg-[#24A1DE] text-white hover:bg-[#1b8bbf] shadow-lg flex items-center justify-center gap-2 min-h-[48px]">
             {{ $t('link_current_telegram', { username: authStore.user?.username }) }}
           </button>
           <p class="text-xs text-on-surface-variant">{{ $t('or_label') }}</p>
-          <button @click="openMergeAccountModal" class="text-sm text-primary hover:underline">
+          <button @click="openMergeAccountModal" class="text-sm text-primary hover:underline min-h-[48px]">
             {{ $t('login_other_and_link') }}
           </button>
         </div>
@@ -208,7 +208,7 @@ watch(() => authStore.isAuthenticated, (val) => {
             <div class="flex bg-black/20 p-1 rounded-2xl border border-white/5">
               <button v-for="size in [24, 36, 52]" :key="size"
                 @click="quickDeckSize = size; saveSettings({ pref_quick_deck_size: size })"
-                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all"
+                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all min-h-[48px]"
                 :class="quickDeckSize === size ? 'bg-primary text-on-primary shadow-lg' : 'text-on-surface-variant hover:text-white'">
                 {{ size }}
               </button>
@@ -222,7 +222,7 @@ watch(() => authStore.isAuthenticated, (val) => {
             <div class="flex bg-black/20 p-1 rounded-2xl border border-white/5">
               <button v-for="count in [2, 3, 4]" :key="count"
                 @click="quickMaxPlayers = count; saveSettings({ pref_quick_max_players: count })"
-                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all"
+                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all min-h-[48px]"
                 :class="quickMaxPlayers === count ? 'bg-primary text-on-primary shadow-lg' : 'text-on-surface-variant hover:text-white'">
                 {{ count }}
               </button>
@@ -235,12 +235,12 @@ watch(() => authStore.isAuthenticated, (val) => {
               $t('settings_quick_game_mode') }}</label>
             <div class="flex bg-black/20 p-1 rounded-2xl border border-white/5">
               <button @click="quickGameMode = 'podkidnoy'; saveSettings({ pref_quick_game_mode: 'podkidnoy' })"
-                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all"
+                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all min-h-[48px]"
                 :class="quickGameMode === 'podkidnoy' ? 'bg-primary text-on-primary shadow-lg' : 'text-on-surface-variant hover:text-white'">
                 {{ $t('game_mode_podkidnoy') }}
               </button>
               <button @click="quickGameMode = 'perevodnoy'; saveSettings({ pref_quick_game_mode: 'perevodnoy' })"
-                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all"
+                class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all min-h-[48px]"
                 :class="quickGameMode === 'perevodnoy' ? 'bg-primary text-on-primary shadow-lg' : 'text-on-surface-variant hover:text-white'">
                 {{ $t('game_mode_perevodnoy') }}
               </button>
@@ -255,7 +255,7 @@ watch(() => authStore.isAuthenticated, (val) => {
                 $t('bet_toggle_sublabel') }}</p>
             </div>
             <button @click="quickIsBetting = !quickIsBetting; saveSettings({ pref_quick_is_betting: quickIsBetting })"
-              class="w-14 h-7 rounded-full transition-all relative p-1"
+              class="w-14 h-7 min-h-[48px] rounded-full transition-all relative p-1"
               :class="quickIsBetting ? 'bg-primary' : 'bg-white/10'">
               <div class="w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300"
                 :class="quickIsBetting ? 'translate-x-7' : 'translate-x-0'"></div>
@@ -280,7 +280,7 @@ watch(() => authStore.isAuthenticated, (val) => {
           $t('settings_active_sessions') }}</h3>
         <div class="max-w-sm mx-auto text-center">
           <button @click="isSessionsModalOpen = true"
-            class="w-full py-3 px-6 rounded-xl font-bold transition-all bg-surface-variant/20 hover:bg-surface-variant/40 text-on-surface border border-white/10">
+            class="w-full py-3 px-6 rounded-xl font-bold transition-all bg-surface-variant/20 hover:bg-surface-variant/40 text-on-surface border border-white/10 min-h-[48px]">
             🛡️ {{ $t('settings_active_sessions') }}
           </button>
         </div>
@@ -291,7 +291,7 @@ watch(() => authStore.isAuthenticated, (val) => {
           $t('password_change_title') }}</h3>
         <div class="max-w-sm mx-auto text-center">
           <button @click="isPasswordModalOpen = true"
-            class="w-full py-3 px-6 rounded-xl font-bold transition-all bg-primary text-on-primary shadow-lg hover:shadow-primary/40">
+            class="w-full py-3 px-6 rounded-xl font-bold transition-all bg-primary text-on-primary shadow-lg hover:shadow-primary/40 min-h-[48px]">
             {{ $t('password_change_title') }}
           </button>
         </div>
@@ -307,7 +307,7 @@ watch(() => authStore.isAuthenticated, (val) => {
 
         <div v-else class="flex flex-col items-center gap-2">
           <button @click="toggleNotifications" :disabled="notifStore.isLoading || notifStore.permission === 'denied'"
-            class="w-full max-w-sm py-3 px-6 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+            class="w-full max-w-sm py-3 px-6 rounded-xl font-bold transition-all flex items-center justify-center gap-2 min-h-[48px]"
             :class="notifStore.isSubscribed
               ? 'bg-error/10 text-error border border-error/20 hover:bg-error/20'
               : 'bg-primary text-on-primary shadow-lg hover:shadow-primary/40'">
@@ -325,7 +325,7 @@ watch(() => authStore.isAuthenticated, (val) => {
       </div>
 
       <button @click="router.push('/')"
-        class="w-full py-4 rounded-xl border border-outline/30 text-on-surface hover:bg-white/5 transition-colors font-bold">
+        class="w-full py-4 rounded-xl border border-outline/30 text-on-surface hover:bg-white/5 transition-colors font-bold min-h-[48px]">
         {{ $t('go_home') }}
       </button>
     </div>
@@ -355,10 +355,10 @@ watch(() => authStore.isAuthenticated, (val) => {
               class="w-full py-3 px-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/40 focus:outline-none" />
             <div class="flex gap-2 mt-2">
               <button @click="isPasswordModalOpen = false"
-                class="flex-1 py-3 rounded-xl border border-outline/30 text-on-surface hover:bg-white/5 font-bold">{{
+                class="flex-1 py-3 rounded-xl border border-outline/30 text-on-surface hover:bg-white/5 font-bold min-h-[48px]">{{
                   $t('go_home') }}</button>
               <button @click="submitPasswordChange" :disabled="isChangingPassword"
-                class="flex-1 py-3 rounded-xl font-bold bg-primary text-on-primary shadow-lg hover:shadow-primary/40 disabled:opacity-60">
+                class="flex-1 py-3 rounded-xl font-bold bg-primary text-on-primary shadow-lg hover:shadow-primary/40 disabled:opacity-60 min-h-[48px]">
                 <span v-if="isChangingPassword" class="animate-spin">⏳</span>
                 <span v-else>{{ $t('password_change_submit') }}</span>
               </button>
