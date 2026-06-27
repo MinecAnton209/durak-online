@@ -10,6 +10,7 @@ import AuthModal from '@/components/ui/AuthModal.vue';
 import LeaderboardModal from '@/components/ui/LeaderboardModal.vue';
 import InboxModal from '@/components/ui/InboxModal.vue';
 import MyGamesModal from '@/components/ui/MyGamesModal.vue';
+import ProfileModal from '@/components/ui/ProfileModal.vue';
 
 const { t, locale } = useI18n();
 const router = useRouter();
@@ -25,6 +26,13 @@ const authMode = ref('login');
 const isLeaderboardOpen = ref(false);
 const isInboxOpen = ref(false);
 const isMyGamesOpen = ref(false);
+const showProfile = ref(false);
+const profileUserId = ref(null);
+
+function openMyProfile() {
+  profileUserId.value = authStore.user.id;
+  showProfile.value = true;
+}
 
 onMounted(() => {
   if (route.query.gameId) {
@@ -154,7 +162,7 @@ const goToLobbyBrowser = () => {
           <div
             class="flex-1 bg-primary/10 rounded-xl p-2 border border-primary/30 flex items-center justify-center gap-2 relative min-w-0">
             <div class="flex items-center justify-center gap-1.5 w-full">
-              <span class="text-lg shrink-0">👤</span>
+              <button @click="openMyProfile" class="text-lg shrink-0 hover:scale-110 transition-transform" title="Profile">👤</button>
               <span class="text-primary font-bold truncate text-xs sm:text-sm md:text-base">{{ authStore.user?.username }}</span>
               <svg v-if="authStore.user?.isVerified" class="w-4 h-4 text-blue-400 shrink-0" viewBox="0 0 24 24"
                 fill="currentColor">
@@ -246,6 +254,7 @@ const goToLobbyBrowser = () => {
     <LeaderboardModal :is-open="isLeaderboardOpen" @close="isLeaderboardOpen = false" />
     <InboxModal :is-open="isInboxOpen" @close="isInboxOpen = false" />
     <MyGamesModal :is-open="isMyGamesOpen" @close="isMyGamesOpen = false" />
+    <ProfileModal :is-open="showProfile" :user-id="profileUserId" @close="showProfile = false" />
   </div>
 </template>
 
