@@ -250,9 +250,10 @@ model InboxMessage {
 }
 
 model Profile {
-  id       Int    @id @default(autoincrement())
-  userId   Int    @unique
-  bio      String @default("")
-  avatarId String @default("default")
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         Int      @id @default(autoincrement())
+  user_id    Int      @unique
+  bio        String   @default("")
+  avatar_id  String   @default("default")
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
