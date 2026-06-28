@@ -7,13 +7,13 @@ console.log('[Prisma Prepare] Syncing SQLite database for tests...');
 try {
     // Generate Prisma Client
     console.log('[Prisma Prepare] Generating client...');
-    execSync('npx prisma generate', { stdio: 'inherit' });
+    execSync('pnpm prisma generate', { stdio: 'inherit' });
 
     // Reset test database
     const url = 'file:./test/test.db';
     console.log(`[Prisma Prepare] Resetting test database at: ${url}`);
 
-    execSync('npx prisma db push --skip-generate --force-reset', {
+    execSync('pnpm prisma db push --skip-generate --force-reset', {
         env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url },
         stdio: 'inherit'
     });
