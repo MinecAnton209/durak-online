@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../db/prisma');
 
 let bot = null;
-const APP_URL = 'https://t.me/durakthebot/durak';
+const APP_URL = process.env.TG_APP_URL || 'http://localhost:3000';
 
 const userStates = {};
 
