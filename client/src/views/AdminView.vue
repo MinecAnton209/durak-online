@@ -101,23 +101,67 @@ const loadActivityData = async () => {
 watch(activityPeriod, loadActivityData);
 
 const isMaintenanceEnabled = ref(false);
+const isMaintenanceScheduled = ref(false);
 const maintenanceMessage = ref('');
 const currentMaintenanceMessage = ref('');
 const maintenanceStartTime = ref(null);
 const maintenanceMinutes = ref(0);
 const processingMaintenance = ref(false);
+const editingMessage = ref('');
+const editingActive = ref(false);
+const countdownText = ref('');
+
+let countdownTimer = null;
+
+const maintenanceStatusText = computed(() => {
+    if (isMaintenanceScheduled.value) return 'SCHEDULED';
+    if (isMaintenanceEnabled.value) return 'ACTIVE';
+    return 'OFF';
+});
+const maintenanceStatusClass = computed(() => {
+    if (isMaintenanceScheduled.value) return 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30';
+    if (isMaintenanceEnabled.value) return 'bg-red-500/20 text-red-500 border-red-500/30 animate-pulse';
+    return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+});
 
 const broadcastText = ref('');
 const broadcastType = ref('info');
 
 const displayedMaintenanceMessage = computed(() => currentMaintenanceMessage.value || t('ban_reason_not_specified'));
 
+const updateCountdown = () => {
+    if (!maintenanceStartTime.value || isMaintenanceEnabled.value) {
+        countdownText.value = '';
+        return;
+    }
+    const now = Date.now();
+    const diff = maintenanceStartTime.value - now;
+    if (diff <= 0) {
+        countdownText.value = t('maintenance_complete_soon');
+        checkMaintenanceStatus();
+        return;
+    }
+    const m = Math.floor(diff / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    countdownText.value = `${m}m ${s}s`;
+};
+
 const checkMaintenanceStatus = async () => {
     const status = await adminStore.fetchMaintenanceStatus();
     if (status) {
         isMaintenanceEnabled.value = status.enabled;
+        isMaintenanceScheduled.value = !status.enabled && status.startTime && status.startTime > Date.now();
         currentMaintenanceMessage.value = status.message;
         maintenanceStartTime.value = status.startTime;
+        editingMessage.value = status.message || '';
+        updateCountdown();
+        if (isMaintenanceScheduled.value) {
+            if (countdownTimer) clearInterval(countdownTimer);
+            countdownTimer = setInterval(updateCountdown, 1000);
+        } else {
+            if (countdownTimer) clearInterval(countdownTimer);
+            countdownTimer = null;
+        }
     }
 };
 
@@ -133,6 +177,21 @@ const handleEnableMaintenance = async () => {
         showToast(t('admin_toast_maint_enabled'));
     } catch (e) {
         showToast(t('admin_toast_maint_fail'), 'error');
+    } finally {
+        processingMaintenance.value = false;
+    }
+};
+
+const handleUpdateMaintenance = async () => {
+    if (!editingMessage.value.trim()) return;
+    processingMaintenance.value = true;
+    try {
+        await adminStore.updateMaintenance(editingMessage.value);
+        currentMaintenanceMessage.value = editingMessage.value;
+        editingActive.value = false;
+        showToast('Maintenance message updated');
+    } catch (e) {
+        showToast('Failed to update message', 'error');
     } finally {
         processingMaintenance.value = false;
     }
@@ -1398,15 +1457,41 @@ onMounted(async () => {
                             class="bg-surface/30 backdrop-blur-xl border border-white/5 p-8 rounded-[2.5rem] space-y-8 relative overflow-hidden group">
                             <div class="flex items-center justify-between relative z-10">
                                 <h3 class="text-xl font-bold text-white">{{ t('admin_maint_mode') }}</h3>
-                                <div :class="isMaintenanceEnabled ? 'bg-red-500/20 text-red-500 border-red-500/30' : 'bg-green-500/20 text-green-500 border-green-500/30'"
-                                    class="px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest animate-pulse">
-                                    {{ isMaintenanceEnabled ? t('admin_status_active') : t('admin_status_banned') }}
+                                <div :class="maintenanceStatusClass"
+                                    class="px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest">
+                                    {{ maintenanceStatusText }}
                                 </div>
                             </div>
                             <p class="text-on-surface-variant text-sm leading-relaxed relative z-10">
                                 {{ t('admin_maint_desc') }}
                             </p>
-                            <div v-if="!isMaintenanceEnabled" class="space-y-5 relative z-10">
+                            <div class="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 relative z-10">
+                                <p class="text-xs text-blue-300 leading-relaxed">
+                                    <span class="font-bold text-blue-200">💡 How it works:</span><br>
+                                    • Users see a maintenance page and cannot access the game.<br>
+                                    • Admins can still access the site normally (you are safe).<br>
+                                    • Active games will be given time to finish before blocking.<br>
+                                    • To disable — click the green button below while maintenance is active.
+                                </p>
+                            </div>
+
+                            <!-- Scheduled state -->
+                            <div v-if="isMaintenanceScheduled" class="space-y-4 relative z-10">
+                                <div class="p-6 bg-yellow-500/10 rounded-2xl border border-yellow-500/20 text-center">
+                                    <p class="text-[10px] text-yellow-400 uppercase font-black tracking-widest mb-2">Maintenance scheduled</p>
+                                    <p class="text-2xl font-bold text-yellow-300 font-mono">{{ countdownText }}</p>
+                                    <p class="text-sm text-yellow-400/70 mt-2">"{{ currentMaintenanceMessage }}"</p>
+                                </div>
+                                <div class="flex gap-3">
+                                    <button @click="handleDisableMaintenance" :disabled="processingMaintenance"
+                                        class="flex-1 py-4 bg-gray-500 text-white font-black rounded-3xl hover:bg-gray-600 active:scale-[0.98] transition-all disabled:opacity-50">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Disabled state -->
+                            <div v-if="!isMaintenanceEnabled && !isMaintenanceScheduled" class="space-y-5 relative z-10">
                                 <div class="space-y-2">
                                     <label
                                         class="text-[10px] font-black text-on-surface-variant uppercase tracking-[0.2em] px-1">{{
@@ -1419,8 +1504,8 @@ onMounted(async () => {
                                     <label
                                         class="text-[10px] font-black text-on-surface-variant uppercase tracking-[0.2em] px-1">{{
                                             t('admin_label_mins_lock') }}</label>
-                                    <input v-model="maintenanceMinutes" type="number"
-                                        class="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-sm text-white focus:border-primary outline-none transition-all">
+                                    <input v-model="maintenanceMinutes" type="number" placeholder="0 = immediate"
+                                        class="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-sm text-white focus:border-primary outline-none transition-all placeholder:opacity-20">
                                 </div>
                                 <button @click="handleEnableMaintenance" :disabled="processingMaintenance"
                                     class="w-full py-5 bg-red-500 text-white font-black rounded-3xl hover:bg-red-600 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-red-500/20">
@@ -1428,12 +1513,28 @@ onMounted(async () => {
                                     }}
                                 </button>
                             </div>
-                            <div v-else class="space-y-6 relative z-10">
+
+                            <!-- Active state -->
+                            <div v-if="isMaintenanceEnabled" class="space-y-6 relative z-10">
                                 <div class="p-6 bg-white/5 rounded-2xl border border-white/5 backdrop-blur-md">
                                     <p
                                         class="text-[10px] text-on-surface-variant mb-2 uppercase font-black tracking-widest">
                                         {{ t('admin_active_notice') }}</p>
-                                    <p class="text-lg text-white font-medium">"{{ currentMaintenanceMessage }}"</p>
+                                    <div v-if="!editingActive" class="flex items-center gap-2">
+                                        <p class="text-lg text-white font-medium flex-1">"{{ currentMaintenanceMessage }}"</p>
+                                        <button @click="editingActive = true; editingMessage = currentMaintenanceMessage"
+                                            class="text-xs text-primary hover:text-white transition-colors shrink-0">✏️</button>
+                                    </div>
+                                    <div v-else class="space-y-3">
+                                        <input v-model="editingMessage" type="text"
+                                            class="w-full bg-black/40 border border-white/20 rounded-xl px-4 py-3 text-sm text-white focus:border-primary outline-none transition-all">
+                                        <div class="flex gap-2">
+                                            <button @click="editingActive = false"
+                                                class="flex-1 py-2 rounded-xl bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-all">Cancel</button>
+                                            <button @click="handleUpdateMaintenance" :disabled="processingMaintenance"
+                                                class="flex-1 py-2 rounded-xl bg-primary text-white text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">{{ processingMaintenance ? '...' : 'Save' }}</button>
+                                        </div>
+                                    </div>
                                 </div>
                                 <button @click="handleDisableMaintenance" :disabled="processingMaintenance"
                                     class="w-full py-5 bg-green-500 text-white font-black rounded-3xl hover:bg-green-600 active:scale-[0.98] transition-all disabled:opacity-50">

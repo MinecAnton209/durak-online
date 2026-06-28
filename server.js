@@ -132,9 +132,10 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(maintenanceMiddleware);
-
 app.use(cookieParser());
+app.use(attachUserFromToken);
+
+app.use(maintenanceMiddleware);
 
 app.use(helmet({
     contentSecurityPolicy: {
@@ -168,18 +169,7 @@ app.use(cors({
     credentials: true
 }));
 
-app.get('/maintenance', (req, res) => {
-    const maintenanceMode = req.app.get('maintenanceMode');
-
-    if (!maintenanceMode.enabled) {
-        return res.redirect('/');
-    }
-
-    res.sendFile(path.join(__dirname, 'public', 'maintenance-page.html'));
-});
 app.use(express.json());
-
-app.use(attachUserFromToken);
 
 app.use('/', authRoutes);
 app.use('/api/telegram', telegramRoutes);
@@ -204,6 +194,10 @@ app.use(expressStaticGzip(path.join(__dirname, 'public'), {
     fileExtension: '.gz',
   }],
 }));
+
+app.get('/maintenance', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'maintenance.html'));
+});
 
 app.get(/.*/, (req, res) => {
     if (req.originalUrl.startsWith('/api')) {

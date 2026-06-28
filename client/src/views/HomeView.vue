@@ -96,6 +96,18 @@ const quickPlay = () => {
   }
 };
 
+async function handleViewProfile(username) {
+  try {
+    const res = await fetch(`/api/profile/by-username/${encodeURIComponent(username)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    profileUserId.value = data.user.id;
+    showProfile.value = true;
+  } catch (e) {
+    console.error('Error fetching profile by username:', e);
+  }
+}
+
 const goToLobbyBrowser = () => {
   router.push('/lobbies');
 };
@@ -159,10 +171,10 @@ const goToLobbyBrowser = () => {
         </div>
 
         <div v-else class="flex gap-2 animate-fade-in">
-          <div
-            class="flex-1 bg-primary/10 rounded-xl p-2 border border-primary/30 flex items-center justify-center gap-2 relative min-w-0">
+          <div @click="openMyProfile"
+            class="flex-1 bg-primary/10 rounded-xl p-2 border border-primary/30 flex items-center justify-center gap-2 relative min-w-0 cursor-pointer hover:bg-primary/15 hover:border-primary/50 transition-all active:scale-[0.98]">
             <div class="flex items-center justify-center gap-1.5 w-full">
-              <button @click="openMyProfile" class="text-lg shrink-0 hover:scale-110 transition-transform" title="Profile">👤</button>
+              <span class="text-lg shrink-0">👤</span>
               <span class="text-primary font-bold truncate text-xs sm:text-sm md:text-base">{{ authStore.user?.username }}</span>
               <svg v-if="authStore.user?.isVerified" class="w-4 h-4 text-blue-400 shrink-0" viewBox="0 0 24 24"
                 fill="currentColor">
@@ -253,7 +265,7 @@ const goToLobbyBrowser = () => {
       @submit="handleAuthSubmit" />
     <LeaderboardModal :is-open="isLeaderboardOpen" @close="isLeaderboardOpen = false" />
     <InboxModal :is-open="isInboxOpen" @close="isInboxOpen = false" />
-    <MyGamesModal :is-open="isMyGamesOpen" @close="isMyGamesOpen = false" />
+    <MyGamesModal :is-open="isMyGamesOpen" @close="isMyGamesOpen = false" @view-profile="handleViewProfile" />
     <ProfileModal :is-open="showProfile" :user-id="profileUserId" @close="showProfile = false" />
   </div>
 </template>

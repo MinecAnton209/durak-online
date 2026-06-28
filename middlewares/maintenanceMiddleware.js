@@ -4,13 +4,17 @@ module.exports = function (req, res, next) {
     const maintenanceMode = maintenanceService.getMaintenanceMode();
 
     if (maintenanceMode.enabled) {
-        // Allow admin routes and admins
+        // Allow admin routes, auth (for login), and admins
         if (req.originalUrl.startsWith('/api/admin') ||
             (req.user && req.user.is_admin) ||
+            req.originalUrl.startsWith('/login') ||
+            req.originalUrl.startsWith('/register') ||
             req.originalUrl.startsWith('/maintenance') ||
             req.originalUrl.startsWith('/css') ||
             req.originalUrl.startsWith('/js') ||
-            req.originalUrl.startsWith('/locales')) {
+            req.originalUrl.startsWith('/locales') ||
+            req.originalUrl.startsWith('/assets') ||
+            req.originalUrl === '/favicon.ico') {
             return next();
         }
 

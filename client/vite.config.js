@@ -46,6 +46,10 @@ export default defineConfig({
       },
     },
     rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        maintenance: fileURLToPath(new URL('./maintenance.html', import.meta.url)),
+      },
       output: {
         manualChunks: {
           'vendor-vue': ['vue', 'vue-router', 'pinia', 'vue-i18n'],

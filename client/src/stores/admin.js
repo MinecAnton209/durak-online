@@ -77,6 +77,21 @@ export const useAdminStore = defineStore('admin', () => {
         }
     }
 
+    async function updateMaintenance(message) {
+        try {
+            const response = await fetch('/api/admin/maintenance/update', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            });
+            if (!response.ok) throw new Error('Failed to update maintenance');
+            return await response.json();
+        } catch (err) {
+            console.error('Error updating maintenance:', err);
+            throw err;
+        }
+    }
+
     async function disableMaintenance() {
         try {
             const response = await fetch('/api/admin/maintenance/disable', {
@@ -283,6 +298,7 @@ export const useAdminStore = defineStore('admin', () => {
         fetchGamesByDay,
         fetchMaintenanceStatus,
         enableMaintenance,
+        updateMaintenance,
         disableMaintenance,
         broadcastMessage,
         fetchUsers,

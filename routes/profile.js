@@ -5,6 +5,42 @@ const prisma = new PrismaClient();
 
 const VALID_AVATARS = ['default','bear','cat','dog','fox','owl','penguin','rabbit','tiger','wolf','dragon','snake'];
 
+router.get('/by-username/:username', async (req, res) => {
+    try {
+        const username = req.params.username;
+        const user = await prisma.user.findFirst({
+            where: { username },
+            select: {
+                id: true,
+                username: true,
+                wins: true,
+                losses: true,
+                rating: true,
+                streak_count: true,
+                win_streak: true,
+                is_verified: true,
+                created_at: true,
+                profile: { select: { bio: true, avatar_id: true } }
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const isOwner = req.user && req.user.id === user.id;
+
+        res.json({
+            user,
+            profile: user.profile || { bio: '', avatar_id: 'default' },
+            isOwner
+        });
+    } catch (error) {
+        console.error('[Profile] Error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 router.get('/:userId', async (req, res) => {
     try {
         const userId = parseInt(req.params.userId);

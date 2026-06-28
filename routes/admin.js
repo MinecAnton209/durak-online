@@ -675,23 +675,32 @@ router.get('/maintenance/status', ensureAdmin, (req, res) => {
 
 router.post('/maintenance/enable', ensureAdmin, (req, res) => {
     const { message, minutesUntilStart = 0 } = req.body;
-    const mm = req.app.get('maintenanceMode');
-    const io = req.app.get('socketio');
     const startTime = Date.now() + minutesUntilStart * 60 * 1000;
-    mm.startTime = startTime;
-    mm.warningMessage = message || "Scheduled maintenance will begin soon.";
 
     if (minutesUntilStart > 0) {
-        io.emit('maintenanceWarning', { message: mm.warningMessage, startTime: mm.startTime });
-        if (mm.timer) clearTimeout(mm.timer);
-        mm.timer = setTimeout(() => { mm.enabled = true; mm.message = mm.warningMessage; console.log('[Admin] Maintenance mode ENABLED.'); }, minutesUntilStart * 60 * 1000);
+        maintenanceService.scheduleMaintenance(message || "Scheduled maintenance will begin soon.", startTime);
+        maintenanceService.setMaintenanceMode({ startTime, warningMessage: message || "Scheduled maintenance will begin soon." });
+        setTimeout(() => {
+            maintenanceService.setMaintenanceMode({ enabled: true, message: message || "The site is undergoing maintenance. Please come back later." });
+            console.log('[Admin] Maintenance mode ENABLED.');
+        }, minutesUntilStart * 60 * 1000);
         res.json({ status: 'warning_scheduled', message: `Maintenance scheduled in ${minutesUntilStart} minutes.` });
     } else {
-        mm.enabled = true;
-        mm.message = message || "The site is undergoing maintenance. Please come back later.";
+        maintenanceService.setMaintenanceMode({
+            enabled: true,
+            message: message || "The site is undergoing maintenance. Please come back later."
+        });
         console.log('[Admin] Maintenance mode ENABLED IMMEDIATELY.');
         res.json({ status: 'enabled', message: 'Maintenance mode enabled.' });
     }
+});
+
+router.put('/maintenance/update', ensureAdmin, (req, res) => {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: 'Message is required' });
+    maintenanceService.setMaintenanceMode({ message, warningMessage: message });
+    console.log('[Admin] Maintenance message updated.');
+    res.json({ status: 'updated', message: 'Maintenance message updated.' });
 });
 
 router.post('/maintenance/disable', ensureAdmin, (req, res) => {
