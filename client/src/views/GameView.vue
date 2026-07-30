@@ -422,7 +422,6 @@ const addBot = () => {
             <div class="relative flex-1">
               <input type="text" :value="currentUrl" readonly
                 class="w-full bg-black/20 border border-outline/30 rounded-xl px-3.5 py-2.5 text-white text-xs md:text-sm truncate focus:outline-none">
-              <span class="absolute right-9 top-1/2 -translate-y-1/2 text-[10px] text-on-surface-variant/40 pointer-events-none hidden sm:block">🔗</span>
             </div>
             <button @click="copyLink"
               class="bg-black/20 border border-outline/30 px-3.5 rounded-xl hover:bg-white/10 text-white transition-all active:scale-90 flex items-center"

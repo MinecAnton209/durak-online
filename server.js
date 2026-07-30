@@ -693,9 +693,9 @@ io.on('connection', (socket) => {
                 oldPlayerId: oldPlayerSocketId,
                 name: oldPlayerData.name
             });
-            logEvent(game, null, { i18nKey: 'log_player_reconnected', options: { name: oldPlayerData.name } });
+            gameService.logEvent(game, null, { i18nKey: 'log_player_reconnected', options: { name: oldPlayerData.name } });
 
-            broadcastGameState(gameId);
+            gameService.broadcastGameState(gameId);
 
             return;
         }
@@ -706,7 +706,7 @@ io.on('connection', (socket) => {
         if (game) {
             // Check by socket id first
             if (game.players[socket.id]) {
-                broadcastGameState(gameId);
+                gameService.broadcastGameState(gameId);
                 return;
             }
             // Check by dbId for authenticated players who got a new socket
@@ -723,7 +723,7 @@ io.on('connection', (socket) => {
                         if (game.turn === sid) game.turn = socket.id;
                         delete game.players[sid];
                         socket.join(gameId);
-                        broadcastGameState(gameId);
+                        gameService.broadcastGameState(gameId);
                         return;
                     }
                 }
