@@ -119,4 +119,31 @@ router.get('/lobbies', (req, res) => {
     res.json(publicLobbies);
 });
 
+router.get('/game/:id/status', async (req, res) => {
+    const games = req.app.get('activeGames');
+    if (!games) return res.status(500).json({ error: 'Games not available' });
+
+    const gameId = req.params.id.toUpperCase();
+    const game = games[gameId];
+
+    if (!game) {
+        return res.status(404).json({ error: 'Game not found', i18nKey: 'error_game_not_found' });
+    }
+
+    res.json({
+        gameId: game.id,
+        status: game.status,
+        playerCount: game.playerOrder.length,
+        maxPlayers: game.settings.maxPlayers,
+        settings: {
+            gameMode: game.settings.gameMode,
+            deckSize: game.settings.deckSize,
+            turnDuration: game.settings.turnDuration,
+            betAmount: game.settings.betAmount || 0,
+            lobbyType: game.settings.lobbyType,
+        },
+        hostName: game.players[game.hostId]?.name || 'Unknown'
+    });
+});
+
 module.exports = router;

@@ -29,6 +29,7 @@ const urlGameId = route.params.id.toUpperCase();
 
 const errorMessage = ref('');
 const isLoading = ref(true);
+const gameInfo = ref(null);
 
 const isFriendsOpen = ref(false);
 const friendsModalTab = ref('friends');
@@ -95,7 +96,7 @@ onUnmounted(() => {
   socketStore.socket?.off('kicked');
 });
 
-const checkRoomStatus = () => {
+const checkRoomStatus = async () => {
   isLoading.value = true;
   errorMessage.value = '';
 
@@ -107,13 +108,57 @@ const checkRoomStatus = () => {
     return;
   }
 
-  if (isPlayerInGame.value) {
+  try {
+    const res = await fetch(`/api/public/game/${urlGameId}/status`);
+    if (!res.ok) {
+      errorMessage.value = t('error_game_not_found');
+      isLoading.value = false;
+      return;
+    }
+    gameInfo.value = await res.json();
+  } catch (e) {
+    errorMessage.value = t('error_unknown');
+    isLoading.value = false;
+    return;
+  }
+
+  if (!gameInfo.value) return;
+
+  const status = gameInfo.value.status;
+
+  if (isPlayerInGame.value || gameStore.gameStatus === 'playing') {
     socketStore.emit('getLobbyState', { gameId: urlGameId });
     isLoading.value = false;
-  } else {
-    gameStore.attemptReconnect(urlGameId);
+    return;
+  }
 
-    const timeoutTimer = setTimeout(() => {
+  if (status === 'waiting') {
+    const name = authStore.isAuthenticated ? undefined : `Guest ${Math.floor(Math.random() * 1000)}`;
+    gameStore.initListeners();
+    socketStore.emit('joinLobby', {
+      gameId: urlGameId,
+      playerName: name
+    });
+    const joinTimer = setTimeout(() => {
+      if (isLoading.value) {
+        errorMessage.value = t('error_lobby_not_found');
+        isLoading.value = false;
+      }
+    }, 5000);
+    socketStore.socket?.once('joinSuccess', () => {
+      clearTimeout(joinTimer);
+      isLoading.value = false;
+    });
+    socketStore.socket?.once('error', (err) => {
+      if (err.i18nKey) {
+        clearTimeout(joinTimer);
+        errorMessage.value = t(err.i18nKey);
+        isLoading.value = false;
+      }
+    });
+  } else if (status === 'in_progress') {
+    gameStore.attemptReconnect(urlGameId);
+    const reconnectTimer = setTimeout(() => {
       if (isLoading.value) {
         errorMessage.value = t('error_reconnect_failed');
         isLoading.value = false;
@@ -123,18 +168,16 @@ const checkRoomStatus = () => {
     }, 5000);
 
     const onJoinSuccess = () => {
-      clearTimeout(timeoutTimer);
+      clearTimeout(reconnectTimer);
       isLoading.value = false;
       socketStore.socket?.off('reconnectFailed', onReconnectFailed);
       socketStore.socket?.off('joinSuccess', onJoinSuccess);
     };
 
     const onReconnectFailed = (data) => {
-      clearTimeout(timeoutTimer);
-
+      clearTimeout(reconnectTimer);
       const key = (data && data.i18nKey) ? data.i18nKey : 'error_reconnect_failed';
       errorMessage.value = t(key);
-
       isLoading.value = false;
       socketStore.socket?.off('reconnectFailed', onReconnectFailed);
       socketStore.socket?.off('joinSuccess', onJoinSuccess);
@@ -142,6 +185,9 @@ const checkRoomStatus = () => {
 
     socketStore.socket?.once('joinSuccess', onJoinSuccess);
     socketStore.socket?.once('reconnectFailed', onReconnectFailed);
+  } else {
+    errorMessage.value = t('error_game_not_found');
+    isLoading.value = false;
   }
 };
 
@@ -244,16 +290,29 @@ const addBot = () => {
   <div
     class="h-[100dvh] w-full flex flex-col relative overflow-hidden font-sans bg-background select-none touch-manipulation">
 
-    <div v-if="!isGameStarted" class="flex-1 flex items-center justify-center p-4 overflow-y-auto">
+    <div v-if="!isGameStarted" class="flex-1 flex items-center justify-center p-3 md:p-4 overflow-y-auto">
       <div
-        class="w-full max-w-xl bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 p-6 md:p-8 animate-fade-in text-on-surface my-auto">
-        <h2 class="text-center text-on-surface-variant mb-1 text-sm uppercase">{{ $t('room_label') }}</h2>
-        <h1 class="text-4xl md:text-5xl text-center font-bold text-primary tracking-widest font-mono uppercase mb-6">{{
-          urlGameId }}</h1>
+        class="w-full max-w-xl bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 p-5 md:p-8 animate-fade-in text-on-surface my-auto">
 
-        <div v-if="errorMessage" class="text-center py-4">
-          <p class="text-error font-bold text-lg mb-2">{{ errorMessage }}</p>
-          <router-link to="/" class="text-primary underline">{{ $t('go_home') }}</router-link>
+        <div class="text-center mb-5">
+          <div class="flex items-center justify-center gap-2 mb-1">
+            <div class="h-px flex-1 bg-outline/20 max-w-12"></div>
+            <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em]">{{ $t('room_label') }}</span>
+            <div class="h-px flex-1 bg-outline/20 max-w-12"></div>
+          </div>
+          <h1 class="text-3xl md:text-4xl font-bold font-mono tracking-[0.15em] uppercase"
+            :class="errorMessage ? 'text-error' : 'text-primary'"
+          >{{ urlGameId }}</h1>
+        </div>
+
+        <div v-if="errorMessage" class="text-center py-8">
+          <div class="text-5xl mb-4">😞</div>
+          <p class="text-error font-bold text-base mb-1">{{ errorMessage }}</p>
+          <p class="text-on-surface-variant text-xs mb-5">{{ $t('error_lobby_not_found') }}</p>
+          <router-link to="/"
+            class="inline-block bg-primary hover:bg-[#00A891] text-on-primary font-bold py-2.5 px-8 rounded-xl transition-all active:scale-95 shadow-lg shadow-primary/20">
+            ← {{ $t('go_home') }}
+          </router-link>
         </div>
 
         <div v-else-if="isLoading" class="flex justify-center py-10">
@@ -262,58 +321,87 @@ const addBot = () => {
 
         <div v-else class="flex flex-col gap-4">
 
-          <div class="bg-black/20 p-3 rounded-xl border border-white/5 flex flex-col gap-2">
-
-            <div class="flex justify-between items-center pb-2 border-b border-white/5">
-              <span class="text-sm text-on-surface-variant">{{ $t('game_mode_label') }}</span>
-              <span class="font-bold text-primary flex items-center gap-1">
-                <span v-if="gameStore.settings?.gameMode === 'perevodnoy'">🔄</span>
-                <span v-else>⬇️</span>
-                {{ $t('game_mode_' + (gameStore.settings?.gameMode || 'podkidnoy')) }}
-              </span>
+          <!-- Settings card -->
+          <div class="bg-black/20 rounded-2xl border border-white/5 p-4">
+            <div class="flex items-center gap-1.5 mb-3">
+              <svg class="w-3.5 h-3.5 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+              <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('settings_title') }}</span>
+              <div class="flex-grow border-t border-outline/20"></div>
             </div>
 
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-on-surface-variant">{{ $t('players_count_label') }}</span>
-              <select v-if="gameStore.isHost" @change="updateSettings" v-model="localMaxPlayers"
-                class="bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white outline-none">
-                <option :value="2">2</option>
-                <option :value="3">3</option>
-                <option :value="4">4</option>
-              </select>
-              <span v-else class="font-bold text-white">{{ gameStore.settings?.maxPlayers || 2 }}</span>
+            <div class="flex flex-wrap gap-x-5 gap-y-2.5">
+              <div class="flex items-center gap-2">
+                <span class="text-base">{{ gameStore.settings?.gameMode === 'perevodnoy' ? '🔄' : '⬇️' }}</span>
+                <div>
+                  <div class="text-[10px] text-on-surface-variant/60">{{ $t('game_mode_label') }}</div>
+                  <span class="font-bold text-sm text-primary">{{ $t('game_mode_' + (gameStore.settings?.gameMode || 'podkidnoy')) }}</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-base">👥</span>
+                <div>
+                  <div class="text-[10px] text-on-surface-variant/60">{{ $t('players_count_label') }}</div>
+                  <span v-if="gameStore.isHost" class="text-sm font-bold text-white">
+                    <select @change="updateSettings" v-model="localMaxPlayers"
+                      class="bg-black/40 border border-outline/30 rounded-lg px-2 py-0.5 text-sm text-white outline-none cursor-pointer appearance-none font-bold">
+                      <option :value="2" class="bg-surface">2</option>
+                      <option :value="3" class="bg-surface">3</option>
+                      <option :value="4" class="bg-surface">4</option>
+                    </select>
+                  </span>
+                  <span v-else class="font-bold text-sm text-white">{{ gameStore.settings?.maxPlayers || 2 }}</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-base">🃏</span>
+                <div>
+                  <div class="text-[10px] text-on-surface-variant/60">{{ $t('deck_size_label') }}</div>
+                  <span v-if="gameStore.isHost" class="text-sm font-bold text-white">
+                    <select @change="updateSettings" v-model="localDeckSize"
+                      class="bg-black/40 border border-outline/30 rounded-lg px-2 py-0.5 text-sm text-white outline-none cursor-pointer appearance-none font-bold">
+                      <option :value="24" class="bg-surface">24</option>
+                      <option :value="36" class="bg-surface">36</option>
+                      <option :value="52" class="bg-surface">52</option>
+                    </select>
+                  </span>
+                  <span v-else class="font-bold text-sm text-white">{{ gameStore.settings?.deckSize || 36 }}</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-base">⏱️</span>
+                <div>
+                  <div class="text-[10px] text-on-surface-variant/60">{{ $t('time_limit_label') }}</div>
+                  <span v-if="gameStore.isHost" class="text-sm font-bold text-white">
+                    <select @change="updateSettings" v-model="localTurnDuration"
+                      class="bg-black/40 border border-outline/30 rounded-lg px-2 py-0.5 text-sm text-white outline-none cursor-pointer appearance-none font-bold">
+                      <option :value="15" class="bg-surface">{{ $t('time_15s') }}</option>
+                      <option :value="30" class="bg-surface">{{ $t('time_30s') }}</option>
+                      <option :value="60" class="bg-surface">{{ $t('time_60s') }}</option>
+                      <option :value="0" class="bg-surface">{{ $t('time_unlimited') }}</option>
+                    </select>
+                  </span>
+                  <span v-else class="font-bold text-sm text-white">
+                    {{ gameStore.settings?.turnDuration === 0 ? '∞' : (gameStore.settings?.turnDuration || 60) + 's' }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="gameStore.settings?.betAmount > 0" class="flex items-center gap-2">
+                <span class="text-base">💰</span>
+                <div>
+                  <div class="text-[10px] text-on-surface-variant/60">{{ $t('bet_amount_label') }}</div>
+                  <span class="font-bold text-sm text-primary">{{ gameStore.settings?.betAmount }}</span>
+                </div>
+              </div>
             </div>
 
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-on-surface-variant">{{ $t('deck_size_label') }}</span>
-              <select v-if="gameStore.isHost" @change="updateSettings" v-model="localDeckSize"
-                class="bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white outline-none">
-                <option :value="24">24</option>
-                <option :value="36">36</option>
-                <option :value="52">52</option>
-              </select>
-              <span v-else class="font-bold text-white">{{ gameStore.settings?.deckSize || 36 }}</span>
-            </div>
-
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-on-surface-variant">{{ $t('time_limit_label') }}</span>
-              <select v-if="gameStore.isHost" @change="updateSettings" v-model="localTurnDuration"
-                class="bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white outline-none">
-                <option :value="15">{{ $t('time_15s') }}</option>
-                <option :value="30">{{ $t('time_30s') }}</option>
-                <option :value="60">{{ $t('time_60s') }}</option>
-                <option :value="0">{{ $t('time_unlimited') }}</option>
-              </select>
-              <span v-else class="font-bold text-white">
-                {{ gameStore.settings?.turnDuration === 0 ? $t('time_unlimited') : (gameStore.settings?.turnDuration ||
-                  60) + 's' }}
-              </span>
-            </div>
-
+            <!-- Bot slot (host only) -->
             <div v-if="gameStore.isHost && gameStore.players.length < localMaxPlayers"
-              class="pt-2 border-t border-white/10 mt-2">
+              class="mt-3 pt-3 border-t border-white/5">
               <div class="flex gap-2">
-                <select v-model="botDifficulty" class="bg-black/40 text-white text-xs rounded px-2 outline-none flex-1">
+                <select v-model="botDifficulty" class="bg-black/40 text-white text-xs rounded-xl px-3 py-2 outline-none flex-1 border border-outline/20 cursor-pointer appearance-none">
                   <option value="child">👶 Child</option>
                   <option value="beginner">🤡 Beginner</option>
                   <option value="easy">🤖 Easy</option>
@@ -322,83 +410,107 @@ const addBot = () => {
                   <option value="impossible">🦾 Impossible</option>
                 </select>
                 <button @click="addBot"
-                  class="bg-surface text-white text-xs px-3 py-1.5 rounded font-bold hover:bg-white/20 transition-colors">
-                  + Bot
+                  class="bg-primary/10 text-primary border border-primary/30 font-bold text-xs px-4 rounded-xl hover:bg-primary/20 transition-all active:scale-95 flex items-center gap-1">
+                  <span>+</span> {{ $t('friends_add') }} Bot
                 </button>
               </div>
             </div>
-
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-on-surface-variant">{{ $t('bet_amount_label') }}</span>
-              <span class="font-bold text-primary">💰 {{ gameStore.settings?.betAmount || 0 }}</span>
-            </div>
           </div>
 
+          <!-- Invite link -->
           <div class="flex gap-2">
-            <input type="text" :value="currentUrl" readonly
-              class="w-full bg-black/20 border border-outline/50 rounded-xl px-4 py-2 text-white text-xs md:text-sm truncate">
+            <div class="relative flex-1">
+              <input type="text" :value="currentUrl" readonly
+                class="w-full bg-black/20 border border-outline/30 rounded-xl px-3.5 py-2.5 text-white text-xs md:text-sm truncate focus:outline-none">
+              <span class="absolute right-9 top-1/2 -translate-y-1/2 text-[10px] text-on-surface-variant/40 pointer-events-none hidden sm:block">🔗</span>
+            </div>
             <button @click="copyLink"
-              class="bg-surface border border-outline/50 px-3 rounded-xl hover:bg-white/10 text-white transition-colors">📋</button>
-          </div>
-
-          <div v-if="authStore.isAuthenticated" class="flex justify-end">
-            <button @click="openFriendsList"
-              class="text-xs font-bold text-primary flex items-center gap-1 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors">
-              <span>👥</span> {{ $t('invite_button') }}
+              class="bg-black/20 border border-outline/30 px-3.5 rounded-xl hover:bg-white/10 text-white transition-all active:scale-90 flex items-center"
+              :title="$t('link_copied')">📋</button>
+            <button v-if="authStore.isAuthenticated" @click="openFriendsList"
+              class="bg-black/20 border border-outline/30 px-3.5 rounded-xl hover:bg-white/10 text-white transition-all active:scale-90 flex items-center gap-1.5 text-xs font-bold whitespace-nowrap">
+              👥 {{ $t('invite_button') }}
             </button>
           </div>
 
-          <ul class="space-y-2">
-            <li v-for="p in gameStore.players" :key="p.id"
-              class="flex items-center justify-between bg-black/20 p-2.5 rounded-xl border border-white/5 relative group">
+          <!-- Players list -->
+          <div>
+            <div class="flex items-center gap-1.5 mb-2.5">
+              <svg class="w-3.5 h-3.5 text-on-surface-variant/60 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+              <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('players_count_label') }}</span>
+              <span class="text-[10px] text-on-surface-variant/60">({{ gameStore.players.length }}/{{ gameStore.settings?.maxPlayers || '?' }})</span>
+              <div class="flex-grow border-t border-outline/20"></div>
+            </div>
+            <ul class="space-y-1.5">
+              <li v-for="p in gameStore.players" :key="p.id"
+                class="flex items-center justify-between bg-black/20 p-2.5 rounded-xl border transition-colors group"
+                :class="p.id === gameStore.hostId ? 'border-primary/20' : 'border-white/5 hover:border-white/10'">
 
-              <div class="flex items-center gap-3 min-w-0">
-                <div
-                  class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
-                  <span v-if="p.isBot">🤖</span>
-                  <span v-else>{{ p.name[0] }}</span>
-                </div>
-
-                <div class="flex flex-col min-w-0">
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-sm font-medium truncate" :class="p.isBot ? 'text-cyan-400' : 'text-white'">
-                      {{ p.name }}
-                    </span>
-                    <svg v-if="p.isVerified" class="w-3 h-3 text-blue-400 shrink-0" viewBox="0 0 24 24"
-                      fill="currentColor">
-                      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span v-if="p.streak > 3"
-                      class="text-[10px] text-orange-500 font-bold bg-orange-500/10 px-1 rounded border border-orange-500/20 shrink-0">🔥{{
-                        p.streak }}</span>
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div
+                    class="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 border"
+                    :class="p.id === gameStore.hostId ? 'bg-primary/20 text-primary border-primary/30' : (p.isBot ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : 'bg-white/5 text-white border-white/10')">
+                    <span v-if="p.isBot">🤖</span>
+                    <span v-else-if="p.id === gameStore.hostId">👑</span>
+                    <span v-else>{{ p.name[0] }}</span>
                   </div>
-                  <span v-if="p.id === gameStore.playerId" class="text-[10px] text-gray-400">{{ $t('you_label')
-                    }}</span>
+                  <div class="flex flex-col min-w-0">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-sm font-medium truncate" :class="p.isBot ? 'text-cyan-400' : (p.id === gameStore.hostId ? 'text-primary' : 'text-white')">
+                        {{ p.name }}
+                      </span>
+                      <svg v-if="p.isVerified" class="w-3 h-3 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span v-if="p.streak > 3" class="text-[10px] text-orange-500 font-bold bg-orange-500/10 px-1 rounded border border-orange-500/20 shrink-0">🔥{{ p.streak }}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span v-if="p.id === gameStore.playerId" class="text-[10px] text-primary">{{ $t('you_label') }}</span>
+                      <span v-if="p.id === gameStore.hostId && p.id !== gameStore.playerId" class="text-[10px] text-primary/60">{{ $t('tooltip_host') }}</span>
+                      <span v-if="p.isBot" class="text-[10px] text-cyan-400/60">Bot</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <div class="flex items-center gap-2">
-                <button v-if="p.id !== gameStore.playerId && authStore.isAuthenticated && !p.isBot"
-                  @click="openAddFriend(p.name)"
-                  class="w-7 h-7 rounded-lg bg-white/5 hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors"
-                  :title="$t('tooltip_add_friend')">+</button>
+                <div class="flex items-center gap-1.5">
+                  <button v-if="p.id !== gameStore.playerId && authStore.isAuthenticated && !p.isBot"
+                    @click="openAddFriend(p.name)"
+                    class="w-7 h-7 rounded-lg bg-white/5 opacity-0 group-hover:opacity-100 hover:bg-primary hover:text-white text-on-surface-variant flex items-center justify-center transition-all"
+                    :title="$t('tooltip_add_friend')">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+                    </svg>
+                  </button>
+                  <button v-if="gameStore.isHost && p.id !== gameStore.playerId" @click="kickPlayer(p.id)"
+                    class="w-7 h-7 rounded-lg bg-white/5 opacity-0 group-hover:opacity-100 hover:bg-error/20 text-error flex items-center justify-center transition-all"
+                    :title="$t('kick_player')">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </div>
 
-                <span v-if="p.id === gameStore.hostId" :title="$t('tooltip_host')" class="text-lg">👑</span>
-
-                <button v-if="gameStore.isHost && p.id !== gameStore.playerId" @click="kickPlayer(p.id)"
-                  class="text-error hover:bg-white/10 p-1 rounded transition-colors"
-                  :title="$t('kick_player')">🚫</button>
-              </div>
-            </li>
-          </ul>
-
-          <button v-if="gameStore.isHost" @click="startGame" :disabled="gameStore.players.length < 2"
-            class="w-full bg-primary text-on-primary font-bold py-3 rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all">{{
-              $t('start_game_button') }}</button>
-          <p v-else class="text-center text-xs text-white/50 animate-pulse">{{ $t('waiting_for_host') }}</p>
-          <button @click="gameStore.leaveGame"
-            class="w-full bg-transparent border border-white/10 text-white/70 hover:bg-white/5 font-bold py-2 rounded-xl transition-all">{{
-              $t('leave_lobby') }}</button>
+          <!-- Actions -->
+          <div class="flex flex-col gap-2 mt-1">
+            <button v-if="gameStore.isHost" @click="startGame" :disabled="gameStore.players.length < 2"
+              class="w-full bg-primary hover:bg-[#00A891] text-on-primary font-bold py-3.5 rounded-2xl shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              {{ $t('start_game_button') }}
+            </button>
+            <p v-else-if="gameStore.players.length > 0" class="text-center text-xs text-white/40 animate-pulse py-1">{{ $t('waiting_for_host') }}</p>
+            <button @click="gameStore.leaveGame"
+              class="w-full bg-black/20 border border-outline/30 text-on-surface-variant hover:bg-white/5 hover:text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98]">
+              {{ $t('leave_lobby') }}
+            </button>
+          </div>
         </div>
       </div>
     </div>

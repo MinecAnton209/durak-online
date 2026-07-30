@@ -640,6 +640,23 @@ io.on('connection', (socket) => {
             }
         }
 
+        // If no disconnected player found, try matching by dbId for authenticated users
+        // This handles page refreshes where the old socket wasn't marked as disconnected
+        if (!oldPlayerSocketId && sessionUser) {
+            for (const [socketId, player] of Object.entries(game.players)) {
+                if (player.dbId === sessionUser.id) {
+                    // Disconnect old socket if still connected
+                    const oldSocket = io.sockets.sockets.get(socketId);
+                    if (oldSocket) {
+                        oldSocket.leave(gameId);
+                    }
+                    oldPlayerSocketId = socketId;
+                    oldPlayerData = player;
+                    break;
+                }
+            }
+        }
+
         if (oldPlayerSocketId && oldPlayerData) {
             console.log(`[Reconnect] Player ${oldPlayerData.name} found in game ${gameId}. Reconnecting...`);
             clearTimeout(oldPlayerData.reconnectTimeout);
@@ -686,8 +703,31 @@ io.on('connection', (socket) => {
     });
     socket.on('requestGameState', ({ gameId }) => {
         const game = games[gameId];
-        if (game && game.players[socket.id]) {
-            broadcastGameState(gameId);
+        if (game) {
+            // Check by socket id first
+            if (game.players[socket.id]) {
+                broadcastGameState(gameId);
+                return;
+            }
+            // Check by dbId for authenticated players who got a new socket
+            const sessionUser = socket.request.session?.user;
+            if (sessionUser) {
+                for (const [sid, player] of Object.entries(game.players)) {
+                    if (player.dbId === sessionUser.id) {
+                        game.players[socket.id] = player;
+                        const idx = game.playerOrder.indexOf(sid);
+                        if (idx > -1) game.playerOrder[idx] = socket.id;
+                        if (game.hostId === sid) game.hostId = socket.id;
+                        if (game.attackerId === sid) game.attackerId = socket.id;
+                        if (game.defenderId === sid) game.defenderId = socket.id;
+                        if (game.turn === sid) game.turn = socket.id;
+                        delete game.players[sid];
+                        socket.join(gameId);
+                        broadcastGameState(gameId);
+                        return;
+                    }
+                }
+            }
         }
     });
     socket.on('addBot', ({ gameId, difficulty }) => {
