@@ -106,13 +106,13 @@
     </div>
 
     <!-- Empty state -->
-    <div v-else-if="!loading" class="flex flex-col items-center justify-center py-12 text-on-surface-variant">
+    <div v-else-if="!inboxStore.loading" class="flex flex-col items-center justify-center py-12 text-on-surface-variant">
       <div class="text-4xl mb-2">📥</div>
       <p>{{ $t('inbox.empty') }}</p>
     </div>
 
     <!-- Loading -->
-    <div v-if="loading" class="flex justify-center py-8">
+    <div v-if="inboxStore.loading" class="flex justify-center py-8">
       <div class="w-8 h-8 border-3 border-white/10 border-t-white rounded-full animate-spin"></div>
     </div>
 
