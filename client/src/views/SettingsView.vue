@@ -141,7 +141,7 @@ watch(() => authStore.isAuthenticated, (val) => {
     class="min-h-screen flex items-center justify-center p-3 md:p-6 bg-background relative overflow-hidden">
 
     <div
-      class="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 animate-fade-in my-auto max-h-[100dvh] md:max-h-[90vh] flex flex-col">
+      class="w-full max-w-2xl lg:max-w-4xl xl:max-w-6xl bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 animate-fade-in my-auto max-h-[100dvh] md:max-h-[90vh] flex flex-col">
 
       <!-- Fixed header -->
       <div class="shrink-0 p-5 md:p-8 lg:p-10 pb-0 flex items-center gap-3">
@@ -157,9 +157,13 @@ watch(() => authStore.isAuthenticated, (val) => {
 
       <!-- Scrollable content -->
       <div class="flex-1 overflow-y-auto px-5 md:px-8 lg:px-10 pb-5 md:pb-8 lg:pb-10 scrollbar-hide">
+        <div class="grid grid-cols-1 xl:grid-cols-2 xl:gap-5 xl:items-start">
+
+          <!-- Left column -->
+          <div class="space-y-4">
 
         <!-- Card Backs -->
-        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6 mb-4">
+        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6">
           <div class="flex items-center gap-1.5 mb-4">
             <span class="text-base">🎴</span>
             <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('choose_card_back') }}</span>
@@ -179,7 +183,7 @@ watch(() => authStore.isAuthenticated, (val) => {
         </div>
 
         <!-- Quick Game Defaults -->
-        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6 mb-4">
+        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6">
           <div class="flex items-center gap-1.5 mb-4">
             <svg class="w-4 h-4 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
@@ -274,9 +278,13 @@ watch(() => authStore.isAuthenticated, (val) => {
             </div>
           </div>
         </div>
+          </div>
+
+          <!-- Right column -->
+          <div class="space-y-4 mt-4 xl:mt-0">
 
         <!-- Account -->
-        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6 mb-4">
+        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6">
           <div class="flex items-center gap-1.5 mb-4">
             <span class="text-base">👤</span>
             <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('settings_title') }}</span>
@@ -358,6 +366,8 @@ watch(() => authStore.isAuthenticated, (val) => {
             </button>
             <p v-if="notifStore.permission === 'denied'" class="text-xs text-error font-bold">{{ $t('notifications_denied') }}</p>
             <p v-else class="text-[10px] text-on-surface-variant/60 text-center max-w-xs">{{ $t('notifications_info') }}</p>
+          </div>
+        </div>
           </div>
         </div>
 
