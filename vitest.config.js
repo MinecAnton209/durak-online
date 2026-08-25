@@ -11,6 +11,9 @@ export default defineConfig({
             DATABASE_URL: 'file:./test/test.db',
             DIRECT_URL: 'file:./test/test.db'
         },
+        // Test files share a single SQLite database; running them in parallel
+        // contends on the same file and produces flaky cross-file count races.
+        fileParallelism: false,
         poolOptions: {
             threads: {
                 singleThread: true

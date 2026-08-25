@@ -12,6 +12,12 @@ const settings = {
 
 const glicko = new Glicko2(settings);
 
+// Glicko2 falls back to 1500 when the configured default rating is falsy
+// (settings.rating || 1500), so a 0-based default never takes effect. New
+// players have rating 0 by design, so force the anchor to 0 to keep ratings
+// centered on 0 instead of silently starting everyone at 1500.
+glicko._default_rating = settings.rating;
+
 async function updateRatingsAfterGame(game) {
     if (!game || !game.winner || !game.winner.winners || !game.winner.loser) {
         console.warn(`[RatingService] Incomplete game result data for rating update: ${game?.id}`);
