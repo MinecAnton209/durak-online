@@ -183,7 +183,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 });
 
-router.get('/sessions', async (req, res) => {
+router.get('/api/auth/sessions', async (req, res) => {
     const currentUser = req.session?.user;
     if (!currentUser) return res.status(401).json({ message: 'Unauthorized' });
 
@@ -203,7 +203,7 @@ router.get('/sessions', async (req, res) => {
     }
 });
 
-router.delete('/sessions/:id', async (req, res) => {
+router.delete('/api/auth/sessions/:id', async (req, res) => {
     const currentUser = req.session?.user;
     if (!currentUser) return res.status(401).json({ message: 'Unauthorized' });
 

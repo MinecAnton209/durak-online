@@ -22,11 +22,9 @@ const expandedSessions = ref({}); // Track expanded state by ID
 const fetchSessions = async () => {
     isLoading.value = true;
     try {
-        const res = await fetch('/api/auth/sessions'); // Fallback check
-        // Actual route is /sessions based on previous context
-        const res2 = await fetch('/sessions');
-        if (res2.ok) {
-            const rawSessions = await res2.json();
+        const res = await fetch('/api/auth/sessions');
+        if (res.ok) {
+            const rawSessions = await res.json();
             sessions.value = rawSessions.map(s => {
                 const ua = parseUserAgent(s.device);
                 return {
@@ -51,7 +49,7 @@ const terminateSession = async (sessionId) => {
     if (!confirm(t('session_confirm_terminate'))) return;
 
     try {
-        const res = await fetch(`/sessions/${sessionId}`, { method: 'DELETE' });
+        const res = await fetch(`/api/auth/sessions/${sessionId}`, { method: 'DELETE' });
         const data = await res.json();
 
         if (res.ok) {
