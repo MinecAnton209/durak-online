@@ -20,7 +20,7 @@ if (isSqlite && !testDbUrl.startsWith('file:')) {
 
 export async function setup() {
     console.log(`[Test Setup] Initializing ${isSqlite ? 'SQLite' : 'PostgreSQL'} database for tests...`);
-    execSync('npx prisma db push --skip-generate --force-reset', {
+    execSync('npx prisma db push --force-reset', {
         env: { ...process.env, DATABASE_URL: testDbUrl },
         stdio: 'pipe'
     });

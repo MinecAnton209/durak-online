@@ -1,13 +1,15 @@
-const { PrismaClient } = require('@prisma/client');
+const { PrismaClient } = require('../generated/prisma/client.ts');
 require('dotenv').config();
 
-const prisma = new PrismaClient();
+const connectionString = process.env.DATABASE_URL || '';
+const isPostgres = connectionString.startsWith('postgresql://') || connectionString.startsWith('postgres://');
 
-// Helper to check provider in runtime (used in routes/admin.js)
-prisma.getDbProvider = () => {
-    const url = process.env.DATABASE_URL || '';
-    if (url.startsWith('postgresql://') || url.startsWith('postgres://')) return 'postgresql';
-    return 'sqlite';
-};
+const adapter = isPostgres
+  ? new (require('@prisma/adapter-pg').PrismaPg)({ connectionString })
+  : new (require('@prisma/adapter-better-sqlite3').PrismaBetterSqlite3)({ url: connectionString });
+
+const prisma = new PrismaClient({ adapter });
+
+prisma.getDbProvider = () => (isPostgres ? 'postgresql' : 'sqlite');
 
 module.exports = prisma;

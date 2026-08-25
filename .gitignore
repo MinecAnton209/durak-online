@@ -42,6 +42,9 @@ build/Release
 node_modules/
 jspm_packages/
 
+# Generated Prisma Client (Prisma 7)
+generated/
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
@@ -138,6 +141,9 @@ dist
 .history/
 data/database.sqlite
 *.sqlite
+test/test.db
+test/test.db-wal
+test/test.db-shm
 .vscode/
 .idea/
 /public/

@@ -13,7 +13,7 @@ try {
     const url = 'file:./test/test.db';
     console.log(`[Prisma Prepare] Resetting test database at: ${url}`);
 
-    execSync('pnpm prisma db push --skip-generate --force-reset', {
+    execSync('pnpm prisma db push --force-reset', {
         env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url },
         stdio: 'inherit'
     });
