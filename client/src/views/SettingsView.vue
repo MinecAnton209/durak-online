@@ -135,12 +135,48 @@ watch(() => authStore.isAuthenticated, (val) => {
   }
 });
 
+const cardRowRef = ref(null);
+let isDown = false;
+let startX = 0;
+let scrollStart = 0;
+let dragMoved = 0;
+
+const onCardRowDown = (e) => {
+  if (e.pointerType !== 'mouse') return;
+  const el = cardRowRef.value;
+  if (!el || el.scrollWidth <= el.clientWidth) return;
+  isDown = true;
+  startX = e.clientX;
+  scrollStart = el.scrollLeft;
+  dragMoved = 0;
+  el.setPointerCapture?.(e.pointerId);
+};
+
+const onCardRowMove = (e) => {
+  if (!isDown) return;
+  const el = cardRowRef.value;
+  const dx = e.clientX - startX;
+  dragMoved = Math.max(dragMoved, Math.abs(dx));
+  el.scrollLeft = scrollStart - dx;
+};
+
+const onCardRowUp = (e) => {
+  if (!isDown) return;
+  isDown = false;
+  cardRowRef.value?.releasePointerCapture?.(e.pointerId);
+};
+
 const onCardRowWheel = (e) => {
-  const el = e.currentTarget;
-  if (el.scrollWidth <= el.clientWidth) return;
+  const el = cardRowRef.value;
+  if (!el || el.scrollWidth <= el.clientWidth) return;
   if (e.deltaY === 0) return;
   e.preventDefault();
-  el.scrollLeft += e.deltaY;
+  el.scrollBy({ left: e.deltaY, behavior: 'smooth' });
+};
+
+const onCardClick = (style) => {
+  if (dragMoved > 5) return;
+  saveCardStyle(style);
 };
 </script>
 
@@ -177,9 +213,11 @@ const onCardRowWheel = (e) => {
             <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('choose_card_back') }}</span>
             <div class="flex-grow border-t border-outline/20"></div>
           </div>
-          <div class="flex gap-3 md:gap-4 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1 cursor-grab active:cursor-grabbing" @wheel="onCardRowWheel">
+          <div ref="cardRowRef"
+            class="card-row flex gap-3 md:gap-4 overflow-x-auto pb-1 -mx-1 px-1 cursor-grab active:cursor-grabbing select-none"
+            @pointerdown="onCardRowDown" @pointermove="onCardRowMove" @pointerup="onCardRowUp" @pointercancel="onCardRowUp" @wheel="onCardRowWheel">
             <div v-for="style in styles" :key="style" class="flex flex-col items-center gap-2 cursor-pointer group shrink-0"
-              @click="saveCardStyle(style)">
+              @click="onCardClick(style)">
               <div class="transition-all duration-200 p-0.5 rounded-xl"
                 :class="currentStyle === style ? 'ring-2 ring-primary scale-105 shadow-lg shadow-primary/20' : 'opacity-60 group-hover:opacity-100 hover:scale-105'">
                 <Card :is-back="true" :card-style="style" class="pointer-events-none shadow-lg !w-14 !h-20 md:!w-16 md:!h-24 lg:!w-24 lg:!h-36" />
@@ -444,6 +482,21 @@ const onCardRowWheel = (e) => {
 </template>
 
 <style scoped>
+.card-row {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  -ms-overflow-style: auto;
+}
+
+.card-row::-webkit-scrollbar {
+  height: 6px;
+}
+
+.card-row::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+}
+
 .animate-fade-in {
   animation: fadeIn 0.5s ease-out;
 }
