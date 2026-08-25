@@ -200,7 +200,7 @@ const onCardClick = (style) => {
       </div>
 
       <!-- Scrollable content -->
-      <div class="flex-1 overflow-y-auto px-5 md:px-8 lg:px-10 pb-5 md:pb-8 lg:pb-10 scrollbar-hide">
+      <div class="settings-scroll flex-1 overflow-y-auto px-5 md:px-8 lg:px-10 pb-5 md:pb-8 lg:pb-10">
         <div class="grid grid-cols-1 xl:grid-cols-2 xl:gap-5 xl:items-start">
 
           <!-- Left column -->
@@ -485,6 +485,7 @@ const onCardClick = (style) => {
 .card-row {
   scroll-behavior: smooth;
   scrollbar-width: thin;
+  scrollbar-color: var(--color-primary) transparent;
   -ms-overflow-style: auto;
 }
 
@@ -492,9 +493,47 @@ const onCardClick = (style) => {
   height: 6px;
 }
 
+.card-row::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 9999px;
+}
+
 .card-row::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.25);
-  border-radius: 3px;
+  background: var(--color-primary);
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background 0.2s ease;
+}
+
+.card-row::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-container, #5DFCCF);
+  box-shadow: 0 0 8px rgba(0, 191, 165, 0.5);
+}
+
+.settings-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 191, 165, 0.5) transparent;
+}
+
+.settings-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 9999px;
+}
+
+.settings-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 191, 165, 0.5);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.settings-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+  background-clip: padding-box;
 }
 
 .animate-fade-in {
