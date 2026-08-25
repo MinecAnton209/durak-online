@@ -4,8 +4,15 @@ const statsService = require('./statsService');
 const achievementService = require('./achievementService');
 const ratingService = require('./ratingService');
 
+// During this window the deal animation plays; moves and the turn timer are locked.
+const DEAL_ANIMATION_MS = 4000;
+
 let io;
 let games = {};
+
+function isDealingActive(game) {
+    return !!(game.dealEndsAt && Date.now() < game.dealEndsAt);
+}
 
 function init(socketIo, activeGames) {
     io = socketIo;
@@ -79,6 +86,7 @@ async function startGame(gameId) {
         }
     }
     game.startTime = new Date();
+    game.dealEndsAt = Date.now() + DEAL_ANIMATION_MS;
     game.deck = createDeck(game.settings.deckSize);
     game.trumpCard = game.deck.length > 0 ? game.deck[game.deck.length - 1] : { suit: '♠', rank: '' };
     game.trumpSuit = game.trumpCard.suit;
@@ -139,6 +147,14 @@ async function startGame(gameId) {
     updateTurn(game, firstAttackerIndex);
     broadcastGameState(gameId);
     if (io) io.emit('lobbyStarted', { lobbyId: gameId });
+
+    // Re-broadcast when the deal window ends so the turn timer and bots start.
+    if (game.dealEndsAt) {
+        const remaining = game.dealEndsAt - Date.now();
+        setTimeout(() => {
+            if (games[gameId] && !games[gameId].winner) broadcastGameState(gameId);
+        }, remaining);
+    }
 }
 
 function refillHands(game) {
@@ -310,6 +326,9 @@ function stopTurnTimer(game) {
 function startTurnTimer(game) {
     stopTurnTimer(game);
 
+    // Lock the timer while the deal animation plays so the first turn can't time out.
+    if (isDealingActive(game)) return;
+
     if (!game.settings.turnDuration || game.settings.turnDuration <= 0 || game.winner) return;
 
     const durationMs = game.settings.turnDuration * 1000 + 2000;
@@ -457,6 +476,7 @@ function broadcastGameState(gameId) {
                 deckCardCount: game.deck.length,
                 isYourTurn: playerId === game.turn && playerForWhomStateIs.cards.length > 0,
                 turnDeadline: game.turnDeadline,
+                dealEndsAt: game.dealEndsAt || null,
                 canPass: playerId === game.attackerId && game.table.length > 0 && game.table.length % 2 === 0,
                 canTake: playerId === game.defenderId && game.table.length > 0,
                 winner: game.winner,
@@ -545,7 +565,7 @@ function broadcastGameState(gameId) {
     }
     if (game.status === 'in_progress' && !game.winner) {
         const currentPlayer = game.players[game.turn];
-        if (currentPlayer && currentPlayer.isBot) {
+        if (currentPlayer && currentPlayer.isBot && !isDealingActive(game)) {
             processBotTurn(game);
         }
     }

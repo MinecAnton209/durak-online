@@ -77,6 +77,9 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
     socket.on('makeMove', ({ gameId, card }) => {
         const game = games[gameId];
         if (!game || !game.players[socket.id] || game.winner) return;
+        if (game.dealEndsAt && Date.now() < game.dealEndsAt) {
+            return socket.emit('invalidMove', { reason: "error_dealing" });
+        }
 
         const cardValidation = validateCard(card);
         if (!cardValidation.valid) {
@@ -168,6 +171,7 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
         const game = games[gameId];
         const { getNextPlayerIndex, updateTurn, checkGameOver } = require('../utils/gameLogic');
         if (!game || game.attackerId !== socket.id || game.table.length === 0 || game.table.length % 2 !== 0 || game.winner) return;
+        if (game.dealEndsAt && Date.now() < game.dealEndsAt) return;
         if (game.players[socket.id]) {
             game.players[socket.id].afkStrikes = 0;
         }
@@ -198,6 +202,7 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
         const game = games[gameId];
         const { getNextPlayerIndex, updateTurn, checkGameOver } = require('../utils/gameLogic');
         if (!game || game.defenderId !== socket.id || game.table.length === 0 || game.winner) return;
+        if (game.dealEndsAt && Date.now() < game.dealEndsAt) return;
         if (game.players[socket.id]) {
             game.players[socket.id].afkStrikes = 0;
         }

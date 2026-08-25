@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import Card from './Card.vue';
 
 const props = defineProps({
@@ -12,8 +12,25 @@ const flyingCards = ref([]);
 const showTrump = ref(false);
 const trumpStyle = ref({});
 
+// Timed-sequence fallback: guarantees the deal resolves even if 'finished'
+// is missed (e.g. component unmount/tab switch) so the game never gets stuck.
+let finished = false;
+let safetyTimer = null;
+
+const finish = () => {
+  if (finished) return;
+  finished = true;
+  if (safetyTimer) clearTimeout(safetyTimer);
+  emit('finished');
+};
+
 onMounted(() => {
   startSequence();
+  safetyTimer = setTimeout(finish, 6000);
+});
+
+onUnmounted(() => {
+  if (safetyTimer) clearTimeout(safetyTimer);
 });
 
 const startSequence = async () => {
@@ -21,62 +38,63 @@ const startSequence = async () => {
 
   for (let i = 0; i < 6; i++) {
     spawnCard('me', i);
-    await delay(100);
+    await delay(90);
     spawnCard('opponent', i);
-    await delay(100);
+    await delay(90);
   }
 
-  await delay(800);
-  emit('finished');
+  await delay(700);
+  finish();
 };
 
 const animateTrump = async () => {
   showTrump.value = true;
   trumpStyle.value = {
     top: '40%',
-    left: '10%',
-    transform: 'rotate(0deg) scale(1)',
+    left: '50%',
+    transform: 'translate(-50%, -50%) rotate(0deg) scale(1)',
     zIndex: 50
   };
 
-  await delay(100);
+  await delay(120);
 
   trumpStyle.value = {
-    top: '40%',
-    left: '25%',
-    transform: 'rotate(0deg) scale(1.2)',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%) scale(1.25)',
     zIndex: 50,
     transition: 'all 0.6s ease-out'
   };
 
-  await delay(800);
+  await delay(750);
 
   trumpStyle.value = {
-    top: '40%',
-    left: '14%',
-    transform: 'rotate(90deg) scale(1)',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%) rotate(90deg) scale(1)',
     zIndex: 0,
     transition: 'all 0.5s ease-in'
   };
 
-  await delay(500);
+  await delay(450);
 };
 
 const spawnCard = (target, index) => {
-  const id = Date.now() + Math.random();
+  const id = `deal-${target}-${index}`;
   const isMe = target === 'me';
 
   const card = {
     id,
     style: {
-      top: '40%',
-      left: '10%',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%) scale(0.5) rotate(0deg)',
       opacity: 0,
-      transform: 'scale(0.5) rotate(0deg)',
-      transition: 'all 0.6s cubic-bezier(0.25, 1, 0.5, 1)'
+      transition: 'all 0.55s cubic-bezier(0.25, 1, 0.5, 1)'
     }
   };
 
+  flyingCards.value = flyingCards.value.filter(c => c.id !== id);
   flyingCards.value.push(card);
 
   requestAnimationFrame(() => {
@@ -84,17 +102,17 @@ const spawnCard = (target, index) => {
     if (isMe) {
       card.style.top = '100%';
       card.style.left = '50%';
-      card.style.transform = `translate(-50%, -100%) rotate(${index * 5 - 15}deg) scale(1)`;
+      card.style.transform = `translate(-50%, -100%) rotate(${index * 4 - 10}deg) scale(1)`;
     } else {
       card.style.top = '0%';
       card.style.left = '50%';
-      card.style.transform = `translate(-50%, 0%) rotate(180deg) scale(0.8)`;
+      card.style.transform = `translate(-50%, 0%) rotate(${180 + index * 4 - 10}deg) scale(0.8)`;
     }
   });
 
   setTimeout(() => {
     flyingCards.value = flyingCards.value.filter(c => c.id !== id);
-  }, 700);
+  }, 650);
 };
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
@@ -105,7 +123,7 @@ const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
     <div
       v-if="showTrump"
-      class="absolute w-24 h-36 transition-all"
+      class="absolute w-16 h-24 sm:w-20 sm:h-28 md:w-24 md:h-36 transition-all"
       :style="trumpStyle"
     >
       <Card :rank="trumpCard.rank" :suit="trumpCard.suit" />
@@ -114,13 +132,13 @@ const delay = (ms) => new Promise(r => setTimeout(r, ms));
     <div
       v-for="card in flyingCards"
       :key="card.id"
-      class="absolute w-24 h-36"
+      class="absolute w-16 h-24 sm:w-20 sm:h-28 md:w-24 md:h-36"
       :style="card.style"
     >
       <Card :is-back="true" />
     </div>
 
-    <div class="absolute top-[40%] left-[10%] w-24 h-36">
+    <div class="absolute top-[50%] left-[50%] w-16 h-24 sm:w-20 sm:h-28 md:w-24 md:h-36 -translate-x-1/2 -translate-y-1/2">
       <Card :is-back="true" class="shadow-2xl" />
       <div class="absolute top-1 left-1 w-full h-full bg-gray-700 rounded-xl -z-10 border border-gray-600"></div>
       <div class="absolute top-2 left-2 w-full h-full bg-gray-700 rounded-xl -z-20 border border-gray-600"></div>

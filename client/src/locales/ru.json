@@ -29,6 +29,7 @@
   "error_unknown": "Неизвестная ошибка",
   "error_game_not_found": "Комната не найдена 😞",
   "error_room_full": "Комната заполнена 🚫",
+  "error_dealing": "Идёт раздача карт…",
   "error_enter_name": "Введите имя!",
   "placeholder_name": "Введите имя...",
   "placeholder_username": "Ваш никнейм",

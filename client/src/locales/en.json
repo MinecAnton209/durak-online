@@ -29,6 +29,7 @@
   "error_unknown": "Unknown error",
   "error_game_not_found": "Room not found 😞",
   "error_room_full": "Room is full 🚫",
+  "error_dealing": "Cards are being dealt…",
   "error_enter_name": "Enter a name!",
   "placeholder_name": "Enter name...",
   "placeholder_username": "Your nickname",

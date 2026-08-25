@@ -23,6 +23,7 @@ export const useGameStore = defineStore('game', () => {
 
   const gameStatus = ref('lobby');
   const isDealing = ref(false);
+  const dealEndsAt = ref(null);
 
   const tableCards = ref([]);
   const myCards = ref([]);
@@ -181,8 +182,11 @@ export const useGameStore = defineStore('game', () => {
       }
 
       turnDeadline.value = state.turnDeadline;
+      dealEndsAt.value = state.dealEndsAt || null;
 
-      if (!isReconnecting.value && gameStatus.value === 'lobby' && !state.winner && state.trumpCard) {
+      // Play the deal animation from the server's deal window — covers first deal
+      // (lobby→playing) and rematches where we're already in 'playing' status.
+      if (!isReconnecting.value && !state.winner && dealEndsAt.value && Date.now() < dealEndsAt.value) {
         isDealing.value = true;
       }
       isReconnecting.value = false;
@@ -248,7 +252,15 @@ export const useGameStore = defineStore('game', () => {
     isReconnecting.value = false; turnDeadline.value = null;
   }
 
-  function stopDealingAnimation() { isDealing.value = false; }
+  function stopDealingAnimation() {
+    // Honor the server's deal window: if it hasn't elapsed, keep the overlay up.
+    if (dealEndsAt.value && Date.now() < dealEndsAt.value) {
+      const remaining = dealEndsAt.value - Date.now();
+      setTimeout(() => { isDealing.value = false; }, remaining);
+    } else {
+      isDealing.value = false;
+    }
+  }
 
   function createLobby(lobbySettings) {
     initListeners();
@@ -403,7 +415,7 @@ export const useGameStore = defineStore('game', () => {
     isHost, gameStatus, tableCards, myCards, trumpCard, deckCount,
     turnPlayerId, attackerId, defenderId,
     isMyTurn, isAttacker, isDefender,
-    canTake, canPass, isDealing, winnerData, rematchStatus,
+    canTake, canPass, isDealing, dealEndsAt, winnerData, rematchStatus,
     chatLog, unreadMessages, musicState, turnDeadline,
 
     initListeners, createLobby, joinLobby, findAndJoinPublicLobby,
