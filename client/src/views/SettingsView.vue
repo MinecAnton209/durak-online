@@ -160,7 +160,7 @@ watch(() => authStore.isAuthenticated, (val) => {
         <div class="grid grid-cols-1 xl:grid-cols-2 xl:gap-5 xl:items-start">
 
           <!-- Left column -->
-          <div class="space-y-4">
+          <div class="space-y-4 min-w-0">
 
         <!-- Card Backs -->
         <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6">
@@ -281,7 +281,7 @@ watch(() => authStore.isAuthenticated, (val) => {
           </div>
 
           <!-- Right column -->
-          <div class="space-y-4 mt-4 xl:mt-0">
+          <div class="space-y-4 mt-4 xl:mt-0 min-w-0">
 
         <!-- Account -->
         <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6">
