@@ -134,6 +134,14 @@ watch(() => authStore.isAuthenticated, (val) => {
     router.push('/');
   }
 });
+
+const onCardRowWheel = (e) => {
+  const el = e.currentTarget;
+  if (el.scrollWidth <= el.clientWidth) return;
+  if (e.deltaY === 0) return;
+  e.preventDefault();
+  el.scrollLeft += e.deltaY;
+};
 </script>
 
 <template>
@@ -169,7 +177,7 @@ watch(() => authStore.isAuthenticated, (val) => {
             <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('choose_card_back') }}</span>
             <div class="flex-grow border-t border-outline/20"></div>
           </div>
-          <div class="flex gap-3 md:gap-4 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
+          <div class="flex gap-3 md:gap-4 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1 cursor-grab active:cursor-grabbing" @wheel="onCardRowWheel">
             <div v-for="style in styles" :key="style" class="flex flex-col items-center gap-2 cursor-pointer group shrink-0"
               @click="saveCardStyle(style)">
               <div class="transition-all duration-200 p-0.5 rounded-xl"
