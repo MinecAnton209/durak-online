@@ -16,6 +16,11 @@ function canBeat(attackCard, defendCard, trumpSuit) {
     return defendCard.suit === trumpSuit && attackCard.suit !== trumpSuit;
 }
 
+// Слабые -> сильные, козыри всегда в хвосте (их ценность выше на 20).
+function sortByValue(cards, trumpSuit) {
+    return [...cards].sort((a, b) => getCardValue(a, trumpSuit) - getCardValue(b, trumpSuit));
+}
+
 function getBotMove(game, botPlayer) {
     const difficulty = botPlayer.difficulty || 'medium';
     const isDefender = game.defenderId === botPlayer.id;
@@ -72,11 +77,25 @@ function getDefenseMove(game, bot, diff) {
         return { type: 'move', card: possibleMoves[0] };
     }
 
-    if (diff === 'medium' || diff === 'hard' || diff === 'impossible') {
-        // Умный: Бьет самой слабой, НО
-        // Если приходится бить козырем мелкую карту - может решить взять (если есть выбор)
-        // Но для простоты пока бьем минимальной необходимой
+    if (diff === 'medium') {
+        // Бьёт самой слабой подходящей картой (тратит ресурс по необходимости).
         return { type: 'move', card: possibleMoves[0] };
+    }
+
+    if (diff === 'hard' || diff === 'impossible') {
+        // Сильный защитник: консервирует козырей.
+        // 1. Бьёт не-козырной, если можем — козыря бережём.
+        const nonTrumpMoves = possibleMoves.filter(c => c.suit !== game.trumpSuit);
+        if (nonTrumpMoves.length > 0) {
+            return { type: 'move', card: sortByValue(nonTrumpMoves, game.trumpSuit)[0] };
+        }
+        // 2. Побить можно только козырем. Если атака не-козырная и карт в руке
+        //    мало, берём: сливать козыря на мелочь в конце партии — проигрыш.
+        const mustBurnTrump = attackCard.suit !== game.trumpSuit;
+        if (mustBurnTrump && bot.cards.length <= 2) {
+            return { type: 'take' };
+        }
+        return { type: 'move', card: sortByValue(possibleMoves, game.trumpSuit)[0] };
     }
 
     return { type: 'take' };
@@ -132,24 +151,32 @@ function getAttackMove(game, bot, diff) {
     }
 
     if (diff === 'hard' || diff === 'impossible') {
-        // Пытается завалить.
-        // Если у соперника мало карт - кидает парные.
-        // Impossible может "мухлевать" (знать карты), но мы сделаем честного, просто агрессивного.
+        // Агрессивный, но грамотный: завал соперника, бережёт козырей.
+        const defender = game.players[game.defenderId];
+        const defenderLow = defender && defender.cards.length <= 2;
 
-        // Приоритет: пары.
-        // Находим ранги, которых у нас > 1
         const counts = {};
         bot.cards.forEach(c => counts[c.rank] = (counts[c.rank] || 0) + 1);
 
-        // Фильтруем карты, которые имеют пару
-        const pairs = validCards.filter(c => counts[c.rank] > 1 && c.suit !== game.trumpSuit);
-
-        if (pairs.length > 0 && game.table.length === 0) {
+        // 1. Когда у защитника мало карт — давим парами, чтобы он не успел отбиться.
+        //    Ищем парные ранги (свободные от козырей), которыми можно подкинуть.
+        const pairs = validCards
+            .filter(c => counts[c.rank] > 1 && c.suit !== game.trumpSuit)
+            .sort((a, b) => getCardValue(a, game.trumpSuit) - getCardValue(b, game.trumpSuit));
+        if (defenderLow && pairs.length > 0 && game.table.length % 2 === 0) {
             return { type: 'move', card: pairs[0] };
         }
 
-        // Иначе минимальной
-        return { type: 'move', card: validCards[0] };
+        // 2. Не тратим козыря на пустом столе, если есть обычная карта.
+        const nonTrump = validCards.filter(c => c.suit !== game.trumpSuit);
+        const pool = (game.table.length === 0 && nonTrump.length > 0) ? nonTrump : validCards;
+
+        // 3. В начале хода (пустой стол) предпочитаем парную карту для давления,
+        //    иначе самую дешёвую, чтобы оставить старшие на потом.
+        if (game.table.length === 0 && pairs.length > 0) {
+            return { type: 'move', card: sortByValue(pairs, game.trumpSuit)[0] };
+        }
+        return { type: 'move', card: sortByValue(pool, game.trumpSuit)[0] };
     }
 
     return { type: 'pass' };
