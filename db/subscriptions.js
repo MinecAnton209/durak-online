@@ -61,6 +61,24 @@ async function getSubscriptionsForUser(userId) {
 }
 
 /**
+ * Retrieves the first push subscription for a single user.
+ * notificationService targets one user at a time, so it expects a single
+ * subscription object rather than the array getSubscriptionsForUser returns.
+ */
+async function findSubscriptionByUserId(userId) {
+    try {
+        const row = await prisma.pushSubscription.findFirst({
+            where: { user_id: userId }
+        });
+        if (!row) return null;
+        return { endpoint: row.endpoint, keys: JSON.parse(row.keys) };
+    } catch (err) {
+        console.error(`[Push] Error finding subscription for user ${userId}:`, err.message);
+        throw err;
+    }
+}
+
+/**
  * Retrieves all subscriptions in the system.
  */
 async function getAllSubscriptions() {
@@ -80,6 +98,7 @@ async function getAllSubscriptions() {
 module.exports = {
     saveSubscription,
     deleteSubscription,
+    findSubscriptionByUserId,
     getSubscriptionsForUser,
     getAllSubscriptions
 };
