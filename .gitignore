@@ -147,7 +147,3 @@ test/test.db-shm
 .vscode/
 .idea/
 /public/
-
-# Capacitor
-android/
-ios/
