@@ -14,15 +14,11 @@ overrides:
   '@tootallnate/once': ^2.0.1
 
 allowBuilds:
-  '@prisma/client': true
-  '@prisma/engines': true
   bcrypt: true
-  better-sqlite3: true
+  cpu-features: set this to true or false
   esbuild: true
-  prisma: true
-  sqlite3: true
+  protobufjs: set this to true or false
+  ssh2: set this to true or false
 
 onlyBuiltDependencies:
   - bcrypt
-  - better-sqlite3
-  - sqlite3

@@ -1,15 +1,32 @@
-const { PrismaClient } = require('../generated/prisma/client.ts');
-require('dotenv').config();
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { schema } from './schema.ts';
+import 'dotenv/config';
 
-const connectionString = process.env.DATABASE_URL || '';
-const isPostgres = connectionString.startsWith('postgresql://') || connectionString.startsWith('postgres://');
+let _db;
 
-const adapter = isPostgres
-  ? new (require('@prisma/adapter-pg').PrismaPg)({ connectionString })
-  : new (require('@prisma/adapter-better-sqlite3').PrismaBetterSqlite3)({ url: connectionString });
+export function initializeDb(connectionString = process.env.DATABASE_URL) {
+  if (!connectionString) {
+    throw new Error('DATABASE_URL is not set before DB init');
+  }
+  if (!_db) {
+    const client = postgres(connectionString, { max: 10 });
+    _db = drizzle(client, { schema });
+  }
+  return _db;
+}
 
-const prisma = new PrismaClient({ adapter });
+export function getDb() {
+  return initializeDb();
+}
 
-prisma.getDbProvider = () => (isPostgres ? 'postgresql' : 'sqlite');
-
-module.exports = prisma;
+// Lazy default: the connection opens on FIRST REAL USE (after the env/container
+// URL is set), not at module import. A Proxy avoids eagerly calling getDb()
+// when a module imports `db` and only touches it later.
+export default new Proxy(
+  {},
+  {
+    get: (_t, prop) => (typeof prop === 'symbol' ? undefined : getDb()[prop]),
+    has: (_t, prop) => prop in getDb(),
+  }
+);

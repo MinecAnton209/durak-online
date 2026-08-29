@@ -1,18 +1,21 @@
-﻿const prisma = require('../db/prisma');
+import { sql } from 'drizzle-orm';
+import db from '../db/prisma.js';
+import { getDb } from '../db/prisma.js';
+import { systemStatsDaily } from '../db/schema.ts';
 
-async function incrementDailyCounter(counterName) {
-    const today = new Date().toISOString().slice(0, 10);
-    try {
-        await prisma.systemStatsDaily.upsert({
-            where: { date: today },
-            update: { [counterName]: { increment: 1 } },
-            create: { date: today, [counterName]: 1 }
-        });
-    } catch (err) {
-        console.error(`[Stats] Error updating counter ${counterName}:`, err.message);
-    }
+async function incrementDailyCounter(counterName, executor = getDb()) {
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    await executor
+      .insert(systemStatsDaily)
+      .values({ date: today, [counterName]: 1 })
+      .onConflictDoUpdate({
+        target: systemStatsDaily.date,
+        set: { [counterName]: sql`${systemStatsDaily[counterName]} + 1` },
+      });
+  } catch (err) {
+    console.error(`[Stats] Error updating counter ${counterName}:`, err.message);
+  }
 }
 
-module.exports = {
-    incrementDailyCounter,
-};
+export { incrementDailyCounter };
