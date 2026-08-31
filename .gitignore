@@ -144,6 +144,7 @@ data/database.sqlite
 test/test.db
 test/test.db-wal
 test/test.db-shm
+test/.test-env.json
 .vscode/
 .idea/
 /public/

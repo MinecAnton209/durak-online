@@ -1,21 +1,25 @@
-const express = require('express');
-const bcrypt = require('bcrypt');
-const prisma = require('../db/prisma');
-const crypto = require('crypto');
+import express from 'express';
+import bcrypt from 'bcrypt';
+import db from '../db/drizzle.js';
+import crypto from 'node:crypto';
+import { eq, sql } from 'drizzle-orm';
+import { signToken, setAuthCookie, clearAuthCookie } from '../middlewares/jwtAuth.js';
+import { validateUsername, validatePassword } from '../utils/validation.js';
+import { loginLimiter, registerLimiter, passwordChangeLimiter } from '../middlewares/rateLimiters.js';
+import statsService from '../services/statsService.js';
+import inboxService from '../services/inboxService.js';
+import { user, activeSession, bannedDevice, knownDevice, userDevice } from '../db/schema.ts';
+
 const router = express.Router();
-const { signToken, setAuthCookie, clearAuthCookie } = require('../middlewares/jwtAuth');
-const { validateUsername, validatePassword } = require('../utils/validation');
-const { loginLimiter, registerLimiter, passwordChangeLimiter } = require('../middlewares/rateLimiters');
 const saltRounds = 10;
-const statsService = require('../services/statsService');
 
 async function checkDeviceBan(deviceId) {
     if (!deviceId) return null;
     try {
-        const ban = await prisma.bannedDevice.findUnique({ where: { device_id: deviceId } });
+        const [ban] = await db.select().from(bannedDevice).where(eq(bannedDevice.device_id, deviceId)).limit(1);
         if (ban) {
             if (ban.ban_until && new Date(ban.ban_until) < new Date()) {
-                await prisma.bannedDevice.delete({ where: { device_id: deviceId } });
+                await db.delete(bannedDevice).where(eq(bannedDevice.device_id, deviceId));
                 return null;
             }
             return ban.reason || 'Device suspended';
@@ -36,35 +40,36 @@ async function recordDeviceActivity(userId, deviceId, req, isLogin = false) {
         const chMobile = req.get('Sec-CH-UA-Mobile') ? (req.get('Sec-CH-UA-Mobile') === '?1') : false;
         const now = new Date();
 
-        await prisma.knownDevice.upsert({
-            where: { id: deviceId },
-            update: {
-                last_seen: now,
-                login_count: isLogin ? { increment: 1 } : undefined,
-                user_agent: ua,
-                device_model: chModel ?? undefined,
-                platform_version: chPlatformVersion ?? undefined,
-                is_mobile: chMobile
-            },
-            create: {
-                id: deviceId,
-                user_agent: ua,
-                first_seen: now,
-                last_seen: now,
-                login_count: 1,
-                device_model: chModel,
-                platform_version: chPlatformVersion,
-                is_mobile: chMobile
-            }
+        const createObj = {
+            id: deviceId,
+            user_agent: ua,
+            first_seen: now,
+            last_seen: now,
+            login_count: 1,
+            device_model: chModel,
+            platform_version: chPlatformVersion,
+            is_mobile: chMobile
+        };
+        const updateObj = {
+            last_seen: now,
+            user_agent: ua,
+            device_model: chModel ?? undefined,
+            platform_version: chPlatformVersion ?? undefined,
+            is_mobile: chMobile,
+            ...(isLogin ? { login_count: sql`${knownDevice.login_count} + 1` } : {})
+        };
+        await db.insert(knownDevice).values(createObj).onConflictDoUpdate({
+            target: knownDevice.id,
+            set: updateObj
         });
 
         if (userId) {
-            await prisma.userDevice.upsert({
-                where: { user_id_device_id: { user_id: userId, device_id: deviceId } },
-                update: { last_used: now },
-                create: { user_id: userId, device_id: deviceId, last_used: now }
-            });
-            await prisma.user.update({ where: { id: userId }, data: { device_id: deviceId } });
+            await db.insert(userDevice).values({ user_id: userId, device_id: deviceId, last_used: now })
+                .onConflictDoUpdate({
+                    target: [userDevice.user_id, userDevice.device_id],
+                    set: { last_used: now }
+                });
+            await db.update(user).set({ device_id: deviceId }).where(eq(user.id, userId));
         }
     } catch (e) {
         console.error('Error tracking device activity:', e);
@@ -88,16 +93,14 @@ router.post('/register', registerLimiter, async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-        await prisma.user.create({
-            data: { username: usernameValidation.value, password: hashedPassword, device_id: deviceId || null }
-        });
+        await db.insert(user).values({ username: usernameValidation.value, password: hashedPassword, device_id: deviceId || null });
 
         await statsService.incrementDailyCounter('new_registrations');
         res.status(201).json({ message: 'Registration successful! You can now log in.' });
 
     } catch (error) {
         console.error(error);
-        if (error.code === 'P2002') {
+        if (error.code === '23505') {
             return res.status(409).json({ message: 'This username is already taken.' });
         }
         res.status(500).json({ message: 'Internal server error.' });
@@ -114,22 +117,22 @@ router.post('/login', loginLimiter, async (req, res) => {
             return res.status(403).json({ message: 'Your device is banned.', i18nKey: 'error_device_banned', options: { reason: deviceBanReason } });
         }
 
-        const user = await prisma.user.findUnique({ where: { username } });
-        if (!user) return res.status(401).json({ message: 'Incorrect username or password.' });
+        const userRecord = await db.query.user.findFirst({ where: { username } });
+        if (!userRecord) return res.status(401).json({ message: 'Incorrect username or password.' });
 
-        const isMatch = await bcrypt.compare(password, user.password);
+        const isMatch = await bcrypt.compare(password, userRecord.password);
         if (!isMatch) return res.status(401).json({ message: 'Incorrect username or password.' });
 
-        if (user.is_banned) {
-            if (user.ban_until && new Date(user.ban_until) < new Date()) {
-                await prisma.user.update({ where: { id: user.id }, data: { is_banned: false, ban_until: null, ban_reason: null } });
-                user.is_banned = false;
-                user.ban_until = null;
-                user.ban_reason = null;
+        if (userRecord.is_banned) {
+            if (userRecord.ban_until && new Date(userRecord.ban_until) < new Date()) {
+                await db.update(user).set({ is_banned: false, ban_until: null, ban_reason: null }).where(eq(user.id, userRecord.id));
+                userRecord.is_banned = false;
+                userRecord.ban_until = null;
+                userRecord.ban_reason = null;
             } else {
                 return res.status(403).json({
-                    i18nKey: user.ban_until ? 'error_account_temp_banned_with_reason' : 'error_account_banned_with_reason',
-                    options: { reason: user.ban_reason || null, until: user.ban_until ? new Date(user.ban_until).toLocaleString() : null }
+                    i18nKey: userRecord.ban_until ? 'error_account_temp_banned_with_reason' : 'error_account_banned_with_reason',
+                    options: { reason: userRecord.ban_reason || null, until: userRecord.ban_until ? new Date(userRecord.ban_until).toLocaleString() : null }
                 });
             }
         }
@@ -144,33 +147,30 @@ router.post('/login', loginLimiter, async (req, res) => {
             if (locRes && locRes.status === 'success') location = `${locRes.city}, ${locRes.country}`;
         } catch (e) { }
 
-        await prisma.activeSession.create({
-            data: { id: sessionId, user_id: user.id, device_info: ua, ip_address: ip, location }
-        });
+        await db.insert(activeSession).values({ id: sessionId, user_id: userRecord.id, device_info: ua, ip_address: ip, location });
 
-        await recordDeviceActivity(user.id, deviceId, req, true);
+        await recordDeviceActivity(userRecord.id, deviceId, req, true);
 
         if (deviceId) {
-            await prisma.user.update({ where: { id: user.id }, data: { device_id: deviceId } });
+            await db.update(user).set({ device_id: deviceId }).where(eq(user.id, userRecord.id));
         }
 
         const payload = {
-            id: user.id, username: user.username, wins: user.wins, losses: user.losses,
-            streak: user.streak_count, coins: user.coins, is_admin: user.is_admin,
-            is_banned: user.is_banned, ban_reason: user.ban_reason, ban_until: user.ban_until,
-            is_muted: user.is_muted, mute_until: user.mute_until, rating: user.rating,
-            card_back_style: user.card_back_style, isVerified: user.is_verified,
-            pref_quick_deck_size: user.pref_quick_deck_size, pref_quick_max_players: user.pref_quick_max_players,
-            pref_quick_game_mode: user.pref_quick_game_mode, pref_quick_is_betting: user.pref_quick_is_betting,
-            pref_quick_bet_amount: user.pref_quick_bet_amount, sessionId
+            id: userRecord.id, username: userRecord.username, wins: userRecord.wins, losses: userRecord.losses,
+            streak: userRecord.streak_count, coins: userRecord.coins, is_admin: userRecord.is_admin,
+            is_banned: userRecord.is_banned, ban_reason: userRecord.ban_reason, ban_until: userRecord.ban_until,
+            is_muted: userRecord.is_muted, mute_until: userRecord.mute_until, rating: userRecord.rating,
+            card_back_style: userRecord.card_back_style, isVerified: userRecord.is_verified,
+            pref_quick_deck_size: userRecord.pref_quick_deck_size, pref_quick_max_players: userRecord.pref_quick_max_players,
+            pref_quick_game_mode: userRecord.pref_quick_game_mode, pref_quick_is_betting: userRecord.pref_quick_is_betting,
+            pref_quick_bet_amount: userRecord.pref_quick_bet_amount, sessionId
         };
 
         const token = signToken(payload);
         setAuthCookie(req, res, token);
         req.session = { user: payload, save() { }, destroy() { } };
 
-        const inboxService = require('../services/inboxService');
-        await inboxService.addMessage(user.id, {
+        await inboxService.addMessage(userRecord.id, {
             type: 'login_alert', titleKey: 'inbox.login_alert_title', contentKey: 'inbox.login_alert_content',
             contentParams: { ip, location, userAgent: ua, sessionId, deviceId }
         });
@@ -188,7 +188,7 @@ router.get('/api/auth/sessions', async (req, res) => {
     if (!currentUser) return res.status(401).json({ message: 'Unauthorized' });
 
     try {
-        const sessions = await prisma.activeSession.findMany({
+        const sessions = await db.query.activeSession.findMany({
             where: { user_id: currentUser.id },
             orderBy: { last_active: 'desc' }
         });
@@ -211,8 +211,8 @@ router.delete('/api/auth/sessions/:id', async (req, res) => {
 
     try {
         const [targetSession, currentSession] = await Promise.all([
-            prisma.activeSession.findUnique({ where: { id: targetId } }),
-            prisma.activeSession.findUnique({ where: { id: currentUser.sessionId } })
+            db.query.activeSession.findFirst({ where: { id: targetId } }),
+            db.query.activeSession.findFirst({ where: { id: currentUser.sessionId } })
         ]);
 
         if (!targetSession) return res.status(404).json({ message: 'Session not found' });
@@ -226,7 +226,7 @@ router.delete('/api/auth/sessions/:id', async (req, res) => {
             }
         }
 
-        await prisma.activeSession.delete({ where: { id: targetId } });
+        await db.delete(activeSession).where(eq(activeSession.id, targetId));
         res.json({ message: 'Session terminated' });
 
     } catch (e) {
@@ -249,43 +249,43 @@ router.get('/check-session', async (req, res) => {
         }
 
         try {
-            const user = await prisma.user.findUnique({ where: { id: currentUser.id } });
-            if (!user) return res.status(200).json({ isLoggedIn: false });
+            const userRecord = await db.query.user.findFirst({ where: { id: currentUser.id } });
+            if (!userRecord) return res.status(200).json({ isLoggedIn: false });
 
             const today = new Date();
-            const lastPlayed = user.last_played_date ? new Date(user.last_played_date) : null;
-            let currentStreak = user.streak_count;
+            const lastPlayed = userRecord.last_played_date ? new Date(userRecord.last_played_date) : null;
+            let currentStreak = userRecord.streak_count;
 
             if (lastPlayed) {
                 const todayMidnight = new Date(today); todayMidnight.setHours(0, 0, 0, 0);
                 const lastMidnight = new Date(lastPlayed); lastMidnight.setHours(0, 0, 0, 0);
                 const diffDays = Math.ceil((todayMidnight - lastMidnight) / (1000 * 60 * 60 * 24));
-                if (diffDays > 1 && user.streak_count > 0) {
+                if (diffDays > 1 && userRecord.streak_count > 0) {
                     currentStreak = 0;
-                    prisma.user.update({ where: { id: user.id }, data: { streak_count: 0 } }).catch(e => console.error(e));
+                    db.update(user).set({ streak_count: 0 }).where(eq(user.id, userRecord.id)).catch(e => console.error(e));
                 }
             }
 
-            let isMuted = user.is_muted, muteUntil = user.mute_until;
+            let isMuted = userRecord.is_muted, muteUntil = userRecord.mute_until;
             if (isMuted && muteUntil && new Date(muteUntil) < new Date()) {
                 isMuted = false; muteUntil = null;
-                prisma.user.update({ where: { id: user.id }, data: { is_muted: false, mute_until: null } }).catch(e => console.error(e));
+                db.update(user).set({ is_muted: false, mute_until: null }).where(eq(user.id, userRecord.id)).catch(e => console.error(e));
             }
 
-            let isBanned = user.is_banned, banUntil = user.ban_until, banReason = user.ban_reason;
+            let isBanned = userRecord.is_banned, banUntil = userRecord.ban_until, banReason = userRecord.ban_reason;
             if (isBanned && banUntil && new Date(banUntil) < new Date()) {
                 isBanned = false; banUntil = null; banReason = null;
-                prisma.user.update({ where: { id: user.id }, data: { is_banned: false, ban_until: null, ban_reason: null } }).catch(e => console.error(e));
+                db.update(user).set({ is_banned: false, ban_until: null, ban_reason: null }).where(eq(user.id, userRecord.id)).catch(e => console.error(e));
             }
 
             const sessionUser = {
-                id: user.id, username: user.username, wins: user.wins, losses: user.losses,
-                streak: currentStreak, coins: user.coins, card_back_style: user.card_back_style,
-                isVerified: user.is_verified, is_admin: user.is_admin, is_banned: isBanned,
+                id: userRecord.id, username: userRecord.username, wins: userRecord.wins, losses: userRecord.losses,
+                streak: currentStreak, coins: userRecord.coins, card_back_style: userRecord.card_back_style,
+                isVerified: userRecord.is_verified, is_admin: userRecord.is_admin, is_banned: isBanned,
                 ban_reason: banReason, ban_until: banUntil, is_muted: isMuted, mute_until: muteUntil,
-                rating: user.rating, pref_quick_deck_size: user.pref_quick_deck_size,
-                pref_quick_max_players: user.pref_quick_max_players, pref_quick_game_mode: user.pref_quick_game_mode,
-                pref_quick_is_betting: user.pref_quick_is_betting, pref_quick_bet_amount: user.pref_quick_bet_amount
+                rating: userRecord.rating, pref_quick_deck_size: userRecord.pref_quick_deck_size,
+                pref_quick_max_players: userRecord.pref_quick_max_players, pref_quick_game_mode: userRecord.pref_quick_game_mode,
+                pref_quick_is_betting: userRecord.pref_quick_is_betting, pref_quick_bet_amount: userRecord.pref_quick_bet_amount
             };
             req.session = { user: sessionUser, save() { }, destroy() { } };
             res.status(200).json({ isLoggedIn: true, user: sessionUser });
@@ -316,17 +316,14 @@ router.post('/update-settings', async (req, res) => {
     }
 
     try {
-        await prisma.user.update({
-            where: { id: userId },
-            data: {
-                ...(card_back_style !== undefined && { card_back_style }),
-                ...(pref_quick_deck_size !== undefined && { pref_quick_deck_size: parseInt(pref_quick_deck_size) }),
-                ...(pref_quick_max_players !== undefined && { pref_quick_max_players: parseInt(pref_quick_max_players) }),
-                ...(pref_quick_game_mode !== undefined && { pref_quick_game_mode }),
-                ...(pref_quick_is_betting !== undefined && { pref_quick_is_betting }),
-                ...(pref_quick_bet_amount !== undefined && { pref_quick_bet_amount: parseInt(pref_quick_bet_amount) }),
-            }
-        });
+        await db.update(user).set({
+            ...(card_back_style !== undefined && { card_back_style }),
+            ...(pref_quick_deck_size !== undefined && { pref_quick_deck_size: parseInt(pref_quick_deck_size) }),
+            ...(pref_quick_max_players !== undefined && { pref_quick_max_players: parseInt(pref_quick_max_players) }),
+            ...(pref_quick_game_mode !== undefined && { pref_quick_game_mode }),
+            ...(pref_quick_is_betting !== undefined && { pref_quick_is_betting }),
+            ...(pref_quick_bet_amount !== undefined && { pref_quick_bet_amount: parseInt(pref_quick_bet_amount) }),
+        }).where(eq(user.id, userId));
         if (req.session && req.session.user) {
             if (card_back_style) req.session.user.card_back_style = card_back_style;
             if (pref_quick_deck_size !== undefined) req.session.user.pref_quick_deck_size = pref_quick_deck_size;
@@ -353,14 +350,14 @@ router.post('/change-password', passwordChangeLimiter, async (req, res) => {
     if (!passwordValidation.valid) return res.status(400).json({ message: passwordValidation.error });
 
     try {
-        const user = await prisma.user.findUnique({ where: { id: currentUser.id }, select: { password: true } });
-        if (!user) return res.status(404).json({ message: 'User not found.' });
+        const userRecord = await db.query.user.findFirst({ where: { id: currentUser.id } });
+        if (!userRecord) return res.status(404).json({ message: 'User not found.' });
 
-        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        const isMatch = await bcrypt.compare(currentPassword, userRecord.password);
         if (!isMatch) return res.status(400).json({ message: 'Incorrect current password.' });
 
         const hashed = await bcrypt.hash(newPassword, saltRounds);
-        await prisma.user.update({ where: { id: currentUser.id }, data: { password: hashed } });
+        await db.update(user).set({ password: hashed }).where(eq(user.id, currentUser.id));
         res.status(200).json({ message: 'Password updated.' });
     } catch (e) {
         console.error(e);
@@ -368,4 +365,4 @@ router.post('/change-password', passwordChangeLimiter, async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

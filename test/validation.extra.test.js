@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { escapeHtml, validateRouletteBet } from '../utils/validation';
+import { escapeHtml, validateRouletteBet } from '../utils/validation.js';
 
 describe('escapeHtml', () => {
     it('escapes ampersand', () => expect(escapeHtml('a & b')).toBe('a &amp; b'));

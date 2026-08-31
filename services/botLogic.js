@@ -182,4 +182,6 @@ function getAttackMove(game, bot, diff) {
     return { type: 'pass' };
 }
 
-module.exports = { getBotMove };
+export { getBotMove };
+
+export default { getBotMove };

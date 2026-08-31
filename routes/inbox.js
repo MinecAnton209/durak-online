@@ -1,8 +1,11 @@
-const express = require('express');
+import express from 'express';
+import { eq } from 'drizzle-orm';
+import inboxService from '../services/inboxService.js';
+import friendsDB from '../db/friends.js';
+import db from '../db/drizzle.js';
+import { activeSession } from '../db/schema.ts';
+
 const router = express.Router();
-const inboxService = require('../services/inboxService');
-const friendsDB = require('../db/friends');
-const prisma = require('../db/prisma');
 
 const isAuthenticated = (req, res, next) => {
     if (!req.user) return res.status(401).json({ i18nKey: 'error_unauthorized' });
@@ -69,8 +72,8 @@ router.post('/:id/action', async (req, res) => {
             }
 
             const [currentSession, targetSession] = await Promise.all([
-                prisma.activeSession.findUnique({ where: { id: currentSessionId } }),
-                prisma.activeSession.findUnique({ where: { id: targetSessionId } })
+                db.query.activeSession.findFirst({ where: { id: currentSessionId } }),
+                db.query.activeSession.findFirst({ where: { id: targetSessionId } })
             ]);
 
             if (currentSession && targetSession) {
@@ -82,7 +85,7 @@ router.post('/:id/action', async (req, res) => {
             if (action === 'not_me' || action === 'terminate_legacy') {
                 if (targetSessionId) {
                     try {
-                        await prisma.activeSession.deleteMany({ where: { id: targetSessionId } });
+                        await db.delete(activeSession).where(eq(activeSession.id, targetSessionId));
                         msg.content_params.action_result = 'terminated';
 
                         const io = req.app.get('socketio');
@@ -107,4 +110,4 @@ router.post('/:id/action', async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

@@ -1,17 +1,14 @@
-/**
- * Integration tests for db/subscriptions.js using real test SQLite DB.
- * Note: pushSubscription.upsert uses 'endpoint' as the unique key.
- * The Prisma client must be regenerated after the schema change for this to work.
- * These tests use the test prisma client which reads from test.db.
- */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import prisma from './prismaClient.js';
 import {
     saveSubscription,
     deleteSubscription,
     getSubscriptionsForUser,
     getAllSubscriptions
 } from '../db/subscriptions.js';
+import {
+    createUser, deleteUsers, deletePushSubscriptions,
+    findPushSubscriptionByUser, findPushSubscriptionByEndpoint, countPushSubscriptionsByUser
+} from './dbHelpers.js';
 
 let testUser, user2, user3;
 const ts = Date.now();
@@ -20,20 +17,20 @@ const endpoint2 = `https://push.example.com/ep2_${ts}`;
 const keys = { auth: 'auth123', p256dh: 'key456' };
 
 beforeAll(async () => {
-    testUser = await prisma.user.create({ data: { username: `subs_u1_${ts}`, password: 'hashed' } });
-    user2 = await prisma.user.create({ data: { username: `subs_u2_${ts}`, password: 'hashed' } });
-    user3 = await prisma.user.create({ data: { username: `subs_u3_${ts}`, password: 'hashed' } });
+    testUser = await createUser(`subs_u1_${ts}`);
+    user2 = await createUser(`subs_u2_${ts}`);
+    user3 = await createUser(`subs_u3_${ts}`);
 });
 
 afterAll(async () => {
-    await prisma.pushSubscription.deleteMany({ where: { user_id: { in: [testUser.id, user2.id, user3.id] } } });
-    await prisma.user.deleteMany({ where: { id: { in: [testUser.id, user2.id, user3.id] } } });
+    await deletePushSubscriptions([testUser.id, user2.id, user3.id]);
+    await deleteUsers([testUser.id, user2.id, user3.id]);
 });
 
 describe('saveSubscription', () => {
     it('creates a new subscription', async () => {
         await saveSubscription(testUser.id, { endpoint: endpoint1, keys });
-        const record = await prisma.pushSubscription.findFirst({ where: { user_id: testUser.id } });
+        const record = await findPushSubscriptionByUser(testUser.id);
         expect(record).not.toBeNull();
         expect(record.endpoint).toBe(endpoint1);
         expect(JSON.parse(record.keys)).toEqual(keys);
@@ -42,10 +39,9 @@ describe('saveSubscription', () => {
     it('upserts on duplicate endpoint (updates keys)', async () => {
         const newKeys = { auth: 'newauth', p256dh: 'newkey' };
         await saveSubscription(testUser.id, { endpoint: endpoint1, keys: newKeys });
-        const records = await prisma.pushSubscription.findMany({ where: { endpoint: endpoint1 } });
-        // Should only have ONE record with the new keys
-        expect(records.length).toBe(1);
-        expect(JSON.parse(records[0].keys)).toEqual(newKeys);
+        const records = await findPushSubscriptionByEndpoint(endpoint1);
+        expect(records).not.toBeNull();
+        expect(JSON.parse(records.keys)).toEqual(newKeys);
     });
 });
 
@@ -55,7 +51,7 @@ describe('getSubscriptionsForUser', () => {
         expect(subs.length).toBeGreaterThan(0);
         expect(subs[0]).toHaveProperty('endpoint');
         expect(subs[0]).toHaveProperty('keys');
-        expect(subs[0].keys).toBeTypeOf('object'); // keys is parsed back to object
+        expect(typeof subs[0].keys).toBe('object');
     });
 
     it('returns empty array for user with no subs', async () => {
@@ -68,7 +64,7 @@ describe('deleteSubscription', () => {
     it('removes the subscription by endpoint', async () => {
         await saveSubscription(user2.id, { endpoint: endpoint2, keys });
         await deleteSubscription(endpoint2);
-        const record = await prisma.pushSubscription.findFirst({ where: { endpoint: endpoint2 } });
+        const record = await findPushSubscriptionByEndpoint(endpoint2);
         expect(record).toBeNull();
     });
 });

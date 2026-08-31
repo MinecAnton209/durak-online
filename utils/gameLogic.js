@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+import crypto from 'node:crypto';
 
 const RANK_VALUES = {
     '2': 2,
@@ -97,7 +97,7 @@ function checkGameOver(game) {
     return false;
 }
 
-module.exports = {
+export {
     RANK_VALUES,
     createDeck,
     canBeat,

@@ -5,7 +5,7 @@ import {
     validateGameId,
     validateCard,
     validateLobbySettings,
-} from '../utils/validation';
+} from '../utils/validation.js';
 
 describe('validateUsername', () => {
     it('accepts valid names', () => {

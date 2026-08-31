@@ -1,6 +1,7 @@
-﻿const express = require('express');
+import express from 'express';
+import subscriptionsDB from '../db/subscriptions.js';
+
 const router = express.Router();
-const subscriptionsDB = require('../db/subscriptions.js');
 
 const isAuthenticated = (req, res, next) => {
     if (!req.session.user) {
@@ -42,4 +43,4 @@ router.post('/unsubscribe', async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

@@ -1,6 +1,8 @@
-﻿const express = require('express');
+import express from 'express';
+import friendsDB from '../db/friends.js';
+import inboxService from '../services/inboxService.js';
+
 const router = express.Router();
-const friendsDB = require('../db/friends.js');
 
 const isAuthenticated = (req, res, next) => {
     if (!req.session.user) {
@@ -69,7 +71,6 @@ router.post('/request', async (req, res, next) => {
             });
         }
 
-        const inboxService = require('../services/inboxService');
         await inboxService.addMessage(toUserId, {
             type: 'friend_request',
             titleKey: 'inbox.friend_request_title',
@@ -82,7 +83,7 @@ router.post('/request', async (req, res, next) => {
 
         res.status(201).json({ success: true, i18nKey: 'friends_request_sent' });
     } catch (error) {
-        if (error.code === 'P2002') {
+        if (error.code === '23505') {
             return res.status(409).json({ i18nKey: 'error_friend_request_already_exists' });
         }
         console.error("Error sending friend request:", error);
@@ -143,4 +144,4 @@ router.delete('/remove', async (req, res, next) => {
     }
 });
 
-module.exports = router;
+export default router;

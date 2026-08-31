@@ -1,5 +1,3 @@
-const prisma = require('../db/prisma');
-
 let maintenanceMode = {
     enabled: false,
     message: "The site is undergoing maintenance. Please come back later.",
@@ -45,10 +43,12 @@ function cancelMaintenance() {
     }
 }
 
-module.exports = {
+export {
     init,
     getMaintenanceMode,
     setMaintenanceMode,
     scheduleMaintenance,
     cancelMaintenance
 };
+
+export default { init, getMaintenanceMode, setMaintenanceMode, scheduleMaintenance, cancelMaintenance };

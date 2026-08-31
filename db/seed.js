@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
-import db from './prisma.js';
+import db from './drizzle.js';
 import { achievement } from './schema.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

@@ -1,13 +1,15 @@
-const express = require('express');
+import express from 'express';
+import db from '../db/drizzle.js';
+import { user, systemStatsDaily } from '../db/schema.ts';
+import path from 'path';
+import fs from 'fs';
+import { performance } from 'perf_hooks';
+
 const router = express.Router();
-const prisma = require('../db/prisma');
-const path = require('path');
-const fs = require('fs');
-const { performance } = require('perf_hooks');
 
 let appVersion = 'unknown';
 try {
-    const packageJsonPath = path.join(__dirname, '../package.json');
+    const packageJsonPath = path.join(import.meta.dirname, '../package.json');
     if (fs.existsSync(packageJsonPath)) {
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
         appVersion = packageJson.version;
@@ -47,11 +49,11 @@ router.get('/health', async (req, res) => {
         }
 
         const dbStartTime = performance.now();
-        await prisma.$queryRaw`SELECT 1`;
+        await db.$client.unsafe('SELECT 1');
         const dbPing = Math.round(performance.now() - dbStartTime);
 
         const today = new Date().toISOString().slice(0, 10);
-        let dailyStats = await prisma.systemStatsDaily.findUnique({ where: { date: today } });
+        let [dailyStats] = await db.select().from(systemStatsDaily).where(eq(systemStatsDaily.date, today)).limit(1);
         if (!dailyStats) dailyStats = { new_registrations: 0, games_played: 0 };
 
         const memory = process.memoryUsage();
@@ -89,13 +91,16 @@ router.get('/leaderboard', async (req, res) => {
     const safeLimit = Math.min(Math.max(1, parseInt(limit, 10)), 100);
 
     try {
-        const rows = await prisma.user.findMany({
+        const rows = await db.query.user.findMany({
             where: { is_banned: false },
-            select: { id: true, username: true, rating: true, wins: true, win_streak: true, is_verified: true },
-            orderBy: { [orderByColumn]: 'desc' },
-            take: safeLimit
+            orderBy: [{ [orderByColumn]: 'desc' }],
+            limit: safeLimit
         });
-        res.json(rows);
+        const mapped = rows.map(r => ({
+            id: r.id, username: r.username, rating: r.rating, wins: r.wins,
+            win_streak: r.win_streak, is_verified: r.is_verified
+        }));
+        res.json(mapped);
     } catch (err) {
         console.error("Error fetching public leaderboard:", err.message);
         res.status(500).json({ error: 'Internal server error' });
@@ -146,4 +151,4 @@ router.get('/game/:id/status', async (req, res) => {
     });
 });
 
-module.exports = router;
+export default router;

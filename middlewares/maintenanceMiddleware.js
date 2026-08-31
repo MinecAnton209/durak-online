@@ -1,6 +1,6 @@
-const maintenanceService = require('../services/maintenanceService');
+import maintenanceService from '../services/maintenanceService.js';
 
-module.exports = function (req, res, next) {
+export default function (req, res, next) {
     const maintenanceMode = maintenanceService.getMaintenanceMode();
 
     if (maintenanceMode.enabled) {

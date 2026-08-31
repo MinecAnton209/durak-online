@@ -1,58 +1,70 @@
-require('dotenv').config();
+import 'dotenv/config';
 
-const express = require('express');
-const http = require('http');
-const socketIo = require('socket.io');
-const path = require('path');
-const crypto = require('crypto');
-const bcrypt = require('bcrypt');
-const cors = require('cors');
-const i18next = require('i18next');
-const Backend = require('i18next-fs-backend');
-const expressStaticGzip = require('express-static-gzip');
+import express from 'express';
+import http from 'node:http';
+import { Server as socketIo } from 'socket.io';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import bcrypt from 'bcrypt';
+import cors from 'cors';
+import i18next from 'i18next';
+import Backend from 'i18next-fs-backend';
+import expressStaticGzip from 'express-static-gzip';
+import webpush from 'web-push';
+import util from 'node:util';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
+import { fileURLToPath } from 'node:url';
 
-const authRoutes = require('./routes/auth.js');
-const telegramRoutes = require('./routes/telegram.js');
-const publicRoutes = require('./routes/public.js');
-const achievementRoutes = require('./routes/achievements.js');
-const adminRoutes = require('./routes/admin.js');
-const friendsRoutes = require('./routes/friends.js');
-const notificationsRoutes = require('./routes/notifications.js');
-const { seedAchievements } = require('./db/seed.js');
-const achievementService = require('./services/achievementService.js');
-const ratingService = require('./services/ratingService.js');
-const statsService = require('./services/statsService.js');
-const notificationService = require('./services/notificationService.js');
-const economyService = require('./services/economyService.js');
-const inboxService = require('./services/inboxService.js');
-const webpush = require('web-push');
-const util = require('util');
-const prisma = require('./db/prisma');
-const cookieParser = require('cookie-parser');
-const { attachUserFromToken, socketAttachUser } = require('./middlewares/jwtAuth');
-const telegramBot = require('./services/telegramBot');
-const botLogic = require('./services/botLogic');
-const { escapeHtml, validateLobbySettings, validateCard, validateGameId } = require('./utils/validation');
-const { RANK_VALUES, createDeck, canBeat, getNextPlayerIndex, updateTurn, checkGameOver } = require('./utils/gameLogic');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const registerLobbyHandlers = require('./handlers/lobbyHandlers');
-const registerGameHandlers = require('./handlers/gameHandlers');
-const rouletteService = require('./services/rouletteService');
-const registerRouletteHandlers = require('./handlers/rouletteHandlers');
-const maintenanceService = require('./services/maintenanceService');
-const maintenanceMiddleware = require('./middlewares/maintenanceMiddleware');
-const chatService = require('./services/chatService');
-const registerChatHandlers = require('./handlers/chatHandlers');
-const gameService = require('./services/gameService');
-const systemService = require('./services/systemService');
-const registerFriendHandlers = require('./handlers/friendHandlers');
-const registerHealthHandlers = require('./handlers/healthHandlers');
+import db, { initializeDb } from './db/drizzle.js';
+import { user as userTable, game as gameTable } from './db/schema.ts';
+import { eq, and, sql, desc, isNotNull } from 'drizzle-orm';
 
-prisma.game.updateMany({
-    where: { status: 'waiting' },
-    data: { status: 'cancelled' }
-})
+import authRoutes from './routes/auth.js';
+import telegramRoutes from './routes/telegram.js';
+import publicRoutes from './routes/public.js';
+import achievementRoutes from './routes/achievements.js';
+import adminRoutes from './routes/admin.js';
+import friendsRoutes from './routes/friends.js';
+import notificationsRoutes from './routes/notifications.js';
+import inboxRoutes from './routes/inbox.js';
+import myGamesRoutes from './routes/myGames.js';
+import profileRoutes from './routes/profile.js';
+
+import { seedAchievements } from './db/seed.js';
+import achievementService from './services/achievementService.js';
+import ratingService from './services/ratingService.js';
+import statsService from './services/statsService.js';
+import notificationService from './services/notificationService.js';
+import economyService from './services/economyService.js';
+import inboxService from './services/inboxService.js';
+import telegramBot from './services/telegramBot.js';
+import botLogic from './services/botLogic.js';
+import chatService from './services/chatService.js';
+import gameService from './services/gameService.js';
+import systemService from './services/systemService.js';
+import rouletteService from './services/rouletteService.js';
+import maintenanceService from './services/maintenanceService.js';
+
+import { attachUserFromToken, socketAttachUser } from './middlewares/jwtAuth.js';
+import maintenanceMiddleware from './middlewares/maintenanceMiddleware.js';
+
+import { escapeHtml, validateLobbySettings, validateCard, validateGameId } from './utils/validation.js';
+import { RANK_VALUES, createDeck, canBeat, getNextPlayerIndex, updateTurn, checkGameOver } from './utils/gameLogic.js';
+
+import registerLobbyHandlers from './handlers/lobbyHandlers.js';
+import registerGameHandlers from './handlers/gameHandlers.js';
+import registerRouletteHandlers from './handlers/rouletteHandlers.js';
+import registerChatHandlers from './handlers/chatHandlers.js';
+import registerFriendHandlers from './handlers/friendHandlers.js';
+import registerHealthHandlers from './handlers/healthHandlers.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+initializeDb(process.env.DATABASE_URL);
+
+db.update(gameTable).set({ status: 'cancelled' }).where(eq(gameTable.status, 'waiting'))
     .then(() => console.log('🧹 DB cleaned: Stale lobbies cancelled.'))
     .catch(err => console.error('DB Clean error:', err));
 
@@ -76,7 +88,7 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
+const io = new socketIo(server, {
     cors: {
         origin: allowedOrigins,
         methods: ["GET", "POST"],
@@ -91,7 +103,6 @@ chatService.loadChatFilters();
 setTimeout(chatService.loadChatFilters, 3000); // Initial load fallback
 
 // Chat filters moved to services/chatService.js
-
 
 let games = {};
 
@@ -117,7 +128,7 @@ i18next
 
 const PORT = process.env.PORT || 3000;
 
-setTimeout(seedAchievements, 1000);
+setTimeout(() => seedAchievements(), 1000);
 achievementService.init(io);
 inboxService.init(io);
 rouletteService.init(io, onlineUsers);
@@ -178,13 +189,9 @@ app.use('/api/achievements', achievementRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/friends', friendsRoutes);
 app.use('/api/notifications', notificationsRoutes);
-const inboxRoutes = require('./routes/inbox.js');
 app.use('/api/inbox', inboxRoutes);
-const myGamesRoutes = require('./routes/myGames.js');
 app.use('/api/my-games', myGamesRoutes);
-const profileRoutes = require('./routes/profile.js');
 app.use('/api/profile', profileRoutes);
-
 
 app.use(expressStaticGzip(path.join(__dirname, 'public'), {
   enableBrotli: true,
@@ -212,22 +219,18 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
 
 io.use(socketAttachUser);
 
-
 async function checkBanStatus(userId) {
     try {
-        const user = await prisma.user.findUnique({
+        const dbUser = await db.query.user.findFirst({
             where: { id: userId },
             select: { is_banned: true, ban_reason: true, ban_until: true }
         });
-        if (user && user.is_banned) {
-            if (user.ban_until && new Date(user.ban_until) < new Date()) {
-                await prisma.user.update({
-                    where: { id: userId },
-                    data: { is_banned: false, ban_until: null, ban_reason: null }
-                });
+        if (dbUser && dbUser.is_banned) {
+            if (dbUser.ban_until && new Date(dbUser.ban_until) < new Date()) {
+                await db.update(userTable).set({ is_banned: false, ban_until: null, ban_reason: null }).where(eq(userTable.id, userId));
                 return null;
             }
-            return user.ban_reason || 'Account banned';
+            return dbUser.ban_reason || 'Account banned';
         }
         return null;
     } catch (error) {
@@ -250,16 +253,13 @@ io.on('connection', (socket) => {
 
         economyService.checkAndAwardDailyBonus(userId, io, socket.id);
         console.log(`[Online Status] User connected: ${sessionUser.username} (ID: ${sessionUser.id}). Total online: ${onlineUsers.size}`);
-        prisma.user.findUnique({
+        db.query.user.findFirst({
             where: { id: userId },
             select: { is_banned: true, ban_reason: true, ban_until: true }
         }).then(async (dbUser) => {
             if (dbUser && dbUser.is_banned) {
                 if (dbUser.ban_until && new Date(dbUser.ban_until) < new Date()) {
-                    await prisma.user.update({
-                        where: { id: userId },
-                        data: { is_banned: false, ban_until: null, ban_reason: null }
-                    });
+                    await db.update(userTable).set({ is_banned: false, ban_until: null, ban_reason: null }).where(eq(userTable.id, userId));
                     console.log(`[Ban] Ban expired for user ${sessionUser.username}`);
                 } else {
                     const reasonText = dbUser.ban_reason || i18next.t('ban_reason_not_specified');
@@ -456,7 +456,7 @@ io.on('connection', (socket) => {
         }
 
         try {
-            await prisma.game.update({ where: { id: gameId }, data: { status: 'in_progress' } });
+            await db.update(gameTable).set({ status: 'in_progress' }).where(eq(gameTable.id, gameId));
             gameService.startGame(gameId);
             broadcastPublicLobbies();
         } catch (e) {
@@ -480,7 +480,7 @@ io.on('connection', (socket) => {
             if (humanIds.length === 0) {
                 console.log(`[Lobby] Lobby ${gameId} has only bots. Deleting.`);
                 delete games[gameId];
-                prisma.game.update({ where: { id: gameId }, data: { status: 'cancelled' } }).catch(() => { });
+                db.update(gameTable).set({ status: 'cancelled' }).where(eq(gameTable.id, gameId)).catch(() => { });
                 io.emit('lobbyExpired', { lobbyId: gameId });
             } else {
                 if (game.hostId === socket.id) {
@@ -500,7 +500,7 @@ io.on('connection', (socket) => {
         } else {
             console.log(`[Lobby] Lobby ${gameId} is empty. Deleting.`);
             delete games[gameId];
-            prisma.game.update({ where: { id: gameId }, data: { status: 'cancelled' } }).catch(() => { });
+            db.update(gameTable).set({ status: 'cancelled' }).where(eq(gameTable.id, gameId)).catch(() => { });
             io.emit('lobbyExpired', { lobbyId: gameId });
             broadcastPublicLobbies();
         }
@@ -521,10 +521,7 @@ io.on('connection', (socket) => {
         }
 
         try {
-            await prisma.game.update({
-                where: { id: gameId },
-                data: { game_settings: JSON.stringify(game.settings), max_players: game.settings.maxPlayers }
-            });
+            await db.update(gameTable).set({ game_settings: JSON.stringify(game.settings), max_players: game.settings.maxPlayers }).where(eq(gameTable.id, gameId));
 
             io.to(gameId).emit('lobbyStateUpdate', {
                 players: Object.values(game.players).map(p => ({
@@ -808,7 +805,7 @@ setInterval(() => {
         if (game.status === 'waiting' && (!game.playerOrder || game.playerOrder.length === 0)) {
             console.log(`[GC] Removing zombie lobby: ${gameId}`);
             delete games[gameId];
-            prisma.game.update({ where: { id: gameId }, data: { status: 'cancelled' } }).catch(() => { });
+            db.update(gameTable).set({ status: 'cancelled' }).where(eq(gameTable.id, gameId)).catch(() => { });
             io.emit('lobbyExpired', { lobbyId: gameId });
             hasChanges = true;
         }
@@ -884,8 +881,8 @@ async function gracefulShutdown(signal) {
         }
 
         console.log("Closing database connection...");
-        await prisma.$disconnect();
-        console.log("Prisma disconnected");
+        await db.$client.end();
+        console.log("Database disconnected");
 
         clearTimeout(forceExitTimer);
 

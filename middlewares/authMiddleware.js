@@ -1,4 +1,4 @@
-﻿function ensureAdmin(req, res, next) {
+function ensureAdmin(req, res, next) {
     if (req.session && req.session.user && req.session.user.is_admin) {
         return next();
     }
@@ -20,7 +20,9 @@ function ensureAuthenticated(req, res, next) {
     });
 }
 
-module.exports = {
+export {
     ensureAuthenticated,
     ensureAdmin
-}
+};
+
+export default { ensureAuthenticated, ensureAdmin };

@@ -1,6 +1,7 @@
 import { pgTable, serial, varchar, integer, boolean, doublePrecision, timestamp, primaryKey, uniqueIndex, foreignKey, pgEnum } from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
 
-const timestampOpts = { mode: 'date' };
+const timestampOpts = { mode: 'date' as const };
 
 export const user = pgTable('User', {
   id: serial('id').primaryKey(),
@@ -249,6 +250,49 @@ export const profile = pgTable('Profile', {
   created_at: timestamp('created_at', timestampOpts).notNull().defaultNow(),
 });
 
+export const userRelations = relations(user, ({ one, many }) => ({
+  profile: one(profile, { fields: [user.id], references: [profile.user_id] }),
+  achievements: many(userAchievement),
+  participants: many(gameParticipant),
+  sessions: many(activeSession),
+  devices: many(userDevice),
+}));
+
+export const profileRelations = relations(profile, ({ one }) => ({
+  user: one(user, { fields: [profile.user_id], references: [user.id] }),
+}));
+
+export const userAchievementRelations = relations(userAchievement, ({ one }) => ({
+  user: one(user, { fields: [userAchievement.user_id], references: [user.id] }),
+  achievement: one(achievement, { fields: [userAchievement.achievement_code], references: [achievement.code] }),
+}));
+
+export const gameParticipantRelations = relations(gameParticipant, ({ one }) => ({
+  game: one(game, { fields: [gameParticipant.game_id], references: [game.id] }),
+  user: one(user, { fields: [gameParticipant.user_id], references: [user.id] }),
+}));
+
+export const gameRelations = relations(game, ({ many }) => ({
+  participants: many(gameParticipant),
+}));
+
+export const donationRelations = relations(donation, ({ one }) => ({
+  user: one(user, { fields: [donation.user_id], references: [user.id] }),
+}));
+
+export const activeSessionRelations = relations(activeSession, ({ one }) => ({
+  user: one(user, { fields: [activeSession.user_id], references: [user.id] }),
+}));
+
+export const knownDeviceRelations = relations(knownDevice, ({ many }) => ({
+  users: many(userDevice),
+}));
+
+export const userDeviceRelations = relations(userDevice, ({ one }) => ({
+  user: one(user, { fields: [userDevice.user_id], references: [user.id] }),
+  device: one(knownDevice, { fields: [userDevice.device_id], references: [knownDevice.id] }),
+}));
+
 export const schema = {
   user,
   chatFilter,
@@ -268,4 +312,13 @@ export const schema = {
   userDevice,
   inboxMessage,
   profile,
+  userRelations,
+  profileRelations,
+  userAchievementRelations,
+  gameParticipantRelations,
+  gameRelations,
+  donationRelations,
+  activeSessionRelations,
+  knownDeviceRelations,
+  userDeviceRelations,
 };

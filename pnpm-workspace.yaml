@@ -15,10 +15,13 @@ overrides:
 
 allowBuilds:
   bcrypt: true
-  cpu-features: set this to true or false
+  cpu-features: true
   esbuild: true
-  protobufjs: set this to true or false
-  ssh2: set this to true or false
+  protobufjs: true
+  ssh2: true
 
 onlyBuiltDependencies:
   - bcrypt
+  - cpu-features
+  - protobufjs
+  - ssh2

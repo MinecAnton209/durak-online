@@ -1,21 +1,13 @@
-import { readFileSync } from 'fs';
-import path from 'path';
-import dotenv from 'dotenv';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-dotenv.config();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// This script runs inside each test worker.
-// It ensures that DATABASE_URL in process.env matches the provider in schema.prisma.
-const schemaPath = path.resolve('./prisma/schema.prisma');
-const schemaContent = readFileSync(schemaPath, 'utf8');
-const providerMatch = schemaContent.match(/datasource\s+db\s*{[^}]*provider\s*=\s*"([^"]*)"/);
-const currentProvider = providerMatch ? providerMatch[1] : 'sqlite';
-
-if (currentProvider === 'sqlite') {
-    const url = process.env.DATABASE_URL || '';
-    if (!url.startsWith('file:')) {
-        // Force SQLite test DB path if we are in sqlite mode but env points to postgres
-        process.env.DATABASE_URL = 'file:./test/test.db';
-        // console.log(`[EnvSetup] Forced DATABASE_URL to SQLite for tests`);
-    }
+// The globalSetup hands off the container DATABASE_URL via this file. Load it
+// so that any module imported before setup.js runs sees the right connection.
+const envPath = path.join(__dirname, '.test-env.json');
+if (fs.existsSync(envPath)) {
+    const { DATABASE_URL } = JSON.parse(fs.readFileSync(envPath, 'utf8'));
+    process.env.DATABASE_URL = DATABASE_URL;
 }

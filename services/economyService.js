@@ -1,56 +1,58 @@
-﻿const util = require('util');
-const prisma = require('../db/prisma');
+import { eq } from 'drizzle-orm';
+import db from '../db/drizzle.js';
+import { user } from '../db/schema.ts';
 
 const DAILY_BONUS_AMOUNT = 200;
 
 async function checkAndAwardDailyBonus(userId, io, userSocketId) {
-    try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { last_daily_bonus_claim: true, coins: true }
-        });
-        if (!user) return;
+  try {
+    const found = await db.query.user.findFirst({
+      where: { id: userId }
+    });
+    if (!found) return;
 
-        const todayStr = new Date().toISOString().slice(0, 10);
+    const lastBonus = found.last_daily_bonus_claim;
+    const coins = found.coins;
 
-        let lastClaimDateStr = null;
-        if (user.last_daily_bonus_claim) {
-            lastClaimDateStr = new Date(user.last_daily_bonus_claim).toISOString().slice(0, 10);
-        }
+    const todayStr = new Date().toISOString().slice(0, 10);
 
-        if (lastClaimDateStr === todayStr) {
-            console.log(`[Economy] Daily bonus for user ${userId} has already been claimed today.`);
-            return;
-        }
-
-        const currentBalance = parseInt(user.coins || 0, 10);
-        const newBalance = currentBalance + DAILY_BONUS_AMOUNT;
-
-        await prisma.user.update({
-            where: { id: userId },
-            data: { coins: newBalance, last_daily_bonus_claim: new Date() }
-        });
-
-        console.log(`[Economy] Daily bonus awarded to user ${userId}. New balance: ${newBalance}`);
-
-        if (io && userSocketId) {
-            io.to(userSocketId).emit('dailyBonusAwarded', {
-                amount: DAILY_BONUS_AMOUNT,
-                newBalance: newBalance
-            });
-
-            const userSocket = io.sockets.sockets.get(userSocketId);
-            if (userSocket && userSocket.request.session.user) {
-                userSocket.request.session.user.coins = newBalance;
-                userSocket.request.session.save();
-            }
-        }
-
-    } catch (error) {
-        console.error(`[Economy] Error checking daily bonus for user ${userId}:`, error);
+    let lastClaimDateStr = null;
+    if (lastBonus) {
+      lastClaimDateStr = new Date(lastBonus).toISOString().slice(0, 10);
     }
+
+    if (lastClaimDateStr === todayStr) {
+      console.log(`[Economy] Daily bonus for user ${userId} has already been claimed today.`);
+      return;
+    }
+
+    const currentBalance = parseInt(coins || 0, 10);
+    const newBalance = currentBalance + DAILY_BONUS_AMOUNT;
+
+    await db
+      .update(user)
+      .set({ coins: newBalance, last_daily_bonus_claim: new Date() })
+      .where(eq(user.id, userId));
+
+    console.log(`[Economy] Daily bonus awarded to user ${userId}. New balance: ${newBalance}`);
+
+    if (io && userSocketId) {
+      io.to(userSocketId).emit('dailyBonusAwarded', {
+        amount: DAILY_BONUS_AMOUNT,
+        newBalance: newBalance
+      });
+
+      const userSocket = io.sockets.sockets.get(userSocketId);
+      if (userSocket && userSocket.request.session.user) {
+        userSocket.request.session.user.coins = newBalance;
+        userSocket.request.session.save();
+      }
+    }
+  } catch (error) {
+    console.error(`[Economy] Error checking daily bonus for user ${userId}:`, error);
+  }
 }
 
-module.exports = {
-    checkAndAwardDailyBonus
-};
+export { checkAndAwardDailyBonus };
+
+export default { checkAndAwardDailyBonus };

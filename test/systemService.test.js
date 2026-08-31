@@ -1,23 +1,24 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import prisma from './prismaClient.js';
 import { getSystemStats } from '../services/systemService.js';
+import {
+    createUser, deleteUser, upsertAchievement, deleteAchievement, setUser,
+    db, eq, deleteSystemStatsDaily, findSystemStatsDaily
+} from './dbHelpers.js';
+import { systemStatsDaily } from '../db/schema.ts';
 
 const ts = Date.now();
+const today = new Date().toISOString().slice(0, 10);
 let user;
 
 beforeAll(async () => {
-    user = await prisma.user.create({ data: { username: `sys_${ts}`, password: 'h' } });
-    await prisma.systemStatsDaily.upsert({
-        where: { date: new Date().toISOString().slice(0, 10) },
-        update: { new_registrations: 7, games_played: 3 },
-        create: { date: new Date().toISOString().slice(0, 10), new_registrations: 7, games_played: 3 }
-    });
+    user = await createUser(`sys_${ts}`);
+    await db.insert(systemStatsDaily).values({ date: today, new_registrations: 7, games_played: 3 })
+        .onConflictDoUpdate({ target: systemStatsDaily.date, set: { new_registrations: 7, games_played: 3 } });
 });
 
 afterAll(async () => {
-    await prisma.user.deleteMany({ where: { id: user.id } });
-    // Don't leak the daily-stats row we seeded; statsService owns that table's baseline.
-    await prisma.systemStatsDaily.deleteMany({ where: { date: new Date().toISOString().slice(0, 10) } });
+    await deleteUser(user.id);
+    await deleteSystemStatsDaily(today);
 });
 
 describe('getSystemStats', () => {
@@ -58,7 +59,7 @@ describe('getSystemStats', () => {
         expect(stats.activity.bot_games_active).toBe(1);
     });
 
-    it('includes today\'s daily stats from the DB', async () => {
+    it("includes today's daily stats from the DB", async () => {
         const stats = await getSystemStats(new Map(), {});
         expect(stats.daily_stats.registrations_today).toBe(7);
         expect(stats.daily_stats.games_played_today).toBe(3);

@@ -1,5 +1,5 @@
 import { eq, or, and, like, ne } from 'drizzle-orm';
-import db from './prisma.js';
+import db from './drizzle.js';
 import { user, friend } from './schema.ts';
 
 /**
@@ -18,10 +18,14 @@ async function sendFriendRequest(fromUserId, toUserId) {
       action_user_id: fromUserId,
     }).returning();
   } catch (err) {
-    // 23505 = unique violation
-    if (err.code === '23505') {
+    // 23505 = unique violation (drizzle wraps in DrizzleQueryError; code is on cause)
+    const code = err?.cause?.code || err.code;
+    if (code === '23505' || err.code === '23505') {
       console.log(`[Friends] Friend request already exists between ${user1Id} and ${user2Id}`);
-      throw err;
+      const wrapped = new Error(err.message);
+      wrapped.code = '23505';
+      wrapped.cause = err;
+      throw wrapped;
     }
     console.error(`[Friends] Error sending friend request:`, err.message);
     throw err;
@@ -68,9 +72,10 @@ async function removeFriendship(user1Id, user2Id) {
  */
 async function getFriendships(userId) {
   try {
-    const friendships = await db.query.friend.findMany({
-      where: or(eq(friend.user1_id, userId), eq(friend.user2_id, userId)),
-    });
+    const friendships = await db
+      .select()
+      .from(friend)
+      .where(or(eq(friend.user1_id, userId), eq(friend.user2_id, userId)));
 
     const accepted = [];
     const pendingSent = [];
@@ -137,6 +142,14 @@ async function findUsersByNickname(nickname, currentUserId) {
 }
 
 export {
+  sendFriendRequest,
+  updateFriendshipStatus,
+  removeFriendship,
+  getFriendships,
+  findUsersByNickname,
+};
+
+export default {
   sendFriendRequest,
   updateFriendshipStatus,
   removeFriendship,

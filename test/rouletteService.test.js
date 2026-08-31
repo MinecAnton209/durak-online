@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getRouletteState, placeBet } from '../services/rouletteService';
+import { getRouletteState, placeBet } from '../services/rouletteService.js';
 
 describe('rouletteService: state', () => {
     it('exposes a state object with expected shape', () => {

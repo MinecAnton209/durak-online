@@ -1,37 +1,28 @@
-const express = require('express');
-const router = express.Router();
-const prisma = require('../db/prisma');
+import express from 'express';
+import { and, eq, not } from 'drizzle-orm';
+import db from '../db/drizzle.js';
+import { user, profile } from '../db/schema.ts';
 
+const router = express.Router();
 const VALID_AVATARS = ['default','bear','cat','dog','fox','owl','penguin','rabbit','tiger','wolf','dragon','snake'];
 
 router.get('/by-username/:username', async (req, res) => {
     try {
         const username = req.params.username;
-        const user = await prisma.user.findFirst({
+        const found = await db.query.user.findFirst({
             where: { username },
-            select: {
-                id: true,
-                username: true,
-                wins: true,
-                losses: true,
-                rating: true,
-                streak_count: true,
-                win_streak: true,
-                is_verified: true,
-                created_at: true,
-                profile: { select: { bio: true, avatar_id: true } }
-            }
+            with: { profile: true }
         });
 
-        if (!user) {
+        if (!found) {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const isOwner = req.user && req.user.id === user.id;
+        const isOwner = req.user && req.user.id === found.id;
 
         res.json({
-            user,
-            profile: user.profile || { bio: '', avatar_id: 'default' },
+            user: found,
+            profile: found.profile || { bio: '', avatar_id: 'default' },
             isOwner
         });
     } catch (error) {
@@ -47,31 +38,20 @@ router.get('/:userId', async (req, res) => {
             return res.status(400).json({ error: 'Invalid user ID' });
         }
 
-        const user = await prisma.user.findUnique({
+        const found = await db.query.user.findFirst({
             where: { id: userId },
-            select: {
-                id: true,
-                username: true,
-                wins: true,
-                losses: true,
-                rating: true,
-                streak_count: true,
-                win_streak: true,
-                is_verified: true,
-                created_at: true,
-                profile: { select: { bio: true, avatar_id: true } }
-            }
+            with: { profile: true }
         });
 
-        if (!user) {
+        if (!found) {
             return res.status(404).json({ error: 'User not found' });
         }
 
         const isOwner = req.user && req.user.id === userId;
 
         res.json({
-            user,
-            profile: user.profile || { bio: '', avatar_id: 'default' },
+            user: found,
+            profile: found.profile || { bio: '', avatar_id: 'default' },
             isOwner
         });
     } catch (error) {
@@ -94,13 +74,12 @@ router.put('/', async (req, res) => {
             if (trimmed.length < 3 || trimmed.length > 20) {
                 return res.status(400).json({ error: 'Nickname must be 3-20 characters' });
             }
-            const existing = await prisma.user.findFirst({
-                where: { username: trimmed, id: { not: userId } }
-            });
+            const existing = (await db.select({ id: user.id }).from(user)
+                .where(and(eq(user.username, trimmed), not(eq(user.id, userId))))).length > 0;
             if (existing) {
                 return res.status(400).json({ error: 'Nickname already taken' });
             }
-            await prisma.user.update({ where: { id: userId }, data: { username: trimmed } });
+            await db.update(user).set({ username: trimmed }).where(eq(user.id, userId));
         }
 
         if (bio !== undefined) {
@@ -113,27 +92,21 @@ router.put('/', async (req, res) => {
             return res.status(400).json({ error: 'Invalid avatar' });
         }
 
-        await prisma.profile.upsert({
-            where: { user_id: userId },
-            update: {
+        await db.insert(profile).values({
+            user_id: userId,
+            bio: bio || '',
+            avatar_id: avatarId || 'default'
+        }).onConflictDoUpdate({
+            target: profile.user_id,
+            set: {
                 ...(bio !== undefined && { bio }),
                 ...(avatarId !== undefined && { avatar_id: avatarId })
-            },
-            create: {
-                user_id: userId,
-                bio: bio || '',
-                avatar_id: avatarId || 'default'
             }
         });
 
-        const updatedUser = await prisma.user.findUnique({
+        const updatedUser = await db.query.user.findFirst({
             where: { id: userId },
-            select: {
-                id: true, username: true, wins: true, losses: true,
-                rating: true, streak_count: true, win_streak: true,
-                is_verified: true, created_at: true,
-                profile: { select: { bio: true, avatar_id: true } }
-            }
+            with: { profile: true }
         });
 
         res.json({
@@ -146,4 +119,4 @@ router.put('/', async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

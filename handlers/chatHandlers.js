@@ -1,9 +1,11 @@
-const chatService = require('../services/chatService');
-const prisma = require('../db/prisma');
-const { logAdminAction } = require('../services/auditLogService');
-const i18next = require('i18next');
+import chatService from '../services/chatService.js';
+import db from '../db/drizzle.js';
+import { user, chatMessage } from '../db/schema.ts';
+import { eq } from 'drizzle-orm';
+import { logAdminAction } from '../services/auditLogService.js';
+import i18next from 'i18next';
 
-module.exports = function registerChatHandlers(io, socket) {
+export default function registerChatHandlers(io, socket) {
 
     socket.on('chat:joinGlobal', () => {
         socket.join('global_chat');
@@ -27,10 +29,7 @@ module.exports = function registerChatHandlers(io, socket) {
                 sessionUser.is_muted = false;
                 sessionUser.mute_until = null;
                 try {
-                    await prisma.user.update({
-                        where: { id: sessionUser.id },
-                        data: { is_muted: false, mute_until: null }
-                    });
+                    await db.update(user).set({ is_muted: false, mute_until: null }).where(eq(user.id, sessionUser.id));
                 } catch (err) {
                     console.error('[Chat] Error unmuting user:', err.message);
                 }
@@ -75,13 +74,11 @@ module.exports = function registerChatHandlers(io, socket) {
 
         chatService.updateSpamTracker(sessionUser.id, now);
 
-        prisma.chatMessage.create({
-            data: {
-                user_id: sessionUser.id,
-                username: sessionUser.username,
-                content: trimmedMessage,
-                created_at: new Date(now)
-            }
+        db.insert(chatMessage).values({
+            user_id: sessionUser.id,
+            username: sessionUser.username,
+            content: trimmedMessage,
+            created_at: new Date(now)
         }).catch(err => console.error('Failed to save chat message:', err));
 
         chatService.addMessageToHistory(messageObject);
@@ -99,10 +96,7 @@ module.exports = function registerChatHandlers(io, socket) {
         }
 
         try {
-            await prisma.user.update({
-                where: { id: parseInt(userId, 10) },
-                data: { is_muted: true, mute_until: muteUntil }
-            });
+            await db.update(user).set({ is_muted: true, mute_until: muteUntil }).where(eq(user.id, parseInt(userId, 10)));
 
             const updatedMsg = chatService.updateMessageInHistory(null, { authorId: userId, updates: { isMuted: true, muteUntil } });
             // Note: chatService.updateMessageInHistory needs logic to update all by author or we do it here
@@ -114,7 +108,7 @@ module.exports = function registerChatHandlers(io, socket) {
 
             io.to('global_chat').emit('chat:userMuted', { userId, muteUntil }); // Notify clients
 
-            const targetUser = await prisma.user.findUnique({ where: { id: parseInt(userId, 10) }, select: { username: true } });
+            const targetUser = (await db.select({ username: user.username }).from(user).where(eq(user.id, parseInt(userId, 10))))[0];
             logAdminAction({
                 adminId: sessionUser.id,
                 adminUsername: sessionUser.username,
@@ -139,16 +133,13 @@ module.exports = function registerChatHandlers(io, socket) {
         }
 
         try {
-            await prisma.user.update({
-                where: { id: parseInt(userId, 10) },
-                data: {
-                    is_banned: true,
-                    ban_until: banUntil,
-                    ban_reason: permanent ? 'Permanent ban from global chat' : 'Temporary ban from global chat'
-                }
-            });
+            await db.update(user).set({
+                is_banned: true,
+                ban_until: banUntil,
+                ban_reason: permanent ? 'Permanent ban from global chat' : 'Temporary ban from global chat'
+            }).where(eq(user.id, parseInt(userId, 10)));
 
-            const targetUser = await prisma.user.findUnique({ where: { id: parseInt(userId, 10) }, select: { username: true } });
+            const targetUser = (await db.select({ username: user.username }).from(user).where(eq(user.id, parseInt(userId, 10))))[0];
             logAdminAction({
                 adminId: sessionUser.id,
                 adminUsername: sessionUser.username,

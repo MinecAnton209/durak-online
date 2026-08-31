@@ -1,10 +1,14 @@
-﻿const express = require('express');
+import express from 'express';
+import db from '../db/drizzle.js';
+import { user, game, gameParticipant, achievement, userAchievement, activeSession, knownDevice, bannedDevice, chatMessage, chatFilter, profile, inboxMessage, donation, adminAuditLog, friend } from '../db/schema.ts';
+import { ensureAdmin } from '../middlewares/authMiddleware.js';
+import { logAdminAction } from '../services/auditLogService.js';
+import notificationService from '../services/notificationService.js';
+import maintenanceService from '../services/maintenanceService.js';
+import inboxService from '../services/inboxService.js';
+import { eq, or, like, and, count, desc, sql, isNotNull } from 'drizzle-orm';
+
 const router = express.Router();
-const prisma = require('../db/prisma');
-const { ensureAdmin } = require('../middlewares/authMiddleware');
-const { logAdminAction } = require('../services/auditLogService');
-const notificationService = require('../services/notificationService.js');
-const maintenanceService = require('../services/maintenanceService');
 
 const isAdmin = (req, res, next) => {
     if (req.session?.user?.is_admin) return next();
@@ -20,15 +24,10 @@ router.get('/users/search', ensureAdmin, async (req, res) => {
     }
     try {
         const searchId = isNaN(parseInt(query)) ? -1 : parseInt(query);
-        const users = await prisma.user.findMany({
-            where: {
-                OR: [
-                    { username: { contains: query } },
-                    { id: searchId }
-                ]
-            },
-            select: { id: true, username: true, wins: true, losses: true, streak_count: true, last_played_date: true, is_verified: true, is_admin: true, is_banned: true, ban_reason: true, is_muted: true, rating: true, coins: true, device_id: true },
-            take: 50
+        const users = await db.query.user.findMany({
+            where: or(like(user.username, `%${query}%`), eq(user.id, searchId)),
+            columns: { id: true, username: true, wins: true, losses: true, streak_count: true, last_played_date: true, is_verified: true, is_admin: true, is_banned: true, ban_reason: true, is_muted: true, rating: true, coins: true, device_id: true },
+            limit: 50
         });
         res.json(users);
     } catch (err) {
@@ -43,12 +42,12 @@ router.get('/users', ensureAdmin, async (req, res) => {
 
     try {
         const [total, users] = await Promise.all([
-            prisma.user.count(),
-            prisma.user.findMany({
-                select: { id: true, username: true, wins: true, losses: true, streak_count: true, last_played_date: true, is_verified: true, is_admin: true, is_banned: true, ban_reason: true, is_muted: true, rating: true, coins: true, device_id: true },
+            db.select({ value: count() }).from(user).then(r => r[0]?.value ?? 0),
+            db.query.user.findMany({
+                columns: { id: true, username: true, wins: true, losses: true, streak_count: true, last_played_date: true, is_verified: true, is_admin: true, is_banned: true, ban_reason: true, is_muted: true, rating: true, coins: true, device_id: true },
                 orderBy: { id: 'asc' },
-                skip: page * limit,
-                take: limit
+                offset: page * limit,
+                limit
             })
         ]);
         res.json({ users, total, page, limit, totalPages: Math.ceil(total / limit) });
@@ -60,18 +59,11 @@ router.get('/users', ensureAdmin, async (req, res) => {
 
 router.get('/users/clones', ensureAdmin, async (req, res) => {
     try {
-        const isPostgres = prisma.getDbProvider() === 'postgresql';
-
-        // Define DB-specific functions
-        const groupConcat = isPostgres ? 'STRING_AGG(username, \',\')' : 'GROUP_CONCAT(username)';
-        const groupIds = isPostgres ? 'STRING_AGG(CAST(id AS TEXT), \',\')' : 'GROUP_CONCAT(id)';
-        const table = isPostgres ? '"User"' : 'User'; // Postgres is case-sensitive with quotes
-
-        const cloneGroups = await prisma.$queryRawUnsafe(`
+        const cloneGroups = await db.$client.unsafe(`
             SELECT device_id, COUNT(*) as account_count,
-                   ${groupConcat} as usernames,
-                   ${groupIds} as user_ids
-            FROM ${table}
+                   STRING_AGG(username, ',') as usernames,
+                   STRING_AGG(CAST(id AS TEXT), ',') as user_ids
+            FROM "User"
             WHERE device_id IS NOT NULL AND device_id != ''
             GROUP BY device_id
             HAVING COUNT(*) > 1
@@ -96,37 +88,49 @@ router.get('/users/:userId/details', ensureAdmin, async (req, res) => {
     const userId = parseInt(req.params.userId, 10);
     try {
         const [userDetails, userGames, userAchievements] = await Promise.all([
-            prisma.user.findUnique({
+            db.query.user.findFirst({
                 where: { id: userId },
-                select: { id: true, username: true, wins: true, losses: true, streak_count: true, is_verified: true, is_admin: true, is_banned: true, ban_reason: true, is_muted: true, last_played_date: true, created_at: true }
+                columns: { id: true, username: true, wins: true, losses: true, streak_count: true, is_verified: true, is_admin: true, is_banned: true, ban_reason: true, is_muted: true, last_played_date: true, created_at: true }
             }),
-            prisma.gameParticipant.findMany({
-                where: { user_id: userId },
-                include: { game: { select: { id: true, end_time: true, game_type: true } } },
-                orderBy: { game: { end_time: 'desc' } },
-                take: 20
-            }),
-            prisma.userAchievement.findMany({
-                where: { user_id: userId },
-                include: { achievement: { select: { name_key: true, rarity: true } } },
-                orderBy: { unlocked_at: 'desc' }
+            db.select({
+                game_id: gameParticipant.game_id,
+                outcome: gameParticipant.outcome,
+                cards_at_end: gameParticipant.cards_at_end,
+                game_id_col: game.id,
+                end_time: game.end_time,
+                game_type: game.game_type,
             })
+                .from(gameParticipant)
+                .leftJoin(game, eq(gameParticipant.game_id, game.id))
+                .where(eq(gameParticipant.user_id, userId))
+                .orderBy(sql`end_time desc`)
+                .limit(20),
+            db.select({
+                achievement_code: userAchievement.achievement_code,
+                unlocked_at: userAchievement.unlocked_at,
+                name_key: achievement.name_key,
+                rarity: achievement.rarity,
+            })
+                .from(userAchievement)
+                .leftJoin(achievement, eq(userAchievement.achievement_code, achievement.code))
+                .where(eq(userAchievement.user_id, userId))
+                .orderBy(sql`unlocked_at desc`)
         ]);
 
         if (!userDetails) return res.status(404).json({ error: 'User not found' });
 
         const games = userGames.map(p => ({
-            id: p.game.id,
-            end_time: p.game.end_time,
-            game_type: p.game.game_type,
+            id: p.game_id_col,
+            end_time: p.end_time,
+            game_type: p.game_type,
             outcome: p.outcome,
             cards_at_end: p.cards_at_end
         }));
         const achievements = userAchievements.map(ua => ({
             achievement_code: ua.achievement_code,
             unlocked_at: ua.unlocked_at,
-            name_key: ua.achievement.name_key,
-            rarity: ua.achievement.rarity
+            name_key: ua.name_key,
+            rarity: ua.rarity
         }));
 
         res.json({ details: userDetails, games, achievements });
@@ -146,10 +150,10 @@ async function handleUserAction(req, res, actionType, updateData, successMessage
     }
 
     try {
-        const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, username: true } });
+        const targetUser = await db.query.user.findFirst({ where: { id: userId }, columns: { id: true, username: true } });
         if (!targetUser) return res.status(404).json({ error: 'User not found' });
 
-        await prisma.user.update({ where: { id: userId }, data: updateData });
+        await db.update(user).set(updateData).where(eq(user.id, userId));
 
         logAdminAction({ adminId: adminUser.id, adminUsername: adminUser.username, actionType, targetUserId: userId, targetUsername: targetUser.username, reason });
 
@@ -180,7 +184,6 @@ async function handleUserAction(req, res, actionType, updateData, successMessage
             });
         }
 
-        const inboxService = require('../services/inboxService');
         if (isBan) {
             inboxService.addMessage(userId, { type: 'admin_action', titleKey: 'inbox.admin_ban_title', contentKey: 'inbox.admin_ban_content', contentParams: { reason: reason || 'Violation of rules', until: actionType === 'BAN_USER_TEMPORARY' ? ` (until ${new Date(updateData.ban_until).toLocaleString()})` : '' } });
         } else if (actionType === 'UNBAN_USER') {
@@ -254,12 +257,11 @@ router.put('/users/:userId', ensureAdmin, async (req, res) => {
     }
 
     try {
-        await prisma.user.update({ where: { id: userId }, data: updateData });
+        await db.update(user).set(updateData).where(eq(user.id, userId));
 
         logAdminAction({ adminId: adminUser.id, adminUsername: adminUser.username, actionType: 'UPDATE_USER_ACCOUNT', targetUserId: userId, reason: `Updated fields: ${fieldsToLog.join(', ')}` });
 
         if (req.body.coins !== undefined) {
-            const inboxService = require('../services/inboxService');
             inboxService.addMessage(userId, { type: 'admin_action', titleKey: 'inbox.admin_coins_added_title', contentKey: 'inbox.admin_coins_added_content', contentParams: { amount: req.body.coins, reason: 'Admin Adjustment' } });
         }
 
@@ -380,16 +382,16 @@ router.get('/games/history', ensureAdmin, async (req, res) => {
 
     try {
         const [total, rows] = await Promise.all([
-            prisma.game.count({ where: { end_time: { not: null } } }),
-            prisma.game.findMany({
-                where: { end_time: { not: null } },
-                select: {
+            db.select({ value: count() }).from(game).where(isNotNull(game.end_time)).then(r => r[0]?.value ?? 0),
+            db.query.game.findMany({
+                where: isNotNull(game.end_time),
+                columns: {
                     id: true, game_type: true, duration_seconds: true, end_time: true,
                     winner_user_id: true, loser_user_id: true
                 },
                 orderBy: { end_time: 'desc' },
-                skip: page * pageSize,
-                take: pageSize
+                offset: page * pageSize,
+                limit: pageSize
             })
         ]);
         if (total === 0) return res.json({ rows: [], rowCount: 0 });
@@ -406,8 +408,8 @@ router.get('/stats/dashboard-overview', ensureAdmin, async (req, res) => {
     try {
         const today = new Date().toISOString().slice(0, 10);
         const [totalUsers, todayStats] = await Promise.all([
-            prisma.user.count(),
-            prisma.systemStatsDaily.findUnique({ where: { date: today } })
+            db.select({ value: count() }).from(user).then(r => r[0]?.value ?? 0),
+            db.select().from(systemStatsDaily).where(eq(systemStatsDaily.date, today)).limit(1).then(r => r[0] ?? null)
         ]);
 
         let onlineUsersCount = 0;
@@ -433,23 +435,15 @@ router.get('/stats/dashboard-overview', ensureAdmin, async (req, res) => {
 
 router.get('/stats/registrations-by-day', ensureAdmin, async (req, res) => {
     try {
-        const isPostgres = prisma.getDbProvider() === 'postgresql';
         const days = parseInt(req.query.days) || 7;
 
-        // Postgres-specific date truncation and intervals
-        const sql = isPostgres
-            ? `SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as count 
-               FROM "User" 
+        const sql = `SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as count
+               FROM "User"
                WHERE created_at > CURRENT_DATE - INTERVAL '${days} days'
-               GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD') 
-               ORDER BY date ASC`
-            : `SELECT STRFTIME('%Y-%m-%d', created_at) as date, COUNT(*) as count 
-               FROM User 
-               WHERE created_at > DATE('now', '-${days} days')
-               GROUP BY date 
+               GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
                ORDER BY date ASC`;
 
-        const stats = await prisma.$queryRawUnsafe(sql);
+        const stats = await db.$client.unsafe(sql);
         res.json(stats);
     } catch (err) {
         console.error('[Admin] Error fetching registration stats:', err.message);
@@ -459,24 +453,16 @@ router.get('/stats/registrations-by-day', ensureAdmin, async (req, res) => {
 
 router.get('/stats/games-by-day', ensureAdmin, async (req, res) => {
     try {
-        const isPostgres = prisma.getDbProvider() === 'postgresql';
         const days = parseInt(req.query.days) || 7;
 
-        const sql = isPostgres
-            ? `SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as count
+        const sql = `SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as count
                FROM "Game"
                WHERE (status = 'finished' OR status = 'ended')
                AND created_at > CURRENT_DATE - INTERVAL '${days} days'
                GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
-               ORDER BY date ASC`
-            : `SELECT STRFTIME('%Y-%m-%d', created_at) as date, COUNT(*) as count
-               FROM Game
-               WHERE (status = 'finished' OR status = 'ended')
-               AND created_at > DATE('now', '-${days} days')
-               GROUP BY date
                ORDER BY date ASC`;
 
-        const stats = await prisma.$queryRawUnsafe(sql);
+        const stats = await db.$client.unsafe(sql);
         res.json(stats);
     } catch (err) {
         console.error('[Admin] Error fetching game stats:', err.message);
@@ -492,10 +478,10 @@ router.get('/stats/leaderboard', ensureAdmin, async (req, res) => {
     if (!allowedSortTypes[type]) return res.status(400).json({ error: 'Invalid leaderboard type specified.' });
 
     try {
-        const rows = await prisma.user.findMany({
-            select: { id: true, username: true, wins: true, losses: true, win_streak: true, streak_count: true, rating: true },
+        const rows = await db.query.user.findMany({
+            columns: { id: true, username: true, wins: true, losses: true, win_streak: true, streak_count: true, rating: true },
             orderBy: allowedSortTypes[type],
-            take: limit
+            limit
         });
         res.json(rows);
     } catch (err) {
@@ -510,12 +496,8 @@ router.get('/audit-log', ensureAdmin, async (req, res) => {
 
     try {
         const [total, rows] = await Promise.all([
-            prisma.adminAuditLog.count(),
-            prisma.adminAuditLog.findMany({
-                orderBy: { timestamp: 'desc' },
-                skip: page * pageSize,
-                take: pageSize
-            })
+            db.select({ value: count() }).from(adminAuditLog).then(r => r[0]?.value ?? 0),
+            db.select().from(adminAuditLog).orderBy(desc(adminAuditLog.timestamp)).offset(page * pageSize).limit(pageSize)
         ]);
         res.json({ rows, rowCount: total });
     } catch (err) {
@@ -530,18 +512,21 @@ router.get('/donations', ensureAdmin, async (req, res) => {
     const pageSize = parseInt(req.query.pageSize, 10) || 50;
 
     try {
-        const [total, rows, aggregate] = await Promise.all([
-            prisma.donation.count(),
-            prisma.donation.findMany({
-                include: { user: { select: { username: true } } },
+        const [total, rows] = await Promise.all([
+            db.select({ value: count() }).from(donation).then(r => r[0]?.value ?? 0),
+            db.query.donation.findMany({
+                with: { user: { columns: { username: true } } },
                 orderBy: { created_at: 'desc' },
-                skip: page * pageSize,
-                take: pageSize
-            }),
-            prisma.donation.aggregate({ _sum: { amount: true } })
+                offset: page * pageSize,
+                limit: pageSize
+            })
         ]);
+
+        const sumRows = await db.select({ sum: sql`sum(${donation.amount})` }).from(donation);
+        const totalAmount = Number(sumRows[0]?.sum) || 0;
+
         if (total === 0) return res.json({ rows: [], rowCount: 0, totalAmount: 0 });
-        res.json({ rows, rowCount: total, totalAmount: aggregate._sum.amount || 0 });
+        res.json({ rows, rowCount: total, totalAmount });
     } catch (err) {
         console.error('[Admin] Error fetching donations:', err.message);
         res.status(500).json({ error: 'Internal server error while fetching donations' });
@@ -596,13 +581,8 @@ router.get('/chat/history/db', ensureAdmin, async (req, res) => {
 
     try {
         const [total, rows] = await Promise.all([
-            prisma.chatMessage.count({ where: { is_deleted: false } }),
-            prisma.chatMessage.findMany({
-                where: { is_deleted: false },
-                orderBy: { created_at: 'desc' },
-                skip: page * pageSize,
-                take: pageSize
-            })
+            db.select({ value: count() }).from(chatMessage).where(eq(chatMessage.is_deleted, false)).then(r => r[0]?.value ?? 0),
+            db.select().from(chatMessage).where(eq(chatMessage.is_deleted, false)).orderBy(desc(chatMessage.created_at)).offset(page * pageSize).limit(pageSize)
         ]);
         res.json({ rows, rowCount: total });
     } catch (err) {
@@ -616,11 +596,7 @@ router.get('/chat/search', ensureAdmin, async (req, res) => {
     if (!q || q.length < 2) return res.status(400).json({ error: 'Query too short' });
 
     try {
-        const rows = await prisma.chatMessage.findMany({
-            where: { content: { contains: q }, is_deleted: false },
-            orderBy: { created_at: 'desc' },
-            take: 50
-        });
+        const rows = await db.select().from(chatMessage).where(and(like(chatMessage.content, `%${q}%`), eq(chatMessage.is_deleted, false))).orderBy(desc(chatMessage.created_at)).limit(50);
         res.json(rows);
     } catch (err) {
         console.error('[Admin] Error searching chat:', err.message);
@@ -630,7 +606,7 @@ router.get('/chat/search', ensureAdmin, async (req, res) => {
 
 router.get('/chat/filters', ensureAdmin, async (req, res) => {
     try {
-        const rows = await prisma.chatFilter.findMany({ orderBy: { created_at: 'desc' } });
+        const rows = await db.select().from(chatFilter).orderBy(desc(chatFilter.created_at));
         res.json(rows);
     } catch (err) { res.status(500).json({ error: 'DB Error' }); }
 });
@@ -640,7 +616,7 @@ router.post('/chat/filters', ensureAdmin, async (req, res) => {
     if (!['word', 'regex'].includes(type) || !content) return res.status(400).json({ error: 'Invalid type or content' });
 
     try {
-        const filter = await prisma.chatFilter.create({ data: { type, content } });
+        const [filter] = await db.insert(chatFilter).values({ type, content }).returning();
         if (global.loadChatFilters) global.loadChatFilters();
         logAdminAction({ adminId: req.session.user.id, adminUsername: req.session.user.username, actionType: 'ADD_CHAT_FILTER', reason: `Added ${type}: ${content}` });
         res.json(filter);
@@ -650,7 +626,7 @@ router.post('/chat/filters', ensureAdmin, async (req, res) => {
 router.delete('/chat/filters/:id', ensureAdmin, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     try {
-        await prisma.chatFilter.delete({ where: { id } });
+        await db.delete(chatFilter).where(eq(chatFilter.id, id));
         if (global.loadChatFilters) global.loadChatFilters();
         logAdminAction({ adminId: req.session.user.id, adminUsername: req.session.user.username, actionType: 'REMOVE_CHAT_FILTER', reason: `Removed filter ID: ${id}` });
         res.json({ message: 'Filter deleted' });
@@ -746,20 +722,28 @@ router.post('/users/:userId/ban-device', ensureAdmin, async (req, res) => {
     const { reason, durationMinutes } = req.body;
 
     try {
-        const user = await prisma.user.findUnique({ where: { id: userId }, select: { device_id: true, username: true } });
-        if (!user) return res.status(404).json({ error: 'User not found' });
-        if (!user.device_id) return res.status(400).json({ error: 'User has no device ID recorded' });
+        const userRec = await db.query.user.findFirst({ where: { id: userId }, columns: { device_id: true, username: true } });
+        if (!userRec) return res.status(404).json({ error: 'User not found' });
+        if (!userRec.device_id) return res.status(400).json({ error: 'User has no device ID recorded' });
 
         const ban_until = durationMinutes ? new Date(Date.now() + durationMinutes * 60000) : null;
 
-        await prisma.bannedDevice.upsert({
-            where: { device_id: user.device_id },
-            update: { reason: reason || 'Admin Ban', admin_id: req.session.user.id, ban_until },
-            create: { device_id: user.device_id, reason: reason || 'Admin Ban', admin_id: req.session.user.id, ban_until }
+        await db.insert(bannedDevice).values({
+            device_id: userRec.device_id,
+            reason: reason || 'Admin Ban',
+            admin_id: req.session.user.id,
+            ban_until
+        }).onConflictDoUpdate({
+            target: bannedDevice.device_id,
+            set: {
+                reason: reason || 'Admin Ban',
+                admin_id: req.session.user.id,
+                ban_until
+            }
         });
 
-        logAdminAction({ adminId: req.session.user.id, adminUsername: req.session.user.username, actionType: 'BAN_DEVICE', targetUserId: userId, reason: `Banned Device ${user.device_id}. Reason: ${reason}` });
-        res.json({ message: `Device ${user.device_id} banned successfully` });
+        logAdminAction({ adminId: req.session.user.id, adminUsername: req.session.user.username, actionType: 'BAN_DEVICE', targetUserId: userId, reason: `Banned Device ${userRec.device_id}. Reason: ${reason}` });
+        res.json({ message: `Device ${userRec.device_id} banned successfully` });
     } catch (err) {
         console.error('[Admin] Error banning device:', err.message);
         res.status(500).json({ error: 'DB Error banning device' });
@@ -769,7 +753,7 @@ router.post('/users/:userId/ban-device', ensureAdmin, async (req, res) => {
 router.get('/users/:userId/active-sessions', ensureAdmin, async (req, res) => {
     const userId = parseInt(req.params.userId, 10);
     try {
-        const rows = await prisma.activeSession.findMany({ where: { user_id: userId }, orderBy: { last_active: 'desc' } });
+        const rows = await db.query.activeSession.findMany({ where: { user_id: userId }, orderBy: { last_active: 'desc' } });
         res.json(rows);
     } catch (err) { res.status(500).json({ error: 'DB Error' }); }
 });
@@ -779,17 +763,16 @@ router.delete('/sessions/:sessionId', ensureAdmin, async (req, res) => {
     if (sessionId === req.sessionID) return res.status(400).json({ error: "You cannot terminate your own current session." });
 
     try {
-        const session = await prisma.activeSession.findUnique({ where: { id: sessionId }, select: { user_id: true } });
+        const session = await db.query.activeSession.findFirst({ where: { id: sessionId }, columns: { user_id: true } });
         if (!session) return res.status(404).json({ error: 'Session not found' });
 
-        await prisma.activeSession.delete({ where: { id: sessionId } });
+        await db.delete(activeSession).where(eq(activeSession.id, sessionId));
 
         logAdminAction({ adminId: req.session.user.id, adminUsername: req.session.user.username, actionType: 'TERMINATE_SESSION_ADMIN', reason: `Terminated session ${sessionId}` });
 
         const io = req.app.get('socketio');
         if (io) io.to(`user_${session.user_id}`).emit('sessionTerminated', { sessionId });
 
-        const inboxService = require('../services/inboxService');
         inboxService.addMessage(session.user_id, { type: 'admin_action', titleKey: 'inbox.admin_session_terminated_title', contentKey: 'inbox.admin_session_terminated_content' });
 
         res.json({ message: 'Session terminated' });
@@ -802,9 +785,14 @@ router.delete('/sessions/:sessionId', ensureAdmin, async (req, res) => {
 router.get('/devices/:deviceId', ensureAdmin, async (req, res) => {
     const { deviceId } = req.params;
     try {
-        const device = await prisma.knownDevice.findUnique({
+        const device = await db.query.knownDevice.findFirst({
             where: { id: deviceId },
-            include: { users: { include: { user: { select: { id: true, username: true } } }, orderBy: { last_used: 'desc' } } }
+            with: {
+                users: {
+                    with: { user: { columns: { id: true, username: true } } },
+                    orderBy: { last_used: 'desc' }
+                }
+            }
         });
         if (!device) return res.status(404).json({ error: 'Device not found' });
         const users = device.users.map(ud => ({ id: ud.user.id, username: ud.user.username, last_used: ud.last_used }));
@@ -814,7 +802,7 @@ router.get('/devices/:deviceId', ensureAdmin, async (req, res) => {
 
 router.get('/banned-devices', ensureAdmin, async (req, res) => {
     try {
-        const rows = await prisma.bannedDevice.findMany({ orderBy: { created_at: 'desc' } });
+        const rows = await db.select().from(bannedDevice).orderBy(desc(bannedDevice.created_at));
         res.json(rows);
     } catch (err) { res.status(500).json({ error: 'DB Error' }); }
 });
@@ -822,7 +810,7 @@ router.get('/banned-devices', ensureAdmin, async (req, res) => {
 router.delete('/banned-devices/:id', ensureAdmin, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     try {
-        await prisma.bannedDevice.delete({ where: { id } });
+        await db.delete(bannedDevice).where(eq(bannedDevice.id, id));
         res.json({ success: true, message: 'Device unbanned' });
     } catch (err) { res.status(500).json({ error: 'DB Error' }); }
 });
@@ -832,12 +820,15 @@ router.post('/devices/:deviceId/ban', ensureAdmin, async (req, res) => {
     const { reason, until } = req.body;
 
     try {
-        await prisma.bannedDevice.create({
-            data: { device_id: deviceId, reason: reason || 'No reason', admin_id: req.session.user.id, ban_until: until ? new Date(until) : null }
-        });
+        await db.insert(bannedDevice).values({
+            device_id: deviceId,
+            reason: reason || 'No reason',
+            admin_id: req.session.user.id,
+            ban_until: until ? new Date(until) : null
+        }).returning();
         res.json({ success: true, message: 'Device banned successfully' });
     } catch (err) {
-        if (err.code === 'P2002') return res.status(400).json({ error: 'Device is already banned' });
+        if (err.code === '23505') return res.status(400).json({ error: 'Device is already banned' });
         res.status(500).json({ error: 'DB Error' });
     }
 });
@@ -845,14 +836,13 @@ router.post('/devices/:deviceId/ban', ensureAdmin, async (req, res) => {
 router.get('/devices/:deviceId/ban-info', ensureAdmin, async (req, res) => {
     const { deviceId } = req.params;
     try {
-        const row = await prisma.bannedDevice.findUnique({ where: { device_id: deviceId } });
+        const [row] = await db.select().from(bannedDevice).where(eq(bannedDevice.device_id, deviceId)).limit(1);
         res.json({ banned: !!row, info: row });
     } catch (err) { res.status(500).json({ error: 'DB Error' }); }
 });
 
 router.post('/inbox/send', ensureAdmin, async (req, res) => {
     const { userId, message, isBroadcast } = req.body;
-    const inboxService = require('../services/inboxService');
     if (!message) return res.status(400).json({ error: 'Message is required' });
 
     try {
@@ -872,4 +862,4 @@ router.post('/inbox/send', ensureAdmin, async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

@@ -1,8 +1,8 @@
-const i18next = require('i18next');
-const notificationService = require('../services/notificationService');
-const inboxService = require('../services/inboxService');
+import i18next from 'i18next';
+import notificationService from '../services/notificationService.js';
+import inboxService from '../services/inboxService.js';
 
-module.exports = function registerFriendHandlers(io, socket, sharedContext) {
+export default function registerFriendHandlers(io, socket, sharedContext) {
     const { games, onlineUsers } = sharedContext;
 
     socket.on('friend:invite', async ({ toUserId, gameId }) => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getBotMove } from '../services/botLogic';
+import { getBotMove } from '../services/botLogic.js';
 
 const C = (rank, suit) => ({ rank, suit });
 

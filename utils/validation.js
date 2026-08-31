@@ -1,4 +1,4 @@
-const { z } = require('zod');
+import { z } from 'zod';
 
 /**
  * Security utilities for input validation and sanitization
@@ -117,7 +117,7 @@ function validateRouletteBet(bet) {
     return { valid: true };
 }
 
-module.exports = {
+export {
     escapeHtml,
     validateUsername,
     validatePassword,

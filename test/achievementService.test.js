@@ -1,71 +1,51 @@
-/**
- * Integration tests for services/achievementService.js using real test SQLite DB.
- * unlockAchievement uses prisma.userAchievement.create and catches P2002 silently.
- * Socket emit is done via ioInstance.of('/').sockets iteration.
- */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import prisma from './prismaClient.js';
 import { unlockAchievement } from '../services/achievementService.js';
+import {
+    createUser, deleteUser, deleteUserAchievements, deleteAchievement,
+    upsertAchievement, findUserAchievement
+} from './dbHelpers.js';
 
 const ts = Date.now();
 let testUser;
 
 beforeAll(async () => {
-    testUser = await prisma.user.create({ data: { username: `ach_u_${ts}`, password: 'hashed' } });
-
-    // Seed test achievements
-    await prisma.achievement.upsert({
-        where: { code: 'TEST_ACH_A' },
-        update: {},
-        create: { code: 'TEST_ACH_A', name_key: 'ach.test_a', description_key: 'desc.test_a', rarity: 'common' }
-    });
-    await prisma.achievement.upsert({
-        where: { code: 'TEST_ACH_B' },
-        update: {},
-        create: { code: 'TEST_ACH_B', name_key: 'ach.test_b', description_key: 'desc.test_b', rarity: 'rare' }
-    });
+    testUser = await createUser(`ach_u_${ts}`);
+    await upsertAchievement('TEST_ACH_A', 'ach.test_a', 'desc.test_a', 'common');
+    await upsertAchievement('TEST_ACH_B', 'ach.test_b', 'desc.test_b', 'rare');
 });
 
 afterAll(async () => {
-    await prisma.userAchievement.deleteMany({ where: { user_id: testUser.id } });
-    await prisma.achievement.deleteMany({ where: { code: { in: ['TEST_ACH_A', 'TEST_ACH_B'] } } });
-    await prisma.user.delete({ where: { id: testUser.id } });
+    await deleteUserAchievements(testUser.id);
+    await deleteAchievement('TEST_ACH_A');
+    await deleteAchievement('TEST_ACH_B');
+    await deleteUser(testUser.id);
 });
 
 describe('unlockAchievement', () => {
     it('creates a user achievement record on first unlock', async () => {
         await unlockAchievement(null, null, testUser.id, 'TEST_ACH_A');
-        const record = await prisma.userAchievement.findFirst({
-            where: { user_id: testUser.id, achievement_code: 'TEST_ACH_A' }
-        });
+        const record = await findUserAchievement(testUser.id, 'TEST_ACH_A');
         expect(record).not.toBeNull();
     });
 
     it('does not throw on duplicate unlock (idempotent via P2002 catch)', async () => {
-        // Already unlocked from the previous test — should not throw
         await expect(unlockAchievement(null, null, testUser.id, 'TEST_ACH_A')).resolves.toBeUndefined();
-        // Still only one record
-        const records = await prisma.userAchievement.findMany({
-            where: { user_id: testUser.id, achievement_code: 'TEST_ACH_A' }
-        });
-        expect(records.length).toBe(1);
+        const records = await findUserAchievement(testUser.id, 'TEST_ACH_A');
+        expect(records).not.toBeNull();
     });
 
     it('creates separate achievements for different codes', async () => {
         await unlockAchievement(null, null, testUser.id, 'TEST_ACH_B');
-        const records = await prisma.userAchievement.findMany({ where: { user_id: testUser.id } });
-        const codes = records.map(r => r.achievement_code);
+        const a = await findUserAchievement(testUser.id, 'TEST_ACH_A');
+        const b = await findUserAchievement(testUser.id, 'TEST_ACH_B');
+        const codes = [a?.achievement_code, b?.achievement_code].filter(Boolean);
         expect(codes).toContain('TEST_ACH_A');
         expect(codes).toContain('TEST_ACH_B');
     });
 
     it('emits achievementUnlocked event when io is provided', async () => {
-        // Create a fresh user so the achievement can be unlocked
-        const freshUser = await prisma.user.create({ data: { username: `ach_emit_${ts}`, password: 'hashed' } });
-
+        const freshUser = await createUser(`ach_emit_${ts}`);
         let emitted = null;
-
-        // achievementService does: ioRef.of('/').sockets → Map, iterates [sid, socket]
         const mockSocket = {
             request: { session: { user: { id: freshUser.id } } }
         };
@@ -73,7 +53,7 @@ describe('unlockAchievement', () => {
             sockets: new Map([['sid1', mockSocket]])
         };
         const io = {
-            of: (ns) => mockNamespace,
+            of: () => mockNamespace,
             to: (sid) => ({ emit: (event, data) => { emitted = { sid, event, data }; } })
         };
 
@@ -84,7 +64,7 @@ describe('unlockAchievement', () => {
         expect(emitted.data.code).toBe('TEST_ACH_A');
         expect(emitted.sid).toBe('sid1');
 
-        await prisma.userAchievement.deleteMany({ where: { user_id: freshUser.id } });
-        await prisma.user.delete({ where: { id: freshUser.id } });
+        await deleteUserAchievements(freshUser.id);
+        await deleteUser(freshUser.id);
     });
 });

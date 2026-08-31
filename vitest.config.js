@@ -6,18 +6,10 @@ export default defineConfig({
         environment: 'node',
         testTimeout: 30000,
         hookTimeout: 30000,
-        // Force SQLite URL for all tests, overriding any PostgreSQL URL from .env
-        env: {
-            DATABASE_URL: 'file:./test/test.db',
-            DIRECT_URL: 'file:./test/test.db'
-        },
-        // Test files share a single SQLite database; running them in parallel
-        // contends on the same file and produces flaky cross-file count races.
+        include: ['test/**/*.test.js'],
+        // One Postgres Testcontainer is started in globalSetup and shared by all workers.
+        globalSetup: './test/globalSetup.js',
+        // A single shared DB across files; parallel runs contend on the same rows.
         fileParallelism: false,
-        poolOptions: {
-            threads: {
-                singleThread: true
-            }
-        }
     }
 });

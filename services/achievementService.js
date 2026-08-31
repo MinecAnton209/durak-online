@@ -1,5 +1,5 @@
-import db from '../db/prisma.js';
-import { getDb } from '../db/prisma.js';
+import db from '../db/drizzle.js';
+import { getDb } from '../db/drizzle.js';
 import { userAchievement } from '../db/schema.ts';
 
 let io;
@@ -83,3 +83,5 @@ function checkPostGameAchievements(game, player, userStats, newWinStreak) {
 }
 
 export { init, unlockAchievement, checkPostGameAchievements, checkInGameAchievements };
+
+export default { init, unlockAchievement, checkPostGameAchievements, checkInGameAchievements };

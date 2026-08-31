@@ -1,8 +1,10 @@
-const prisma = require('../db/prisma');
-const crypto = require('crypto');
-const { validateLobbySettings } = require('../utils/validation');
+import db from '../db/drizzle.js';
+import { game } from '../db/schema.ts';
+import { eq, and } from 'drizzle-orm';
+import crypto from 'node:crypto';
+import { validateLobbySettings } from '../utils/validation.js';
 
-module.exports = function registerLobbyHandlers(io, socket, sharedContext) {
+export default function registerLobbyHandlers(io, socket, sharedContext) {
     const { games, addPlayerToGame, broadcastPublicLobbies, checkBanStatus } = sharedContext;
 
     socket.on('createLobby', async (settings) => {
@@ -40,17 +42,15 @@ module.exports = function registerLobbyHandlers(io, socket, sharedContext) {
         try {
             const inviteCode = lobbySettings.lobbyType === 'private' ? crypto.randomBytes(3).toString('hex').toUpperCase() : null;
 
-            await prisma.game.create({
-                data: {
-                    id: gameId,
-                    status: 'waiting',
-                    lobby_type: lobbySettings.lobbyType,
-                    invite_code: inviteCode,
-                    max_players: lobbySettings.maxPlayers,
-                    host_user_id: userId,
-                    game_settings: JSON.stringify(lobbySettings),
-                    start_time: new Date().toISOString()
-                }
+            await db.insert(game).values({
+                id: gameId,
+                status: 'waiting',
+                lobby_type: lobbySettings.lobbyType,
+                invite_code: inviteCode,
+                max_players: lobbySettings.maxPlayers,
+                host_user_id: userId,
+                game_settings: JSON.stringify(lobbySettings),
+                start_time: new Date().toISOString()
             });
 
             games[gameId] = {
@@ -97,25 +97,16 @@ module.exports = function registerLobbyHandlers(io, socket, sharedContext) {
             if (inviteCode) {
                 const codeToCheck = inviteCode.toUpperCase();
 
-                gameFromDb = await prisma.game.findFirst({
-                    where: { invite_code: codeToCheck, status: 'waiting' },
-                    select: { id: true, max_players: true }
-                });
+                gameFromDb = (await db.select({ id: game.id, max_players: game.max_players }).from(game).where(and(eq(game.invite_code, codeToCheck), eq(game.status, 'waiting'))))[0];
 
                 if (!gameFromDb) {
-                    gameFromDb = await prisma.game.findFirst({
-                        where: { id: codeToCheck, status: 'waiting' },
-                        select: { id: true, max_players: true }
-                    });
+                    gameFromDb = (await db.select({ id: game.id, max_players: game.max_players }).from(game).where(and(eq(game.id, codeToCheck), eq(game.status, 'waiting'))))[0];
                 }
 
                 if (gameFromDb) lobbyToJoinId = gameFromDb.id;
 
             } else if (lobbyToJoinId) {
-                gameFromDb = await prisma.game.findFirst({
-                    where: { id: lobbyToJoinId, status: 'waiting' },
-                    select: { id: true, max_players: true }
-                });
+                gameFromDb = (await db.select({ id: game.id, max_players: game.max_players }).from(game).where(and(eq(game.id, lobbyToJoinId), eq(game.status, 'waiting'))))[0];
             }
 
             console.log(`[JoinLobby] DB Search Result:`, gameFromDb);
@@ -128,10 +119,7 @@ module.exports = function registerLobbyHandlers(io, socket, sharedContext) {
             const game = games[lobbyToJoinId];
             if (!game) {
                 console.log(`[JoinLobby] Lobby found in DB but NOT in Memory. Cancelling DB record.`);
-                await prisma.game.update({
-                    where: { id: lobbyToJoinId },
-                    data: { status: 'cancelled' }
-                });
+                await db.update(game).set({ status: 'cancelled' }).where(eq(game.id, lobbyToJoinId));
                 return socket.emit('error', { i18nKey: 'error_lobby_not_found_in_memory' });
             }
 
@@ -213,7 +201,7 @@ module.exports = function registerLobbyHandlers(io, socket, sharedContext) {
             if (humanIds.length === 0) {
                 console.log(`[Lobby] Lobby ${gameId} has only bots. Deleting.`);
                 delete games[gameId];
-                prisma.game.update({ where: { id: gameId }, data: { status: 'cancelled' } }).catch(() => { });
+                db.update(game).set({ status: 'cancelled' }).where(eq(game.id, gameId)).catch(() => { });
                 io.emit('lobbyExpired', { lobbyId: gameId });
             } else {
                 if (game.hostId === socket.id) {
@@ -234,7 +222,7 @@ module.exports = function registerLobbyHandlers(io, socket, sharedContext) {
         } else {
             console.log(`[Lobby] Lobby ${gameId} is empty. Deleting.`);
             delete games[gameId];
-            prisma.game.update({ where: { id: gameId }, data: { status: 'cancelled' } }).catch(() => { });
+            db.update(game).set({ status: 'cancelled' }).where(eq(game.id, gameId)).catch(() => { });
             io.emit('lobbyExpired', { lobbyId: gameId });
             broadcastPublicLobbies();
         }
@@ -255,10 +243,7 @@ module.exports = function registerLobbyHandlers(io, socket, sharedContext) {
         }
 
         try {
-            await prisma.game.update({
-                where: { id: gameId },
-                data: { game_settings: JSON.stringify(game.settings), max_players: game.settings.maxPlayers }
-            });
+            await db.update(game).set({ game_settings: JSON.stringify(game.settings), max_players: game.settings.maxPlayers }).where(eq(game.id, gameId));
 
             io.to(gameId).emit('lobbyStateUpdate', {
                 players: Object.values(game.players).map(p => ({

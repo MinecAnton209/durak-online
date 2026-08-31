@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDeck, canBeat, getNextPlayerIndex, checkGameOver, RANK_VALUES } from '../utils/gameLogic';
+import { createDeck, canBeat, getNextPlayerIndex, checkGameOver, RANK_VALUES } from '../utils/gameLogic.js';
 
 describe('RANK_VALUES', () => {
     it('has correct values', () => {

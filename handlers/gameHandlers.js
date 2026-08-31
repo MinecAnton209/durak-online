@@ -1,7 +1,10 @@
-const prisma = require('../db/prisma');
-const { validateCard } = require('../utils/validation');
+import db from '../db/drizzle.js';
+import { user, game, gameParticipant } from '../db/schema.ts';
+import { eq, and, sql } from 'drizzle-orm';
+import { validateCard } from '../utils/validation.js';
+import { RANK_VALUES, canBeat, getNextPlayerIndex, updateTurn, checkGameOver } from '../utils/gameLogic.js';
 
-module.exports = function registerGameHandlers(io, socket, sharedContext) {
+export default function registerGameHandlers(io, socket, sharedContext) {
     const {
         games,
         gameService,
@@ -31,7 +34,7 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
         }
 
         try {
-            await prisma.game.update({ where: { id: gameId }, data: { status: 'in_progress' } });
+            await db.update(game).set({ status: 'in_progress' }).where(eq(game.id, gameId));
             gameService.startGame(gameId);
             gameService.broadcastPublicLobbies();
         } catch (e) {
@@ -53,10 +56,7 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
                     sessionUser.is_muted = false;
                     sessionUser.mute_until = null;
                 }
-                prisma.user.update({
-                    where: { id: player.dbId || sessionUser?.id },
-                    data: { is_muted: false, mute_until: null }
-                }).catch(err => console.error(err));
+                db.update(user).set({ is_muted: false, mute_until: null }).where(eq(user.id, player.dbId || sessionUser?.id)).catch(err => console.error(err));
             } else {
                 return socket.emit('systemMessage', { i18nKey: 'error_chat_muted', type: 'error' });
             }
@@ -90,7 +90,6 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
         const player = game.players[socket.id];
         player.afkStrikes = 0;
         const isDefender = socket.id === game.defenderId;
-        const { canBeat, getNextPlayerIndex } = require('../utils/gameLogic');
 
         const canToss = !isDefender && game.table.length > 0 && game.table.length % 2 === 0;
 
@@ -169,7 +168,6 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
 
     socket.on('passTurn', ({ gameId }) => {
         const game = games[gameId];
-        const { getNextPlayerIndex, updateTurn, checkGameOver } = require('../utils/gameLogic');
         if (!game || game.attackerId !== socket.id || game.table.length === 0 || game.table.length % 2 !== 0 || game.winner) return;
         if (game.dealEndsAt && Date.now() < game.dealEndsAt) return;
         if (game.players[socket.id]) {
@@ -200,7 +198,6 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
 
     socket.on('takeCards', ({ gameId }) => {
         const game = games[gameId];
-        const { getNextPlayerIndex, updateTurn, checkGameOver } = require('../utils/gameLogic');
         if (!game || game.defenderId !== socket.id || game.table.length === 0 || game.winner) return;
         if (game.dealEndsAt && Date.now() < game.dealEndsAt) return;
         if (game.players[socket.id]) {
@@ -211,10 +208,7 @@ module.exports = function registerGameHandlers(io, socket, sharedContext) {
         if (defender) {
             defender.gameStats.cardsTaken += game.table.length;
             if (defender.dbId) {
-                prisma.gameParticipant.update({
-                    where: { game_id_user_id: { game_id: gameId, user_id: defender.dbId } },
-                    data: { cards_taken_total: { increment: game.table.length } }
-                }).catch(err => console.error(`[Game] Error updating cards_taken_total:`, err.message));
+                db.update(gameParticipant).set({ cards_taken_total: sql`${gameParticipant.cards_taken_total} + ${game.table.length}` }).where(and(eq(gameParticipant.game_id, gameId), eq(gameParticipant.user_id, defender.dbId))).catch(err => console.error(`[Game] Error updating cards_taken_total:`, err.message));
             }
             gameService.logEvent(game, null, { i18nKey: 'log_take', options: { name: defender.name } });
             defender.cards.push(...game.table);

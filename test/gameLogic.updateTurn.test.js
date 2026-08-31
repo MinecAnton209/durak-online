@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { updateTurn } from '../utils/gameLogic';
+import { updateTurn } from '../utils/gameLogic.js';
 
 function makePlayer(id, cards = []) {
     return { id, cards };

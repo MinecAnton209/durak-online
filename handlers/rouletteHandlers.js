@@ -1,7 +1,9 @@
-const rouletteService = require('../services/rouletteService');
-const prisma = require('../db/prisma');
+import rouletteService from '../services/rouletteService.js';
+import db from '../db/drizzle.js';
+import { user } from '../db/schema.ts';
+import { eq, sql } from 'drizzle-orm';
 
-module.exports = function registerRouletteHandlers(io, socket) {
+export default function registerRouletteHandlers(io, socket) {
 
     socket.on('roulette:getState', async () => {
         const state = rouletteService.getRouletteState();
@@ -9,12 +11,9 @@ module.exports = function registerRouletteHandlers(io, socket) {
 
         if (socket.request.session.user) {
             try {
-                const user = await prisma.user.findUnique({
-                    where: { id: socket.request.session.user.id },
-                    select: { coins: true }
-                });
-                if (user) {
-                    socket.emit('updateBalance', { coins: user.coins });
+                const dbUser = await db.query.user.findFirst({ where: { id: socket.request.session.user.id }, select: { coins: true } });
+                if (dbUser) {
+                    socket.emit('updateBalance', { coins: dbUser.coins });
                 }
             } catch (err) {
                 console.error('[Roulette Handler] Error fetching balance:', err.message);
@@ -39,16 +38,13 @@ module.exports = function registerRouletteHandlers(io, socket) {
         const userId = parseInt(sessionUser.id, 10);
 
         try {
-            const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { coins: true } });
+            const dbUser = await db.query.user.findFirst({ where: { id: userId }, select: { coins: true } });
             if (!dbUser || dbUser.coins < amount) {
                 return socket.emit('roulette:betError', { messageKey: 'error_not_enough_coins' });
             }
 
             // Deduct coins from DB
-            await prisma.user.update({
-                where: { id: userId },
-                data: { coins: { decrement: amount } }
-            });
+            await db.update(user).set({ coins: sql`${user.coins} - ${amount}` }).where(eq(user.id, userId));
 
             // Update session if it's there
             if (socket.request.session.user) {
@@ -63,10 +59,7 @@ module.exports = function registerRouletteHandlers(io, socket) {
                 socket.emit('updateBalance', { coins: dbUser.coins - amount });
             } else {
                 // Refund if failed to place bet in time
-                await prisma.user.update({
-                    where: { id: userId },
-                    data: { coins: { increment: amount } }
-                });
+                await db.update(user).set({ coins: sql`${user.coins} + ${amount}` }).where(eq(user.id, userId));
                 socket.emit('roulette:betError', { messageKey: 'roulette_error_bets_closed' });
             }
 

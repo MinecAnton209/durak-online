@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
-import db from '../db/prisma.js';
-import { getDb } from '../db/prisma.js';
+import db from '../db/drizzle.js';
+import { getDb } from '../db/drizzle.js';
 import { systemStatsDaily } from '../db/schema.ts';
 
 async function incrementDailyCounter(counterName, executor = getDb()) {
@@ -19,3 +19,5 @@ async function incrementDailyCounter(counterName, executor = getDb()) {
 }
 
 export { incrementDailyCounter };
+
+export default { incrementDailyCounter };

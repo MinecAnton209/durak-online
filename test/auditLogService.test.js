@@ -1,22 +1,19 @@
-/**
- * Integration tests for services/auditLogService.js using real test SQLite DB.
- * logAdminAction is fire-and-forget (no await), so we wait a bit for completion.
- */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import prisma from './prismaClient.js';
 import { logAdminAction } from '../services/auditLogService.js';
+import {
+    createUser, deleteUsers, findAdminAuditLog, countAdminAuditLog
+} from './dbHelpers.js';
 
 const ts = Date.now();
 let adminUser, targetUser;
 
 beforeAll(async () => {
-    adminUser = await prisma.user.create({ data: { username: `audit_admin_${ts}`, password: 'hashed', is_admin: true } });
-    targetUser = await prisma.user.create({ data: { username: `audit_target_${ts}`, password: 'hashed' } });
+    adminUser = await createUser(`audit_admin_${ts}`, { is_admin: true });
+    targetUser = await createUser(`audit_target_${ts}`);
 });
 
 afterAll(async () => {
-    await prisma.adminAuditLog.deleteMany({ where: { admin_id: adminUser.id } });
-    await prisma.user.deleteMany({ where: { id: { in: [adminUser.id, targetUser.id] } } });
+    await deleteUsers([adminUser.id, targetUser.id]);
 });
 
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
@@ -32,11 +29,9 @@ describe('logAdminAction', () => {
             reason: 'cheating'
         });
 
-        await wait(300); // fire-and-forget: give the async promise time to resolve
+        await wait(300);
 
-        const log = await prisma.adminAuditLog.findFirst({
-            where: { admin_id: adminUser.id, action_type: 'BAN_USER' }
-        });
+        const log = await findAdminAuditLog(adminUser.id, 'BAN_USER');
         expect(log).not.toBeNull();
         expect(log.reason).toBe('cheating');
         expect(log.target_user_id).toBe(targetUser.id);
@@ -50,19 +45,16 @@ describe('logAdminAction', () => {
         });
         await wait(300);
 
-        const log = await prisma.adminAuditLog.findFirst({
-            where: { admin_id: adminUser.id, action_type: 'MAINTENANCE_ON' }
-        });
+        const log = await findAdminAuditLog(adminUser.id, 'MAINTENANCE_ON');
         expect(log).not.toBeNull();
         expect(log.target_user_id).toBeNull();
     });
 
     it('does NOT create a log entry when required fields are missing', async () => {
-        const before = await prisma.adminAuditLog.count({ where: { admin_id: adminUser.id } });
-        // Missing adminUsername and actionType → service returns early
+        const before = await countAdminAuditLog(adminUser.id);
         logAdminAction({ adminId: adminUser.id });
         await wait(300);
-        const after = await prisma.adminAuditLog.count({ where: { admin_id: adminUser.id } });
+        const after = await countAdminAuditLog(adminUser.id);
         expect(after).toBe(before);
     });
 });

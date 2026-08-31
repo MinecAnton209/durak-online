@@ -1,6 +1,6 @@
-const systemService = require('../services/systemService');
+import systemService from '../services/systemService.js';
 
-module.exports = function registerHealthHandlers(io, socket, sharedContext) {
+export default function registerHealthHandlers(io, socket, sharedContext) {
     const { onlineUsers, games } = sharedContext;
 
     socket.on('health:subscribe', () => {

@@ -555,4 +555,4 @@ const locales = {
     }
 };
 
-module.exports = locales;
+export default locales;

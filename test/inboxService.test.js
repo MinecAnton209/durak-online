@@ -1,13 +1,5 @@
-/**
- * Integration tests for services/inboxService.js using real test SQLite DB.
- * 
- * inboxService imports telegramBot which tries to send messages to Telegram IDs.
- * We mock it so no real network calls happen.
- */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import prisma from './prismaClient.js';
 
-// Mock telegramBot BEFORE importing inboxService
 vi.mock('../services/telegramBot.js', () => ({
     sendMessage: vi.fn().mockResolvedValue(null),
     init: vi.fn(),
@@ -23,19 +15,25 @@ import {
     deleteMessage,
     broadcastMessage
 } from '../services/inboxService.js';
+import {
+    createUser, deleteUser, deleteInboxMessages,
+    findInboxMessage, countInboxMessages
+} from './dbHelpers.js';
 
 const ts = Date.now();
 let user1, user2;
 
 beforeAll(async () => {
-    init(null); // No socket.io needed for tests
-    user1 = await prisma.user.create({ data: { username: `inbox_u1_${ts}`, password: 'hashed' } });
-    user2 = await prisma.user.create({ data: { username: `inbox_u2_${ts}`, password: 'hashed' } });
+    init(null);
+    user1 = await createUser(`inbox_u1_${ts}`);
+    user2 = await createUser(`inbox_u2_${ts}`);
 });
 
 afterAll(async () => {
-    await prisma.inboxMessage.deleteMany({ where: { user_id: { in: [user1.id, user2.id] } } });
-    await prisma.user.deleteMany({ where: { id: { in: [user1.id, user2.id] } } });
+    await deleteInboxMessages(user1.id);
+    await deleteInboxMessages(user2.id);
+    await deleteUser(user1.id);
+    await deleteUser(user2.id);
 });
 
 describe('addMessage', () => {
@@ -48,7 +46,7 @@ describe('addMessage', () => {
         expect(typeof id).toBe('number');
         expect(id).toBeGreaterThan(0);
 
-        const msg = await prisma.inboxMessage.findUnique({ where: { id } });
+        const msg = await findInboxMessage(id);
         expect(msg).not.toBeNull();
         expect(msg.type).toBe('system');
         expect(msg.is_read).toBe(false);
@@ -65,15 +63,14 @@ describe('getMessages', () => {
     });
 
     it('returns empty for user with no messages', async () => {
-        const noMsgUser = await prisma.user.create({ data: { username: `inbox_empty_${ts}`, password: 'hashed' } });
+        const noMsgUser = await createUser(`inbox_empty_${ts}`);
         const result = await getMessages(noMsgUser.id, { page: 1, limit: 10 });
         expect(result.messages.length).toBe(0);
         expect(result.pagination.total).toBe(0);
-        await prisma.user.delete({ where: { id: noMsgUser.id } });
+        await deleteUser(noMsgUser.id);
     });
 
     it('paginates correctly', async () => {
-        // Add 5 messages for user2
         for (let i = 0; i < 5; i++) {
             await addMessage(user2.id, { contentKey: `test.key.${i}`, contentParams: {} });
         }
@@ -105,7 +102,7 @@ describe('markAsRead', () => {
     it('marks a specific message as read', async () => {
         const id = await addMessage(user1.id, { contentKey: 'test.read', contentParams: {} });
         await markAsRead(user1.id, id);
-        const msg = await prisma.inboxMessage.findUnique({ where: { id } });
+        const msg = await findInboxMessage(id);
         expect(msg.is_read).toBe(true);
     });
 });
@@ -114,17 +111,16 @@ describe('deleteMessage', () => {
     it('removes the message', async () => {
         const id = await addMessage(user1.id, { contentKey: 'test.delete', contentParams: {} });
         await deleteMessage(user1.id, id);
-        const msg = await prisma.inboxMessage.findFirst({ where: { id } });
+        const msg = await findInboxMessage(id);
         expect(msg).toBeNull();
     });
 });
 
 describe('broadcastMessage', () => {
     it('creates a message for every existing user', async () => {
-        const userCount = await prisma.user.count();
-        const beforeCount = await prisma.inboxMessage.count();
+        const before = await countInboxMessages(user1.id);
         await broadcastMessage({ contentKey: 'broadcast.test', contentParams: {} });
-        const afterCount = await prisma.inboxMessage.count();
-        expect(afterCount - beforeCount).toBe(userCount);
+        const after = await countInboxMessages(user1.id);
+        expect(after - before).toBe(1);
     });
 });

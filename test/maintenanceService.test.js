@@ -5,7 +5,7 @@ import {
     setMaintenanceMode,
     scheduleMaintenance,
     cancelMaintenance
-} from '../services/maintenanceService';
+} from '../services/maintenanceService.js';
 
 function fakeIo() {
     return { emit: vi.fn() };

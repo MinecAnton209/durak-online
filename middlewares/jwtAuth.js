@@ -1,5 +1,7 @@
-const jwt = require('jsonwebtoken')
-const prisma = require('../db/prisma');
+import jwt from 'jsonwebtoken';
+import db from '../db/drizzle.js';
+import { eq } from 'drizzle-orm';
+import { activeSession } from '../db/schema.ts';
 
 function getCookieDomain(hostname) {
     if (process.env.NODE_ENV !== 'production') return undefined;
@@ -29,37 +31,37 @@ function getJwtSecret() {
 }
 
 function signToken(payload, options = {}) {
-    const secret = getJwtSecret()
+    const secret = getJwtSecret();
     const defaultOpts = {
         expiresIn: '7d',
         issuer: 'durak-api',
         audience: 'durak-client'
-    }
-    return jwt.sign(payload, secret, { ...defaultOpts, ...options })
+    };
+    return jwt.sign(payload, secret, { ...defaultOpts, ...options });
 }
 
 function verifyToken(token) {
-    if (!token) return null
+    if (!token) return null;
     try {
         return jwt.verify(token, getJwtSecret(), {
             issuer: 'durak-api',
             audience: 'durak-client'
-        })
+        });
     } catch (_) {
-        return null
+        return null;
     }
 }
 
 function parseCookieHeader(cookieHeader) {
-    const result = {}
-    if (!cookieHeader) return result
+    const result = {};
+    if (!cookieHeader) return result;
     cookieHeader.split(';').forEach(part => {
-        const idx = part.indexOf('=')
-        const key = part.slice(0, idx).trim()
-        const val = part.slice(idx + 1).trim()
-        if (key) result[key] = decodeURIComponent(val)
-    })
-    return result
+        const idx = part.indexOf('=');
+        const key = part.slice(0, idx).trim();
+        const val = part.slice(idx + 1).trim();
+        if (key) result[key] = decodeURIComponent(val);
+    });
+    return result;
 }
 
 function setAuthCookie(req, res, token) {
@@ -74,6 +76,7 @@ function setAuthCookie(req, res, token) {
         domain: domain,
     });
 }
+
 function clearAuthCookie(req, res) {
     const domain = getCookieDomain(req.hostname);
 
@@ -86,6 +89,35 @@ function clearAuthCookie(req, res) {
     });
 }
 
+async function checkSession(decoded, onUser, onInvalid) {
+    if (!decoded.sessionId) {
+        // Legacy token support disabled - force logout
+        onInvalid();
+        return;
+    }
+    try {
+        const session = await db.query.activeSession.findFirst({ where: { id: decoded.sessionId } });
+        if (session) {
+            onUser(session);
+        } else {
+            onInvalid();
+        }
+    } catch (e) {
+        console.error('Session check error:', e);
+        onInvalid();
+    }
+}
+
+function touchSession(sessionId, lastActive) {
+    const now = new Date();
+    if (now.getTime() - lastActive.getTime() > 1 * 60 * 1000) {
+        db.update(activeSession)
+            .set({ last_active: now })
+            .where(eq(activeSession.id, sessionId))
+            .catch(err => console.error('Last active update fail', err.message));
+    }
+}
+
 function attachUserFromToken(req, _res, next) {
     const cookies = parseCookieHeader(req.headers.cookie);
 
@@ -93,51 +125,30 @@ function attachUserFromToken(req, _res, next) {
     const bearer = bearerHeader.startsWith('Bearer ') ? bearerHeader.slice(7) : null;
     const token = bearer || cookies.durak_token;
 
-    if (token) {
-        const decoded = verifyToken(token);
-        if (decoded) {
-            // Check session validity if sessionId is present
-            const checkSession = async () => {
-                if (decoded.sessionId) {
-                    try {
-                        const session = await prisma.activeSession.findUnique({ where: { id: decoded.sessionId } });
-                        if (session) {
-                            req.user = decoded;
-                            req.session = {
-                                user: decoded,
-                                save() { },
-                                destroy() { },
-                            };
-
-                            // Update last_active occasionally (e.g. if > 1 min old)
-                            const now = new Date();
-                            const lastActive = new Date(session.last_active);
-                            // Simple diff check
-                            if (now.getTime() - lastActive.getTime() > 1 * 60 * 1000) {
-                                prisma.activeSession.update({
-                                    where: { id: decoded.sessionId },
-                                    data: { last_active: now }
-                                }).catch(err => console.error('Last active update fail', err.message));
-                            }
-                        } else {
-                            req.user = null; // Session terminated
-                        }
-                    } catch (e) {
-                        console.error('Session check error:', e);
-                        req.user = null;
-                    }
-                } else {
-                    // Legacy token support disabled - force logout
-                    req.user = null;
-                }
-                next();
-            };
-            checkSession();
-            return;
-        }
+    if (!token) {
+        next();
+        return;
     }
 
-    next();
+    const decoded = verifyToken(token);
+    if (!decoded) {
+        next();
+        return;
+    }
+
+    checkSession(
+        decoded,
+        (session) => {
+            req.user = decoded;
+            req.session = { user: decoded, save() { }, destroy() { } };
+            touchSession(decoded.sessionId, new Date(session.last_active));
+            next();
+        },
+        () => {
+            req.user = null;
+            next();
+        }
+    );
 }
 
 function socketAttachUser(socket, next) {
@@ -151,40 +162,26 @@ function socketAttachUser(socket, next) {
 
     const decoded = verifyToken(token);
 
-    if (decoded) {
-        const verifySession = async () => {
-            if (decoded.sessionId) {
-                try {
-                    const session = await prisma.activeSession.findUnique({ where: { id: decoded.sessionId } });
-                    if (session) {
-                        socket.request.user = decoded;
-                        socket.request.session = { user: decoded, save() { }, destroy() { } };
+    if (!decoded) {
+        socket.request.session = { user: null, save() { }, destroy() { } };
+        next();
+        return;
+    }
 
-                        // Also update last_active on socket connect if needed
-                        const now = new Date();
-                        const lastActive = new Date(session.last_active);
-                        if (now.getTime() - lastActive.getTime() > 1 * 60 * 1000) {
-                            prisma.activeSession.update({
-                                where: { id: decoded.sessionId },
-                                data: { last_active: now }
-                            }).catch(err => console.error('Socket last active update fail', err.message));
-                        }
-
-                        next();
-                        return;
-                    }
-                } catch (e) { console.error('Socket session check error', e); }
-            }
-            // Invalid
+    checkSession(
+        decoded,
+        (session) => {
+            socket.request.user = decoded;
+            socket.request.session = { user: decoded, save() { }, destroy() { } };
+            touchSession(decoded.sessionId, new Date(session.last_active));
+            next();
+        },
+        () => {
             socket.request.user = null;
             socket.request.session = { user: null, save() { }, destroy() { } };
             next();
         }
-        verifySession();
-    } else {
-        socket.request.session = { user: null, save() { }, destroy() { } };
-        next();
-    }
+    );
 }
 
 function authMiddleware(req, res, next) {
@@ -195,13 +192,12 @@ function authMiddleware(req, res, next) {
     }
 }
 
-
-module.exports = {
+export {
     signToken,
     verifyToken,
     setAuthCookie,
     clearAuthCookie,
     attachUserFromToken,
     socketAttachUser,
-    authMiddleware,
-}
+    authMiddleware
+};

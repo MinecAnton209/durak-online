@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import db from './prisma.js';
+import db from './drizzle.js';
 import { pushSubscription } from './schema.ts';
 
 /**
@@ -44,9 +44,10 @@ async function deleteSubscription(endpoint) {
  */
 async function getSubscriptionsForUser(userId) {
   try {
-    const rows = await db.query.pushSubscription.findMany({
-      where: { user_id: userId },
-    });
+    const rows = await db
+      .select()
+      .from(pushSubscription)
+      .where(eq(pushSubscription.user_id, userId));
 
     return rows.map((s) => ({
       endpoint: s.endpoint,
@@ -65,9 +66,11 @@ async function getSubscriptionsForUser(userId) {
  */
 async function findSubscriptionByUserId(userId) {
   try {
-    const row = await db.query.pushSubscription.findFirst({
-      where: { user_id: userId },
-    });
+    const [row] = await db
+      .select()
+      .from(pushSubscription)
+      .where(eq(pushSubscription.user_id, userId))
+      .limit(1);
     if (!row) return null;
     return { endpoint: row.endpoint, keys: JSON.parse(row.keys) };
   } catch (err) {
@@ -81,7 +84,7 @@ async function findSubscriptionByUserId(userId) {
  */
 async function getAllSubscriptions() {
   try {
-    const rows = await db.query.pushSubscription.findMany();
+    const rows = await db.select().from(pushSubscription);
 
     return rows.map((s) => ({
       endpoint: s.endpoint,
@@ -94,6 +97,14 @@ async function getAllSubscriptions() {
 }
 
 export {
+  saveSubscription,
+  deleteSubscription,
+  findSubscriptionByUserId,
+  getSubscriptionsForUser,
+  getAllSubscriptions,
+};
+
+export default {
   saveSubscription,
   deleteSubscription,
   findSubscriptionByUserId,

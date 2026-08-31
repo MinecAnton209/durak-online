@@ -1,6 +1,5 @@
-﻿const webpush = require('web-push');
-const subscriptionsDB = require('../db/subscriptions.js');
-
+import webpush from 'web-push';
+import subscriptionsDB from '../db/subscriptions.js';
 
 async function sendNotification(userId, payload) {
     const subscription = await subscriptionsDB.findSubscriptionByUserId(userId);
@@ -26,7 +25,6 @@ async function sendNotification(userId, payload) {
     }
 }
 
-
 async function sendBroadcastNotification(payload) {
     const allSubs = await subscriptionsDB.getAllSubscriptions();
     let successCount = 0;
@@ -50,7 +48,9 @@ async function sendBroadcastNotification(payload) {
     return { successCount, failureCount };
 }
 
-module.exports = {
+export {
     sendNotification,
     sendBroadcastNotification
 };
+
+export default { sendNotification, sendBroadcastNotification };

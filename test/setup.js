@@ -1,45 +1,30 @@
-import { execSync } from 'child_process';
-import { existsSync, unlinkSync, readFileSync } from 'fs';
-import path from 'path';
-import dotenv from 'dotenv';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import db, { initializeDb, getDb } from '../db/drizzle.js';
 
-dotenv.config();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Detect provider directly from schema.prisma (updated by preparePrisma.js)
-const schemaContent = readFileSync(path.resolve('./prisma/schema.prisma'), 'utf8');
-const providerMatch = schemaContent.match(/datasource\s+db\s*{[^}]*provider\s*=\s*"([^"]*)"/);
-const currentProvider = providerMatch ? providerMatch[1] : 'sqlite';
-
-let testDbUrl = process.env.DATABASE_URL || 'file:./test/test.db';
-const isSqlite = currentProvider === 'sqlite';
-
-// If schema is sqlite but URL is postgres, we MUST force a local file for tests
-if (isSqlite && !testDbUrl.startsWith('file:')) {
-    testDbUrl = 'file:./test/test.db';
+const envPath = path.join(__dirname, '.test-env.json');
+if (fs.existsSync(envPath)) {
+    const { DATABASE_URL } = JSON.parse(fs.readFileSync(envPath, 'utf8'));
+    process.env.DATABASE_URL = DATABASE_URL;
 }
 
-export async function setup() {
-    console.log(`[Test Setup] Initializing ${isSqlite ? 'SQLite' : 'PostgreSQL'} database for tests...`);
-    execSync('npx prisma db push --force-reset', {
-        env: { ...process.env, DATABASE_URL: testDbUrl },
-        stdio: 'pipe'
-    });
-    console.log('[Test Setup] Database schema pushed successfully.');
-}
+initializeDb(process.env.DATABASE_URL);
 
-export async function teardown() {
-    if (isSqlite) {
-        const dbPath = path.resolve(testDbUrl.replace('file:', ''));
-        if (existsSync(dbPath)) {
-            unlinkSync(dbPath);
-            // Also clean WAL and SHM files
-            for (const suffix of ['-wal', '-shm']) {
-                const f = dbPath + suffix;
-                if (existsSync(f)) unlinkSync(f);
-            }
-        }
-        console.log('[Test Teardown] SQLite Test DB cleaned up.');
-    } else {
-        console.log('[Test Teardown] PostgreSQL database left intact (data reset done during setup).');
+/**
+ * Deletes all rows from the given Drizzle tables. Call in beforeEach/afterEach
+ * to keep tests isolated on the shared container DB.
+ */
+export async function truncateTables(dbInstance, tables) {
+    for (const table of tables) {
+        await dbInstance.delete(table);
     }
+}
+
+export { db, getDb };
+
+export async function closeDb() {
+    await getDb().$client.end();
 }
