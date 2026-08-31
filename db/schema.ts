@@ -312,13 +312,4 @@ export const schema = {
   userDevice,
   inboxMessage,
   profile,
-  userRelations,
-  profileRelations,
-  userAchievementRelations,
-  gameParticipantRelations,
-  gameRelations,
-  donationRelations,
-  activeSessionRelations,
-  knownDeviceRelations,
-  userDeviceRelations,
 };

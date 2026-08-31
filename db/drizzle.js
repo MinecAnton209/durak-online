@@ -96,7 +96,7 @@ function pickColumns(table, columns) {
   return Object.keys(selected).length ? selected : undefined;
 }
 
-async function runFindFirst(table, { where, columns, orderBy, limit: lim, with: withSpec } = {}) {
+async function runFindFirst(table, { where, columns, orderBy, limit: lim } = {}) {
   const db = getDb();
   let q = db.select(pickColumns(table, columns) || table).from(table);
   const w = buildWhere(table, where);
@@ -105,14 +105,10 @@ async function runFindFirst(table, { where, columns, orderBy, limit: lim, with: 
   for (const ob of obs) q = q.orderBy(ob);
   if (lim) q = q.limit(lim);
   const rows = await q;
-  let row = rows[0] || null;
-  if (row && withSpec && typeof withSpec === 'object') {
-    await applyNestedWith(table, [row], withSpec);
-  }
-  return row;
+  return rows[0] || null;
 }
 
-async function runFindMany(table, { where, columns, orderBy, limit: lim, with: withSpec } = {}) {
+async function runFindMany(table, { where, columns, orderBy, limit: lim } = {}) {
   const db = getDb();
   let q = db.select(pickColumns(table, columns) || table).from(table);
   const w = buildWhere(table, where);
@@ -121,48 +117,7 @@ async function runFindMany(table, { where, columns, orderBy, limit: lim, with: w
   for (const ob of obs) q = q.orderBy(ob);
   if (lim) q = q.limit(lim);
   const rows = await q;
-  if (rows.length && withSpec && typeof withSpec === 'object') {
-    await applyNestedWith(table, rows, withSpec);
-  }
   return rows;
-}
-
-const RELATIONS = {
-  user: {
-    profile: { table: profile, type: 'one', from: 'id', to: 'user_id' },
-  },
-  game: {
-    participants: { table: gameParticipant, type: 'many', from: 'id', to: 'game_id' },
-  },
-};
-
-async function applyNestedWith(parentTable, rows, withSpec) {
-  if (!rows || rows.length === 0) return;
-  if (withSpec === true) withSpec = {};
-  for (const [relName, relSpec] of Object.entries(withSpec)) {
-    const rel = RELATIONS[parentTable]?.[relName];
-    if (!rel) continue;
-    if (rel.type === 'one') {
-      for (const r of rows) {
-        const fkVal = r[rel.from];
-        if (fkVal === undefined || fkVal === null) { r[relName] = null; continue; }
-        const where = { [rel.to]: fkVal };
-        const columns = relSpec && typeof relSpec === 'object' && relSpec.columns ? relSpec.columns : undefined;
-        const child = await runFindFirst(rel.table, { where, columns });
-        if (relSpec && typeof relSpec === 'object' && child) await applyNestedWith(rel.table, [child], relSpec);
-        r[relName] = child;
-      }
-    } else {
-      const ids = [...new Set(rows.map(r => r[rel.from]).filter(v => v !== undefined && v !== null))];
-      if (ids.length) {
-        const children = await runFindMany(rel.table, { where: { [rel.to]: { in: ids } } });
-        if (relSpec && typeof relSpec === 'object') await applyNestedWith(rel.table, children, relSpec);
-        rows.forEach(r => { r[relName] = children.filter(c => c[rel.to] === r[rel.from]); });
-      } else {
-        rows.forEach(r => { r[relName] = []; });
-      }
-    }
-  }
 }
 
 const query = new Proxy({}, {
