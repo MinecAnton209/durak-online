@@ -31,6 +31,7 @@ import notificationsRoutes from './routes/notifications.js';
 import inboxRoutes from './routes/inbox.js';
 import myGamesRoutes from './routes/myGames.js';
 import profileRoutes from './routes/profile.js';
+import pokerRoutes from './routes/poker.js';
 
 import { seedAchievements } from './db/seed.js';
 import achievementService from './services/achievementService.js';
@@ -43,6 +44,7 @@ import telegramBot from './services/telegramBot.js';
 import botLogic from './services/botLogic.js';
 import chatService from './services/chatService.js';
 import gameService from './services/gameService.js';
+import * as pokerService from './services/pokerService.js';
 import systemService from './services/systemService.js';
 import rouletteService from './services/rouletteService.js';
 import maintenanceService from './services/maintenanceService.js';
@@ -59,6 +61,8 @@ import registerRouletteHandlers from './handlers/rouletteHandlers.js';
 import registerChatHandlers from './handlers/chatHandlers.js';
 import registerFriendHandlers from './handlers/friendHandlers.js';
 import registerHealthHandlers from './handlers/healthHandlers.js';
+import registerPokerLobbyHandlers from './handlers/pokerLobbyHandlers.js';
+import registerPokerGameHandlers from './handlers/pokerGameHandlers.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -134,6 +138,7 @@ inboxService.init(io);
 rouletteService.init(io, onlineUsers);
 maintenanceService.init(io);
 gameService.init(io, games);
+pokerService.initPoker(io, games);
 
 app.set('trust proxy', 1);
 
@@ -192,6 +197,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/inbox', inboxRoutes);
 app.use('/api/my-games', myGamesRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/poker', pokerRoutes);
 
 app.use(expressStaticGzip(path.join(__dirname, 'public'), {
   enableBrotli: true,
@@ -292,6 +298,8 @@ io.on('connection', (socket) => {
     registerGameHandlers(io, socket, { games, gameService, achievementService, escapeHtml });
     registerFriendHandlers(io, socket, { games, onlineUsers });
     registerHealthHandlers(io, socket, { onlineUsers, games });
+    registerPokerLobbyHandlers(io, socket);
+    registerPokerGameHandlers(io, socket);
 
     socket.on('disconnect', () => {
         let disconnectedUserId = null;
