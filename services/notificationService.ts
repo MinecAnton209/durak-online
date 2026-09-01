@@ -1,0 +1,61 @@
+import webpush from 'web-push';
+import subscriptionsDB from '../db/subscriptions.js';
+
+async function sendNotification(userId: number, payload: any): Promise<boolean> {
+    const subscription = await subscriptionsDB.findSubscriptionByUserId(userId);
+
+    if (!subscription) {
+        console.log(`[Push Service] No subscription found for user ${userId}.`);
+        return false;
+    }
+
+    const notificationPayload = JSON.stringify(payload);
+
+    try {
+        await webpush.sendNotification(subscription, notificationPayload);
+        console.log(`[Push Service] Notification successfully sent to user ${userId}.`);
+        return true;
+    } catch (error: any) {
+        console.error(`[Push Service] Error sending notification to user ${userId}:`, error.statusCode, error.body);
+        if (error.statusCode === 410) {
+            await subscriptionsDB.deleteSubscription(userId as any);
+            console.log(`[Push Service] Deleted expired subscription for user ${userId}.`);
+        }
+        return false;
+    }
+}
+
+interface BroadcastResult {
+  successCount: number;
+  failureCount: number;
+}
+
+async function sendBroadcastNotification(payload: any): Promise<BroadcastResult> {
+    const allSubs = await subscriptionsDB.getAllSubscriptions();
+    let successCount = 0;
+    let failureCount = 0;
+
+    const notificationPayload = JSON.stringify(payload);
+
+    const sendPromises = allSubs.map(async (subInfo: any) => {
+        try {
+            await webpush.sendNotification(subInfo.subscription, notificationPayload);
+            successCount++;
+        } catch (error: any) {
+            failureCount++;
+            if (error.statusCode === 410) {
+                await subscriptionsDB.deleteSubscription(subInfo.userId);
+            }
+        }
+    });
+
+    await Promise.all(sendPromises);
+    return { successCount, failureCount };
+}
+
+export {
+    sendNotification,
+    sendBroadcastNotification
+};
+
+export default { sendNotification, sendBroadcastNotification };

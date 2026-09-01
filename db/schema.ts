@@ -293,7 +293,7 @@ export const userDeviceRelations = relations(userDevice, ({ one }) => ({
   device: one(knownDevice, { fields: [userDevice.device_id], references: [knownDevice.id] }),
 }));
 
-export const schema = {
+export const tables = {
   user,
   chatFilter,
   achievement,
@@ -313,3 +313,5 @@ export const schema = {
   inboxMessage,
   profile,
 };
+
+export const schema = { ...tables };
