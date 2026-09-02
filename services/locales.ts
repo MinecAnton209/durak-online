@@ -555,4 +555,6 @@ const locales = {
     }
 };
 
+export type LocaleTree = string | { [k: string]: LocaleTree };
+
 export default locales;

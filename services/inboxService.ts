@@ -64,7 +64,7 @@ async function addMessage(userId: number, { type = 'system', titleKey = null, co
         };
       }
 
-      const sentMsg = await telegramBot.sendMessage(foundUser.telegram_id, `📩 *${title}*\n\n${content}`, extra);
+      const sentMsg = await telegramBot.sendMessage(foundUser.telegram_id, `📩 *${title}*\n\n${content}`, extra) as { message_id: number } | null | undefined;
       if (sentMsg && sentMsg.message_id) {
         await db
           .update(inboxMessage)

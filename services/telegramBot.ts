@@ -1,11 +1,16 @@
 import { Bot, Context, InlineKeyboard } from 'grammy';
+import type { InlineQueryResult } from 'grammy/types';
 import crypto from 'node:crypto';
 import { eq, and, not, like, desc, sql } from 'drizzle-orm';
 import db from '../db/drizzle.js';
 import { user, achievement, userAchievement, activeSession, game, inboxMessage, donation } from '../db/schema.ts';
+import { TELEGRAM_ONLY_PASSWORDS } from '../db/constants.ts';
 import locales from './locales.js';
+import type { LocaleTree } from './locales.js';
 import friendsDb from '../db/friends.js';
 import bcrypt from 'bcryptjs';
+
+type UserRow = typeof user.$inferSelect;
 
 interface UserState {
   action: 'awaiting_nick' | 'awaiting_old_pass' | 'awaiting_new_pass' | 'awaiting_donation_amount';
@@ -13,7 +18,10 @@ interface UserState {
 
 interface MyContext extends Context {
   userState?: UserState;
+  dbUser?: UserRow;
 }
+
+const MD = { parse_mode: 'Markdown' as const };
 
 let bot: Bot<MyContext> | null = null;
 const APP_URL = process.env.TG_APP_URL || 'http://localhost:3000';
@@ -22,22 +30,35 @@ const userStates: Record<number, UserState> = {};
 
 function t(langCode: string | undefined, key: string, params: Record<string, unknown> = {}): string {
   const lang = (langCode && langCode.split('-')[0]) || 'en';
-  const selectedLang: any = (locales as any)[lang] || (locales as any)["en"];
+  const localeMap = locales as Record<string, LocaleTree>;
+  const selectedLang: LocaleTree = localeMap[lang] ?? localeMap["en"] ?? localeMap["en"]!;
   const keys = key.split('.');
-  let value: any = selectedLang;
+  let value: LocaleTree | string = selectedLang;
   for (const k of keys) {
-    value = value && value[k];
+    if (typeof value !== 'string') {
+      const next: LocaleTree | undefined = value[k];
+      if (next === undefined) return key;
+      value = next;
+    } else return key;
   }
-  if (!value) return key;
-  return value.replace(/{(\w+)}/g, (_: any, v: string) => (params[v] !== undefined ? params[v] : `{${v}}`));
+  if (typeof value !== 'string') return key;
+  return value.replace(/{(\w+)}/g, (_, v: string) => (params[v] !== undefined ? String(params[v]) : `{${v}}`));
 }
 
 function isTelegramOnly(passwordHash: string): boolean {
-  return passwordHash === 'telegram_user' || passwordHash === 'telegram_user_widget';
+  return (TELEGRAM_ONLY_PASSWORDS as readonly string[]).includes(passwordHash);
 }
 
 function getLang(ctx: MyContext): string {
   return ctx.from?.language_code || 'en';
+}
+
+function autoDelete(ctx: MyContext, message: NonNullable<Context['msg']>, ms = 3000): void {
+  const currentBot = bot;
+  if (!currentBot || !ctx.chat) return;
+  setTimeout(() => {
+    currentBot.api.deleteMessage(ctx.chat!.id, message.message_id).catch(() => {});
+  }, ms);
 }
 
 async function showMainMenu(ctx: MyContext, isEdit: boolean = false): Promise<void> {
@@ -79,7 +100,10 @@ async function init(token: string, getStatsCallback: () => Promise<any>): Promis
   await bot.init();
 
   bot.use(async (ctx, next) => {
-    if (ctx.from) ctx.userState = userStates[ctx.from.id];
+    if (ctx.from) {
+      ctx.userState = userStates[ctx.from.id];
+      ctx.dbUser = await db.query.user.findFirst({ where: { telegram_id: String(ctx.from.id) } }) ?? undefined;
+    }
     await next();
   });
 
@@ -178,9 +202,8 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
   async function showProfile(ctx: MyContext, isEdit: boolean = false): Promise<void> {
     const lang = getLang(ctx);
-    const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db.query.user.findFirst({ where: { telegram_id: telegramId } });
+      const foundUser = ctx.dbUser;
       if (!foundUser) { await ctx.reply(t(lang, 'errors.no_account')); return; }
 
       const isTgOnly = isTelegramOnly(foundUser.password);
@@ -233,12 +256,8 @@ ${t(lang, 'status.version', { version: stats.app.version })}
     }
 
     try {
-      const foundUser = await db
-        .select({ password: user.password })
-        .from(user)
-        .where(eq(user.telegram_id, String(userId)));
-      const password = foundUser[0]?.password;
-      if (isTelegramOnly(password)) {
+      const password = ctx.dbUser?.password;
+      if (password && isTelegramOnly(password)) {
         userStates[userId] = { action: 'awaiting_new_pass' };
         await ctx.reply(t(lang, 'profile.enter_new_pass'), {
           parse_mode: 'Markdown',
@@ -266,11 +285,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
     const lang = getLang(ctx);
     const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db
-        .select({ id: user.id, username: user.username })
-        .from(user)
-        .where(eq(user.telegram_id, telegramId));
-      const userRecord = foundUser[0];
+      const userRecord = ctx.dbUser;
       if (!userRecord) {
         const msg = t(lang, 'errors.user_not_found');
         if (isEdit) await ctx.answerCallbackQuery(msg); else await ctx.reply(msg);
@@ -318,11 +333,8 @@ ${t(lang, 'status.version', { version: stats.app.version })}
     const lang = getLang(ctx);
     const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db
-        .select({ id: user.id })
-        .from(user)
-        .where(eq(user.telegram_id, telegramId));
-      const userRecord = foundUser[0];
+      const userRecord = ctx.dbUser;
+      if (!userRecord) { await ctx.answerCallbackQuery('No requests'); return; }
       const { pendingReceived } = await friendsDb.getFriendships(userRecord.id);
       if (pendingReceived.length === 0) { await ctx.answerCallbackQuery('No requests'); await showFriendsMenu(ctx); return; }
 
@@ -342,13 +354,9 @@ ${t(lang, 'status.version', { version: stats.app.version })}
     const lang = getLang(ctx);
     const action = ctx.match![1]!;
     const friendId = parseInt(ctx.match![2]!);
-    const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db
-        .select({ id: user.id, username: user.username })
-        .from(user)
-        .where(eq(user.telegram_id, telegramId));
-      const userRecord = foundUser[0];
+      const userRecord = ctx.dbUser;
+      if (!userRecord) { await ctx.answerCallbackQuery('Error'); return; }
       const friendRow = await db
         .select({ username: user.username })
         .from(user)
@@ -441,18 +449,17 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
   async function showAchievements(ctx: MyContext, page: number = 1, isEdit: boolean = false): Promise<void> {
     const lang = getLang(ctx);
-    const telegramId = String(ctx.from!.id);
     const limit = 5;
     try {
-      const foundUser = await db.query.user.findFirst({ where: { telegram_id: telegramId } });
-      if (!foundUser) { await ctx.reply(t(lang, 'errors.no_account')); return; }
+      const userRecord = ctx.dbUser;
+      if (!userRecord) { await ctx.reply(t(lang, 'errors.no_account')); return; }
 
       const allAchievements = await db.select().from(achievement);
 
       const unlocked = await db
         .select()
         .from(userAchievement)
-        .where(eq(userAchievement.user_id, foundUser.id));
+        .where(eq(userAchievement.user_id, userRecord.id));
 
       const text = t(lang, 'achievements.title', { count: unlocked.length, total: allAchievements.length });
 
@@ -490,12 +497,11 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
   async function showDailyBonus(ctx: MyContext, isEdit: boolean = false): Promise<void> {
     const lang = getLang(ctx);
-    const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db.query.user.findFirst({ where: { telegram_id: telegramId } });
-      if (!foundUser) { await ctx.reply(t(lang, 'errors.no_account')); return; }
+      const userRecord = ctx.dbUser;
+      if (!userRecord) { await ctx.reply(t(lang, 'errors.no_account')); return; }
 
-      const lastClaim = foundUser.last_daily_bonus_claim;
+      const lastClaim = userRecord.last_daily_bonus_claim;
       const today = new Date().toDateString();
       const isClaimed = lastClaim && new Date(lastClaim).toDateString() === today;
 
@@ -514,12 +520,11 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
   async function claimDailyBonus(ctx: MyContext): Promise<void> {
     const lang = getLang(ctx);
-    const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db.query.user.findFirst({ where: { telegram_id: telegramId } });
-      if (!foundUser) { await ctx.answerCallbackQuery(t(lang, 'errors.no_account')); return; }
+      const userRecord = ctx.dbUser;
+      if (!userRecord) { await ctx.answerCallbackQuery(t(lang, 'errors.no_account')); return; }
 
-      const lastClaim = foundUser.last_daily_bonus_claim;
+      const lastClaim = userRecord.last_daily_bonus_claim;
       const today = new Date().toDateString();
       if (lastClaim && new Date(lastClaim).toDateString() === today) {
         await ctx.answerCallbackQuery({ text: t(lang, 'daily_bonus.claimed'), show_alert: true });
@@ -530,7 +535,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
       await db
         .update(user)
         .set({ coins: sql`${user.coins} + ${bonusAmount}`, last_daily_bonus_claim: new Date() })
-        .where(eq(user.id, foundUser.id));
+        .where(eq(user.id, userRecord.id));
 
       await ctx.answerCallbackQuery({ text: t(lang, 'daily_bonus.success', { amount: bonusAmount }), show_alert: true });
       await showDailyBonus(ctx, true);
@@ -554,11 +559,9 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
   async function showCardBacks(ctx: MyContext, isEdit: boolean = false): Promise<void> {
     const lang = getLang(ctx);
-    const telegramId = String(ctx.from!.id);
     const styles = ['default', 'red', 'blue', 'green', 'purple', 'gold'];
     try {
-      const foundUser = await db.query.user.findFirst({ where: { telegram_id: telegramId } });
-      const currentStyle = foundUser ? foundUser.card_back_style : 'default';
+      const currentStyle = ctx.dbUser?.card_back_style ?? 'default';
       const text = t(lang, 'settings.card_back_title') + '\n' + t(lang, 'settings.card_back_current', { style: currentStyle });
 
       const keyboard = new InlineKeyboard();
@@ -587,18 +590,17 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
   async function showQuickGameSettings(ctx: MyContext, isEdit: boolean = false): Promise<void> {
     const lang = getLang(ctx);
-    const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db.query.user.findFirst({ where: { telegram_id: telegramId } });
-      if (!foundUser) { await ctx.reply(t(lang, 'errors.no_account')); return; }
+      const userRecord = ctx.dbUser;
+      if (!userRecord) { await ctx.reply(t(lang, 'errors.no_account')); return; }
 
       const text = t(lang, 'settings.quick_game_title') + '\n\n' +
         t(lang, 'settings.quick_game_desc') + '\n\n' +
-        t(lang, 'settings.deck_size', { value: foundUser.pref_quick_deck_size }) + '\n' +
-        t(lang, 'settings.max_players', { value: foundUser.pref_quick_max_players }) + '\n' +
-        t(lang, 'settings.game_mode', { value: t(lang, `game_mode_${foundUser.pref_quick_game_mode}`) }) + '\n' +
-        t(lang, 'settings.betting', { value: foundUser.pref_quick_is_betting ? '✅' : '❌' }) + '\n' +
-        (foundUser.pref_quick_is_betting ? t(lang, 'settings.bet_amount', { value: foundUser.pref_quick_bet_amount }) : '');
+        t(lang, 'settings.deck_size', { value: userRecord.pref_quick_deck_size }) + '\n' +
+        t(lang, 'settings.max_players', { value: userRecord.pref_quick_max_players }) + '\n' +
+        t(lang, 'settings.game_mode', { value: t(lang, `game_mode_${userRecord.pref_quick_game_mode}`) }) + '\n' +
+        t(lang, 'settings.betting', { value: userRecord.pref_quick_is_betting ? '✅' : '❌' }) + '\n' +
+        (userRecord.pref_quick_is_betting ? t(lang, 'settings.bet_amount', { value: userRecord.pref_quick_bet_amount }) : '');
 
       const keyboard = new InlineKeyboard()
         .text(t(lang, 'buttons.back_to_settings'), 'settings');
@@ -610,15 +612,14 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
   async function showSessions(ctx: MyContext, isEdit: boolean = false): Promise<void> {
     const lang = getLang(ctx);
-    const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db.query.user.findFirst({ where: { telegram_id: telegramId } });
-      if (!foundUser) { await ctx.reply(t(lang, 'errors.no_account')); return; }
+      const userRecord = ctx.dbUser;
+      if (!userRecord) { await ctx.reply(t(lang, 'errors.no_account')); return; }
 
       const sessions = await db
         .select()
         .from(activeSession)
-        .where(eq(activeSession.user_id, foundUser.id));
+        .where(eq(activeSession.user_id, userRecord.id));
 
       let text = t(lang, 'settings.sessions_title') + '\n\n' + t(lang, 'settings.sessions_desc') + '\n\n';
       text += t(lang, 'settings.sessions_current') + '\n\n';
@@ -650,33 +651,29 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
   async function terminateAllSessions(ctx: MyContext): Promise<void> {
     const lang = getLang(ctx);
-    const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db.query.user.findFirst({ where: { telegram_id: telegramId } });
+      const userRecord = ctx.dbUser;
+      if (!userRecord) { await ctx.answerCallbackQuery('User not found'); return; }
       await db
         .delete(activeSession)
-        .where(and(eq(activeSession.user_id, foundUser!.id), not(like(activeSession.id, 'tg_%'))));
+        .where(and(eq(activeSession.user_id, userRecord.id), not(like(activeSession.id, 'tg_%'))));
       await ctx.answerCallbackQuery({ text: t(lang, 'settings.terminated_all'), show_alert: true });
       await showSessions(ctx, true);
     } catch (e: any) { console.error('[TelegramBot] terminateAllSessions error:', e); ctx.answerCallbackQuery('Error'); }
   }
 
-  bot.command('donate', askForDonation);
-  bot.callbackQuery('donate_start', async (ctx) => {
-    await ctx.answerCallbackQuery();
+  const donateHandler = async (ctx: MyContext): Promise<void> => {
+    if (ctx.callbackQuery) await ctx.answerCallbackQuery();
     await askForDonation(ctx);
-  });
+  };
+  bot.command('donate', donateHandler);
+  bot.callbackQuery('donate_start', donateHandler);
 
   bot.command('createroom', async (ctx) => {
     const lang = getLang(ctx);
-    const from = ctx.from!;
-    const telegramId = String(from.id);
+    const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db
-        .select({ id: user.id })
-        .from(user)
-        .where(eq(user.telegram_id, telegramId));
-      const userRecord = foundUser[0];
+      const userRecord = ctx.dbUser;
       if (!userRecord) { await ctx.reply(t(lang, 'errors.no_account')); return; }
 
       const gameId = crypto.randomBytes(3).toString('hex').toUpperCase();
@@ -754,8 +751,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
         const isMatch = await bcrypt.compare(text, password);
         if (!isMatch) {
           const msg = await ctx.reply(t(lang, 'profile.error_wrong_pass'));
-          const currentBot = bot;
-          if (currentBot) setTimeout(() => currentBot.api.deleteMessage(ctx.chat!.id, msg.message_id).catch(() => {}), 3000);
+          autoDelete(ctx, msg);
           return;
         }
         userStates[userId] = { action: 'awaiting_new_pass' };
@@ -767,8 +763,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
       try { await ctx.deleteMessage(); } catch (e: any) {}
       if (text.length < 4 || text.length > 30) {
         const msg = await ctx.reply(t(lang, 'profile.error_format'));
-        const currentBot = bot;
-        if (currentBot) setTimeout(() => currentBot.api.deleteMessage(ctx.chat!.id, msg.message_id).catch(() => {}), 3000);
+        autoDelete(ctx, msg);
         return;
       }
       try {
@@ -779,8 +774,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
           .where(eq(user.telegram_id, String(userId)));
         delete userStates[userId];
         const msg = await ctx.reply(t(lang, 'profile.pass_set_success'), { parse_mode: 'Markdown', reply_markup: { remove_keyboard: true } });
-        const currentBot = bot;
-        if (currentBot) setTimeout(() => currentBot.api.deleteMessage(ctx.chat!.id, msg.message_id).catch(() => {}), 3000);
+        autoDelete(ctx, msg);
         showProfile(ctx);
       } catch (e) { ctx.reply(t(lang, 'profile.error_db')); }
     }
@@ -808,11 +802,7 @@ ${t(lang, 'status.version', { version: stats.app.version })}
     const lang = getLang(ctx);
     const payment = ctx.message!.successful_payment!;
     try {
-      const foundUser = await db
-        .select({ id: user.id })
-        .from(user)
-        .where(eq(user.telegram_id, String(ctx.from!.id)));
-      const userRecord = foundUser[0];
+      const userRecord = ctx.dbUser;
       if (userRecord) {
         await db.insert(donation).values({
           user_id: userRecord.id,
@@ -827,14 +817,9 @@ ${t(lang, 'status.version', { version: stats.app.version })}
   bot.on('inline_query', async (ctx) => {
     try {
       const lang = getLang(ctx);
-      const telegramId = String(ctx.from!.id);
-      const foundUser = await db
-        .select({ id: user.id })
-        .from(user)
-        .where(eq(user.telegram_id, telegramId));
-      const userRecord = foundUser[0];
+      const userRecord = ctx.dbUser;
 
-      const results: any[] = [{
+      const results: InlineQueryResult[] = [{
         type: 'article', id: 'play_game',
         title: t(lang, 'inline.title'), description: t(lang, 'inline.desc'),
         thumbnail_url: 'https://cdn-icons-png.flaticon.com/512/8002/8002169.png',
@@ -908,13 +893,8 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
   async function showInbox(ctx: MyContext, page: number = 1, isEdit: boolean = false): Promise<void> {
     const lang = getLang(ctx);
-    const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db
-        .select({ id: user.id })
-        .from(user)
-        .where(eq(user.telegram_id, telegramId));
-      const userRecord = foundUser[0];
+      const userRecord = ctx.dbUser;
       if (!userRecord) { await ctx.reply(t(lang, 'errors.no_account')); return; }
 
       const inboxService = await import('./inboxService.js');
@@ -966,14 +946,9 @@ ${t(lang, 'status.version', { version: stats.app.version })}
     const msgId = parseInt(ctx.match![1]!);
     const action = ctx.match![2]!;
     const lang = getLang(ctx);
-    const telegramId = String(ctx.from!.id);
 
     try {
-      const foundUser = await db
-        .select({ id: user.id })
-        .from(user)
-        .where(eq(user.telegram_id, telegramId));
-      const userRecord = foundUser[0];
+      const userRecord = ctx.dbUser;
       if (!userRecord) return ctx.answerCallbackQuery('User not found');
 
       const inboxService = await import('./inboxService.js');
@@ -1009,13 +984,8 @@ ${t(lang, 'status.version', { version: stats.app.version })}
 
   bot.callbackQuery(/inbox_read_(\d+)/, async (ctx) => {
     const msgId = parseInt(ctx.match![1]!);
-    const telegramId = String(ctx.from!.id);
     try {
-      const foundUser = await db
-        .select({ id: user.id })
-        .from(user)
-        .where(eq(user.telegram_id, telegramId));
-      const userRecord = foundUser[0];
+      const userRecord = ctx.dbUser;
       if (!userRecord) return;
 
       const inboxService = await import('./inboxService.js');
@@ -1033,12 +1003,12 @@ ${t(lang, 'status.version', { version: stats.app.version })}
   }).catch((err) => console.error('[TelegramBot] Bot start error:', err));
 }
 
-async function sendMessage(telegramId: string, text: string, extra: Record<string, unknown> = {}): Promise<any> {
+async function sendMessage(telegramId: string, text: string, extra: Record<string, unknown> = {}): Promise<unknown> {
   if (!bot || !telegramId) return;
   try {
-    return await bot.api.sendMessage(telegramId, text, { parse_mode: 'Markdown', ...extra } as any);
+    return await bot.api.sendMessage(telegramId, text, { parse_mode: 'Markdown', ...extra });
   } catch (e) {
-    console.error(`[TelegramBot] Error sending message to ${telegramId}:`, (e as any).message);
+    console.error(`[TelegramBot] Error sending message to ${telegramId}:`, (e as Error).message);
   }
 }
 
