@@ -4,22 +4,18 @@ import express from 'express';
 import http from 'node:http';
 import { Server as socketIo } from 'socket.io';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import bcrypt from 'bcrypt';
 import cors from 'cors';
 import i18next from 'i18next';
 import Backend from 'i18next-fs-backend';
 import expressStaticGzip from 'express-static-gzip';
 import webpush from 'web-push';
-import util from 'node:util';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import { fileURLToPath } from 'node:url';
 
 import db, { initializeDb } from './db/drizzle.js';
 import { user as userTable, game as gameTable } from './db/schema.ts';
-import { eq, and, sql, desc, isNotNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import authRoutes from './routes/auth.js';
 import telegramRoutes from './routes/telegram.js';
@@ -35,8 +31,6 @@ import pokerRoutes from './routes/poker.js';
 
 import { seedAchievements } from './db/seed.js';
 import achievementService from './services/achievementService.js';
-import ratingService from './services/ratingService.js';
-import statsService from './services/statsService.js';
 import notificationService from './services/notificationService.js';
 import economyService from './services/economyService.js';
 import inboxService from './services/inboxService.js';
@@ -108,7 +102,18 @@ setTimeout(chatService.loadChatFilters, 3000); // Initial load fallback
 
 // Chat filters moved to services/chatService.js
 
-let games: Record<string, any> = {};
+interface RuntimeGame {
+  id: string;
+  status: 'waiting' | 'in_progress' | 'finished' | 'cancelled';
+  hostId: string;
+  host?: { is_shadow_banned?: boolean } | null;
+  playerOrder: string[];
+  players: Record<string, any>;
+  gameType?: string;
+  settings?: { lobbyType: string; maxPlayers: number; betAmount?: number; deckSize?: number; gameMode?: string; turnDuration?: number };
+  [key: string]: any;
+}
+let games: Record<string, RuntimeGame> = {};
 
 const onlineUsers = new Map();
 app.set('onlineUsers', onlineUsers);
@@ -137,8 +142,8 @@ achievementService.init(io);
 inboxService.init(io);
 rouletteService.init(io, onlineUsers);
 maintenanceService.init(io);
-gameService.init(io, games);
-pokerService.initPoker(io, games);
+gameService.init(io, games as Record<string, any>);
+pokerService.initPoker(io, games as any);
 
 app.set('trust proxy', 1);
 
@@ -321,14 +326,18 @@ io.on('connection', (socket) => {
         for (const gameId in games) {
             const game: any = games[gameId];
 
-            if (game.spectators.includes(socket.id)) {
+            if (game.spectators?.includes(socket.id)) {
                 game.spectators = game.spectators.filter((id: any) => id !== socket.id);
                 console.log(`[Spectator] Spectator left game ${gameId}`);
                 break;
             }
 
             if (game.players[socket.id]) {
-                gameService.handlePlayerDisconnect(socket, game);
+                if (game.gameType?.includes('poker')) {
+                    pokerService.handlePokerPlayerDisconnect(socket, game);
+                } else {
+                    gameService.handlePlayerDisconnect(socket, game);
+                }
                 break;
             }
         }
@@ -346,6 +355,7 @@ io.on('connection', (socket) => {
         if (game.players[socket.id]) {
             return socket.emit('error', { i18nKey: 'error_already_in_game_as_player' });
         }
+        if (!Array.isArray(game.spectators)) game.spectators = [];
         if (game.spectators.includes(socket.id)) {
             gameService.broadcastGameState(gameId);
             return;
@@ -577,30 +587,30 @@ io.on('connection', (socket) => {
         socket.join('lobby_browser');
         // Initial lobby list update when joining the browser
         const list = Object.values(games)
-            .filter(game => game.status === 'waiting' && game.settings.lobbyType === 'public' && game.playerOrder.length > 0 && !game.host?.is_shadow_banned)
+            .filter(game => game.status === 'waiting' && game.settings?.lobbyType === 'public' && game.playerOrder.length > 0 && !game.host?.is_shadow_banned)
             .map(game => ({
                 gameId: game.id,
                 hostName: game.players[game.hostId]?.name || 'Unknown',
                 playerCount: game.playerOrder.length,
-                maxPlayers: game.settings.maxPlayers,
-                betAmount: game.settings.betAmount || 0,
-                deckSize: game.settings.deckSize || 36
+                maxPlayers: game.settings!.maxPlayers,
+                betAmount: game.settings!.betAmount || 0,
+                deckSize: game.settings!.deckSize || 36
             }));
         socket.emit('lobbyListUpdate', list);
     });
 
     socket.on('getLobbyList', () => {
         const publicGames = Object.values(games)
-            .filter(g => g.status === 'waiting' && g.settings.lobbyType === 'public' && !g.host?.is_shadow_banned)
+            .filter(g => g.status === 'waiting' && g.settings?.lobbyType === 'public' && !g.host?.is_shadow_banned)
             .map(g => ({
                 gameId: g.id,
                 hostName: g.players[g.hostId]?.name || 'Unknown',
                 playerCount: Object.keys(g.players).length,
-                maxPlayers: g.settings.maxPlayers,
-                full: Object.keys(g.players).length >= g.settings.maxPlayers,
-                betAmount: g.settings.betAmount,
-                gameMode: g.settings.gameMode,
-                turnDuration: g.settings.turnDuration
+                maxPlayers: g.settings!.maxPlayers,
+                full: Object.keys(g.players).length >= g.settings!.maxPlayers,
+                betAmount: g.settings!.betAmount,
+                gameMode: g.settings!.gameMode,
+                turnDuration: g.settings!.turnDuration
             }));
         socket.emit('lobbyList', publicGames);
     });

@@ -1,7 +1,7 @@
 import express from 'express';
 import type { Request, Response } from 'express';
 import db from '../db/drizzle.js';
-import { user, systemStatsDaily } from '../db/schema.ts';
+import { systemStatsDaily } from '../db/schema.ts';
 import { eq } from 'drizzle-orm';
 import path from 'path';
 import fs from 'fs';
@@ -113,17 +113,41 @@ router.get('/lobbies', (req: Request, res: Response) => {
     const games = req.app.get('activeGames') as Record<string, any>;
     if (!games) return res.json([]);
 
-    const publicLobbies = Object.values(games)
-        .filter((game: any) => game.status === 'waiting' && game.settings.lobbyType === 'public' && game.playerOrder.length > 0)
+    const all = Object.values(games);
+
+    const durakLobbies = all
+        .filter((game: any) => game.status === 'waiting' && game.settings?.lobbyType === 'public' && game.playerOrder.length > 0)
         .map((game: any) => ({
-            gameId: game.id, hostName: game.players[game.hostId]?.name || 'Unknown',
-            playerCount: game.playerOrder.length, maxPlayers: game.settings.maxPlayers,
-            betAmount: game.settings.betAmount || 0, deckSize: game.settings.deckSize || 36,
+            kind: 'durak',
+            gameId: game.id,
+            hostName: game.players[game.hostId]?.name || 'Unknown',
+            playerCount: game.playerOrder.length,
+            maxPlayers: game.settings.maxPlayers,
+            betAmount: game.settings.betAmount || 0,
+            deckSize: game.settings.deckSize || 36,
             gameMode: game.settings.gameMode || 'podkidnoy',
-            turnDuration: game.settings.turnDuration !== undefined ? game.settings.turnDuration : 60
+            turnDuration: game.settings.turnDuration !== undefined ? game.settings.turnDuration : 60,
+            gameType: (game.settings.betAmount || 0) > 0 ? 'cash' : 'free',
+            status: 'waiting',
         }));
 
-    res.json(publicLobbies);
+    const pokerLobbies = all
+        .filter((game: any) => game.status === 'waiting' && game.gameType?.includes('poker') && game.playerOrder.length > 0)
+        .map((game: any) => ({
+            kind: 'poker',
+            gameId: game.id,
+            hostName: `Стол #${game.id.slice(0, 4)}`,
+            playerCount: game.playerOrder.length,
+            maxPlayers: game.maxPlayers ?? 10,
+            betAmount: 0,
+            gameType: game.gameType === 'poker_holdem_tournament' ? 'tournament' : 'cash',
+            smallBlind: game.smallBlind ?? 5,
+            bigBlind: game.bigBlind ?? 10,
+            startingChips: game.startingChips ?? 1000,
+            status: 'waiting',
+        }));
+
+    res.json([...durakLobbies, ...pokerLobbies]);
 });
 
 router.get('/game/:id/status', async (req: Request, res: Response) => {

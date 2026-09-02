@@ -33,14 +33,68 @@ export function getPokerGame(gameId: string): PokerGameState | undefined {
   return games[gameId];
 }
 
-export function listPokerLobbies(): Array<{ gameId: string; players: number; maxPlayers: number; gameType: string }> {
+export function handlePokerPlayerDisconnect(socket: any, game: PokerGameState): void {
+  const player = game.players[socket.id];
+  if (!player) return;
+
+  console.log(`[Poker] Player ${player.name} disconnected from ${game.id}`);
+
+  if (game.status === 'waiting') {
+    // In waiting state, mark as disconnected but keep their seat
+    // so they can reconnect with the same role (especially host).
+    player.isConnected = false;
+    io.to(game.id).emit('pokerPlayerDisconnected', { playerId: socket.id, name: player.name });
+    io.to('lobby_browser').emit('pokerLobbies', listPokerLobbies());
+    return;
+  }
+
+  if (game.status === 'in_progress') {
+    player.isConnected = false;
+    io.to(game.id).emit('pokerPlayerDisconnected', { playerId: socket.id, name: player.name });
+    // Auto-fold if it's their turn
+    if (game.playerOrder[game.currentPlayerIdx] === socket.id) {
+      try {
+        const idx = game.playerOrder.indexOf(socket.id);
+        // Reuse the fold path indirectly: call playerFold via internal
+        // Emit fold and advance turn via a server-side timer
+        setTimeout(() => {
+          const stillHere = games[game.id];
+          if (!stillHere) return;
+          const p = stillHere.players[socket.id];
+          if (!p || p.folded || p.isAllIn) return;
+          p.folded = true;
+          io.to(game.id).emit('pokerPlayerFolded', { playerId: socket.id });
+          const active = stillHere.playerOrder.filter((id) => !stillHere.players[id]?.folded);
+          if (active.length <= 1) {
+            void endHand(stillHere, [stillHere.players[active[0]!]!]);
+            return;
+          }
+          // Advance to next acting player
+          let next = (stillHere.currentPlayerIdx + 1) % stillHere.playerOrder.length;
+          while (stillHere.players[stillHere.playerOrder[next]!]?.folded || stillHere.players[stillHere.playerOrder[next]!]?.isAllIn) {
+            next = (next + 1) % stillHere.playerOrder.length;
+          }
+          stillHere.currentPlayerIdx = next;
+          advanceToNextActingPlayer(stillHere);
+        }, 30000);
+      } catch (e) {
+        console.error('[Poker] Auto-fold on disconnect failed:', e);
+      }
+    }
+  }
+}
+
+export function listPokerLobbies(): Array<{ gameId: string; players: number; maxPlayers: number; gameType: string; smallBlind: number; bigBlind: number; startingChips: number }> {
   return Object.entries(games)
     .filter(([, g]) => g.status === 'waiting' && g.gameType.includes('poker'))
     .map(([gameId, g]) => ({
       gameId,
       players: g.playerOrder.length,
-      maxPlayers: 10,
+      maxPlayers: g.maxPlayers ?? 10,
       gameType: g.gameType,
+      smallBlind: g.smallBlind ?? 5,
+      bigBlind: g.bigBlind ?? 10,
+      startingChips: g.startingChips ?? 1000,
     }));
 }
 
@@ -59,6 +113,7 @@ export async function createPokerLobby(
 ): Promise<string> {
   const sessionUser = socket.request.session?.user;
   const gameId = crypto.randomBytes(3).toString('hex').toUpperCase();
+  console.log(`[PokerService] createPokerLobby gameId=${gameId} by ${sessionUser?.username || socket.id}`);
   const inviteCode = crypto.randomBytes(3).toString('hex').toUpperCase();
 
   const starting = settings.startingChips;
@@ -85,6 +140,10 @@ export async function createPokerLobby(
     currentBlindLevel: 0,
     blindTimerEndsAt: null,
     log: [],
+    maxPlayers: settings.maxPlayers,
+    smallBlind: sb,
+    bigBlind: bb,
+    startingChips: starting,
   };
 
   const state = pokerGames[gameId]!;
@@ -128,6 +187,7 @@ export async function createPokerLobby(
   });
 
   io.to(gameId).emit('pokerLobbyUpdate', { gameId, inviteCode, maxPlayers: settings.maxPlayers });
+  io.to('lobby_browser').emit('pokerLobbies', listPokerLobbies());
   return gameId;
 }
 
@@ -141,13 +201,46 @@ export async function joinPokerGame(socket: any, gameId: string): Promise<boolea
     socket.emit('error', { message: 'Game already started' });
     return false;
   }
-  if (state.playerOrder.length >= (state.blindStructure ? 10 : 10)) {
+  // Already joined — idempotent (same socket)
+  if (state.players[socket.id]) {
+    io.to(gameId).emit('pokerLobbies', listPokerLobbies());
+    return true;
+  }
+
+  const sessionUser = socket.request.session?.user;
+  const userDbId = sessionUser ? sessionUser.id : null;
+
+  // Reconnect handling: if a player with same dbId already exists (waiting state),
+  // update their socket.id and re-seat them. Preserves their position in playerOrder.
+  if (userDbId) {
+    const existingId = Object.keys(state.players).find((pid) => state.players[pid]?.dbId === userDbId);
+    const oldPlayer = existingId ? state.players[existingId] : null;
+    if (existingId && oldPlayer && existingId !== socket.id) {
+      delete state.players[existingId];
+      const idx = state.playerOrder.indexOf(existingId);
+      if (idx !== -1) state.playerOrder[idx] = socket.id;
+      state.players[socket.id] = { ...oldPlayer, id: socket.id, isConnected: true } as PokerPlayer;
+      console.log(`[Poker] ${oldPlayer.name} reconnected: ${existingId} -> ${socket.id}`);
+      io.to(gameId).emit('pokerPlayerJoined', { playerId: socket.id });
+      io.to('lobby_browser').emit('pokerLobbies', listPokerLobbies());
+      // Re-broadcast state
+      const pub = {
+        id: state.id, gameType: state.gameType, status: state.status,
+        players: Object.values(state.players).map((p) => ({ id: p.id, name: p.name, chips: p.chips, folded: p.folded, isAllIn: p.isAllIn, cardCount: p.cards?.length || 0, currentBet: p.currentBet })),
+        playerOrder: state.playerOrder, pot: state.pot, currentBet: state.currentBet, bettingRound: state.bettingRound,
+        maxPlayers: state.maxPlayers ?? 10, smallBlind: state.smallBlind ?? 5, bigBlind: state.bigBlind ?? 10, startingChips: state.startingChips ?? 1000,
+      };
+      io.to(gameId).emit('pokerLobbyState', pub);
+      return true;
+    }
+  }
+
+  if (state.playerOrder.length >= (state.maxPlayers ?? 10)) {
     socket.emit('error', { message: 'Game is full' });
     return false;
   }
 
-  const sessionUser = socket.request.session?.user;
-  const startingChips = getDefaultChips(state.gameType);
+  const startingChips = state.startingChips ?? getDefaultChips(state.gameType);
   state.players[socket.id] = {
     id: socket.id,
     dbId: sessionUser ? sessionUser.id : null,
@@ -167,6 +260,23 @@ export async function joinPokerGame(socket: any, gameId: string): Promise<boolea
   state.playerOrder.push(socket.id);
 
   io.to(gameId).emit('pokerPlayerJoined', { playerId: socket.id });
+  io.to('lobby_browser').emit('pokerLobbies', listPokerLobbies());
+  // Broadcast updated lobby state to everyone in the game (so host sees new player)
+  const state2 = getPokerGame(gameId);
+  if (state2) {
+    const pub = {
+      id: state2.id,
+      gameType: state2.gameType,
+      status: state2.status,
+      players: Object.values(state2.players).map((p: any) => ({
+        id: p.id, name: p.name, chips: p.chips, folded: p.folded, isAllIn: p.isAllIn, cardCount: p.cards?.length || 0, currentBet: p.currentBet,
+      })),
+      playerOrder: state2.playerOrder,
+      pot: state2.pot, currentBet: state2.currentBet, bettingRound: state2.bettingRound,
+      maxPlayers: state2.maxPlayers ?? 10, smallBlind: state2.smallBlind ?? 5, bigBlind: state2.bigBlind ?? 10, startingChips: state2.startingChips ?? 1000,
+    };
+    io.to(gameId).emit('pokerLobbyState', pub);
+  }
   return true;
 }
 
@@ -203,8 +313,9 @@ export function startPoker(gameId: string): boolean {
     state.currentPlayerIdx = (state.dealerBtn + 1) % 2;
   }
 
-  io.to(gameId).emit('pokerGameStarted', { gameState: serializeState(state) });
-  advanceToNextActingPlayer(state);
+  broadcastState(state, 'pokerGameStarted');
+  io.to('lobby_browser').emit('pokerLobbies', listPokerLobbies());
+  emitActionForCurrent(state);
   return true;
 }
 
@@ -317,7 +428,6 @@ export async function playerBet(socket: any, gameId: string, amount: number): Pr
   if (!player || player.folded || player.isAllIn) return false;
 
   const totalCallAmount = state.currentBet - player.totalBet;
-  const minRaise = state.currentBet * 2; // Simple raise logic: at least 2x current bet
 
   if (amount < totalCallAmount) {
     socket.emit('error', { message: 'Amount too low, must call' });
@@ -601,11 +711,8 @@ function dealFlop(state: PokerGameState): void {
   state.currentBet = 0;
   findFirstToAct(state);
 
-  io.to(state.id).emit('pokerFlopDealt', {
-    gameState: serializeState(state),
-    communityCards: state.communityCards,
-  });
-  advanceToNextActingPlayer(state);
+  broadcastState(state, 'pokerFlopDealt');
+  emitActionForCurrent(state);
 }
 
 function dealTurn(state: PokerGameState): void {
@@ -617,11 +724,8 @@ function dealTurn(state: PokerGameState): void {
   state.currentBet = 0;
   findFirstToAct(state);
 
-  io.to(state.id).emit('pokerTurnDealt', {
-    gameState: serializeState(state),
-    card: card,
-  });
-  advanceToNextActingPlayer(state);
+  broadcastState(state, 'pokerTurnDealt');
+  emitActionForCurrent(state);
 }
 
 function dealRiver(state: PokerGameState): void {
@@ -633,11 +737,24 @@ function dealRiver(state: PokerGameState): void {
   state.currentBet = 0;
   findFirstToAct(state);
 
-  io.to(state.id).emit('pokerRiverDealt', {
-    gameState: serializeState(state),
-    card: card,
+  broadcastState(state, 'pokerRiverDealt');
+  emitActionForCurrent(state);
+}
+
+function emitActionForCurrent(state: PokerGameState): void {
+  const pid = state.playerOrder[state.currentPlayerIdx];
+  if (!pid) return;
+  const p = state.players[pid];
+  if (!p || p.folded || p.isAllIn) {
+    advanceToNextActingPlayer(state);
+    return;
+  }
+  io.to(state.id).emit('pokerActionRequired', {
+    gameId: state.id,
+    playerId: pid,
+    minCall: state.currentBet - p.totalBet,
+    minRaise: state.currentBet * 2,
   });
-  advanceToNextActingPlayer(state);
 }
 
 function findFirstToAct(state: PokerGameState): void {
@@ -722,6 +839,12 @@ async function awardPots(
       handRank: w.rank,
     })),
     pot: totalPot,
+    allCards: state.playerOrder.map((pid) => ({
+      playerId: pid,
+      name: state.players[pid]?.name,
+      cards: state.players[pid]?.cards || [],
+      folded: state.players[pid]?.folded,
+    })),
   });
 }
 
@@ -790,6 +913,23 @@ function serializeState(state: PokerGameState) {
     currentBet: state.currentBet,
     bettingRound: state.bettingRound,
     dealerBtn: state.dealerBtn,
+    currentPlayerIdx: state.currentPlayerIdx,
     minRaise: state.currentBet * 2,
+    smallBlind: state.smallBlind ?? 5,
+    bigBlind: state.bigBlind ?? 10,
+    startingChips: state.startingChips ?? 1000,
+    maxPlayers: state.maxPlayers ?? 10,
   };
+}
+
+/** Broadcast state to all players + per-player hole cards (private). */
+function broadcastState(state: PokerGameState, eventName: string) {
+  const pub = serializeState(state);
+  for (const pid of state.playerOrder) {
+    const player = state.players[pid];
+    if (!player) continue;
+    const sock = io?.sockets?.sockets?.get?.(pid);
+    if (!sock) continue;
+    sock.emit(eventName, { ...pub, players: pub.players.map((sp: any) => sp.id === pid ? { ...sp, cards: player.cards } : sp) });
+  }
 }

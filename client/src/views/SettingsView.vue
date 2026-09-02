@@ -185,68 +185,68 @@ const onCardClick = (style) => {
     class="min-h-screen flex items-center justify-center p-3 md:p-6 bg-background relative overflow-hidden">
 
     <div
-      class="w-full max-w-2xl lg:max-w-4xl xl:max-w-6xl bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 animate-fade-in my-auto max-h-[100dvh] md:max-h-[90vh] flex flex-col">
+      class="w-full max-w-2xl lg:max-w-5xl xl:max-w-6xl bg-surface/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/5 animate-fade-in my-auto max-h-[100dvh] md:max-h-[90vh] flex flex-col">
 
       <!-- Fixed header -->
       <div class="shrink-0 p-5 md:p-8 lg:p-10 pb-0 flex items-center gap-3">
         <button @click="router.push('/')"
-          class="shrink-0 w-9 h-9 bg-white/5 hover:bg-white/10 rounded-xl text-on-surface transition-all active:scale-90 flex items-center justify-center"
+          class="shrink-0 w-9 h-9 lg:w-11 lg:h-11 bg-white/5 hover:bg-white/10 rounded-xl text-on-surface transition-all active:scale-90 flex items-center justify-center"
           :title="$t('go_home')">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
           </svg>
         </button>
-        <h1 class="text-xl md:text-2xl font-bold text-white">{{ $t('settings_title') }}</h1>
+        <h1 class="text-xl md:text-2xl lg:text-3xl font-bold text-white">{{ $t('settings_title') }}</h1>
       </div>
 
       <!-- Scrollable content -->
       <div class="settings-scroll flex-1 overflow-y-auto px-5 md:px-8 lg:px-10 pb-5 md:pb-8 lg:pb-10">
-        <div class="grid grid-cols-1 xl:grid-cols-2 xl:gap-5 xl:items-start">
+        <div class="grid grid-cols-1 xl:grid-cols-2 xl:gap-6 xl:items-start">
 
           <!-- Left column -->
-          <div class="space-y-4 min-w-0">
+          <div class="space-y-4 lg:space-y-5 min-w-0">
 
         <!-- Card Backs -->
-        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6">
-          <div class="flex items-center gap-1.5 mb-4">
-            <span class="text-base">🎴</span>
-            <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('choose_card_back') }}</span>
+        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-7">
+          <div class="flex items-center gap-1.5 lg:gap-2 mb-4">
+            <span class="text-base lg:text-lg">🎴</span>
+            <span class="text-[10px] lg:text-xs font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('choose_card_back') }}</span>
             <div class="flex-grow border-t border-outline/20"></div>
           </div>
           <div ref="cardRowRef"
-            class="card-row flex gap-3 md:gap-4 overflow-x-auto pb-1 -mx-1 px-1 cursor-grab active:cursor-grabbing select-none"
+            class="card-row flex gap-3 md:gap-4 lg:gap-5 overflow-x-auto pb-1 -mx-1 px-1 cursor-grab active:cursor-grabbing select-none"
             @pointerdown="onCardRowDown" @pointermove="onCardRowMove" @pointerup="onCardRowUp" @pointercancel="onCardRowUp" @wheel="onCardRowWheel">
             <div v-for="style in styles" :key="style" class="flex flex-col items-center gap-2 cursor-pointer group shrink-0"
               @click="onCardClick(style)">
               <div class="transition-all duration-200 p-0.5 rounded-xl"
                 :class="currentStyle === style ? 'ring-2 ring-primary scale-105 shadow-lg shadow-primary/20' : 'opacity-60 group-hover:opacity-100 hover:scale-105'">
-                <Card :is-back="true" :card-style="style" class="pointer-events-none shadow-lg !w-14 !h-20 md:!w-16 md:!h-24 lg:!w-24 lg:!h-36" />
+                <Card :is-back="true" :card-style="style" class="pointer-events-none shadow-lg !w-14 !h-20 md:!w-16 md:!h-24 lg:!w-28 lg:!h-40" />
               </div>
-              <span class="text-[10px] font-medium capitalize"
+              <span class="text-[10px] lg:text-sm font-medium capitalize"
                 :class="currentStyle === style ? 'text-primary' : 'text-on-surface-variant'">{{ style }}</span>
             </div>
           </div>
         </div>
 
         <!-- Quick Game Defaults -->
-        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6">
-          <div class="flex items-center gap-1.5 mb-4">
-            <svg class="w-4 h-4 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-7">
+          <div class="flex items-center gap-1.5 lg:gap-2 mb-4">
+            <svg class="w-4 h-4 lg:w-5 lg:h-5 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
             </svg>
-            <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('settings_quick_game_title') }}</span>
+            <span class="text-[10px] lg:text-xs font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('settings_quick_game_title') }}</span>
             <div class="flex-grow border-t border-outline/20"></div>
           </div>
 
-          <div class="space-y-3">
+          <div class="space-y-3 lg:space-y-4">
             <!-- Deck Size -->
             <div>
-              <label class="text-[10px] font-semibold text-on-surface-variant ml-1 mb-1.5 block">{{ $t('settings_quick_deck_size') }}</label>
-              <div class="flex gap-1.5">
+              <label class="text-[10px] lg:text-xs font-semibold text-on-surface-variant ml-1 mb-1.5 lg:mb-2 block">{{ $t('settings_quick_deck_size') }}</label>
+              <div class="flex gap-1.5 lg:gap-2">
                 <button v-for="size in [24, 36, 52]" :key="size"
                   @click="quickDeckSize = size; saveSettings({ pref_quick_deck_size: size })"
-                  class="flex-1 py-2 rounded-xl font-bold text-sm transition-all active:scale-95 border"
+                  class="flex-1 py-2 lg:py-3 rounded-xl font-bold text-sm lg:text-base transition-all active:scale-95 border"
                   :class="quickDeckSize === size ? 'bg-primary text-on-primary border-primary shadow-sm' : 'bg-black/20 text-on-surface-variant border-outline/30 hover:bg-black/30'">
                   {{ size }}
                 </button>
@@ -254,28 +254,28 @@ const onCardClick = (style) => {
             </div>
 
             <!-- Max Players + Game Mode row -->
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-2 gap-2 lg:gap-3">
               <div>
-                <label class="text-[10px] font-semibold text-on-surface-variant ml-1 mb-1.5 block">{{ $t('settings_quick_max_players') }}</label>
-                <div class="flex gap-1.5">
+                <label class="text-[10px] lg:text-xs font-semibold text-on-surface-variant ml-1 mb-1.5 lg:mb-2 block">{{ $t('settings_quick_max_players') }}</label>
+                <div class="flex gap-1.5 lg:gap-2">
                   <button v-for="count in [2, 3, 4]" :key="count"
                     @click="quickMaxPlayers = count; saveSettings({ pref_quick_max_players: count })"
-                    class="flex-1 py-2 rounded-xl font-bold text-sm transition-all active:scale-95 border"
+                    class="flex-1 py-2 lg:py-3 rounded-xl font-bold text-sm lg:text-base transition-all active:scale-95 border"
                     :class="quickMaxPlayers === count ? 'bg-primary text-on-primary border-primary shadow-sm' : 'bg-black/20 text-on-surface-variant border-outline/30 hover:bg-black/30'">
                     {{ count }}
                   </button>
                 </div>
               </div>
               <div>
-                <label class="text-[10px] font-semibold text-on-surface-variant ml-1 mb-1.5 block">{{ $t('settings_quick_game_mode') }}</label>
-                <div class="flex gap-1.5">
+                <label class="text-[10px] lg:text-xs font-semibold text-on-surface-variant ml-1 mb-1.5 lg:mb-2 block">{{ $t('settings_quick_game_mode') }}</label>
+                <div class="flex gap-1.5 lg:gap-2">
                   <button @click="quickGameMode = 'podkidnoy'; saveSettings({ pref_quick_game_mode: 'podkidnoy' })"
-                    class="flex-1 py-2 rounded-xl font-bold text-xs transition-all active:scale-95 border"
+                    class="flex-1 py-2 lg:py-3 rounded-xl font-bold text-sm lg:text-base transition-all active:scale-95 border"
                     :class="quickGameMode === 'podkidnoy' ? 'bg-primary text-on-primary border-primary shadow-sm' : 'bg-black/20 text-on-surface-variant border-outline/30 hover:bg-black/30'">
                     ⬇️
                   </button>
                   <button @click="quickGameMode = 'perevodnoy'; saveSettings({ pref_quick_game_mode: 'perevodnoy' })"
-                    class="flex-1 py-2 rounded-xl font-bold text-xs transition-all active:scale-95 border"
+                    class="flex-1 py-2 lg:py-3 rounded-xl font-bold text-sm lg:text-base transition-all active:scale-95 border"
                     :class="quickGameMode === 'perevodnoy' ? 'bg-primary text-on-primary border-primary shadow-sm' : 'bg-black/20 text-on-surface-variant border-outline/30 hover:bg-black/30'">
                     🔄
                   </button>
@@ -284,36 +284,36 @@ const onCardClick = (style) => {
             </div>
 
             <!-- Betting Toggle -->
-            <div class="flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer"
+            <div class="flex items-center justify-between p-3 lg:p-4 rounded-xl border transition-all cursor-pointer"
               :class="quickIsBetting ? 'bg-primary/10 border-primary/30' : 'bg-black/20 border-outline/30 hover:bg-black/30'"
               @click="quickIsBetting = !quickIsBetting; saveSettings({ pref_quick_is_betting: quickIsBetting })">
-              <div class="flex items-center gap-2.5">
-                <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
+              <div class="flex items-center gap-2.5 lg:gap-3">
+                <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg flex items-center justify-center text-sm lg:text-base"
                   :class="quickIsBetting ? 'bg-primary/20' : 'bg-white/5'">
                   {{ quickIsBetting ? '💰' : '🎲' }}
                 </div>
                 <div>
-                  <div class="font-bold text-xs" :class="quickIsBetting ? 'text-primary' : 'text-on-surface'">{{ $t('settings_quick_is_betting') }}</div>
-                  <div class="text-[9px] text-on-surface-variant/60">{{ quickIsBetting ? $t('bet_toggle_sublabel') : $t('bet_toggle_sublabel_simple') }}</div>
+                  <div class="font-bold text-xs lg:text-sm" :class="quickIsBetting ? 'text-primary' : 'text-on-surface'">{{ $t('settings_quick_is_betting') }}</div>
+                  <div class="text-[9px] lg:text-xs text-on-surface-variant/60">{{ quickIsBetting ? $t('bet_toggle_sublabel') : $t('bet_toggle_sublabel_simple') }}</div>
                 </div>
               </div>
-              <div class="w-11 h-6 rounded-full relative transition-colors duration-300 cursor-pointer select-none"
+              <div class="w-11 h-6 lg:w-14 lg:h-7 rounded-full relative transition-colors duration-300 cursor-pointer select-none"
                 :class="quickIsBetting ? 'bg-primary' : 'bg-outline/40'">
-                <div class="absolute top-0.5 w-[18px] h-[18px] bg-white rounded-full transition-all duration-300 shadow-md"
-                  :class="quickIsBetting ? 'left-[22px]' : 'left-0.5'"></div>
+                <div class="absolute top-0.5 w-[18px] h-[18px] lg:w-6 lg:h-6 bg-white rounded-full transition-all duration-300 shadow-md"
+                  :class="quickIsBetting ? 'left-[22px] lg:left-[26px]' : 'left-0.5'"></div>
               </div>
             </div>
 
             <!-- Bet Amount slider -->
             <div v-if="quickIsBetting" class="animate-fade-in">
-              <label class="text-[10px] font-semibold text-primary ml-1 mb-2 flex items-center gap-1">
+              <label class="text-[10px] lg:text-xs font-semibold text-primary ml-1 mb-2 flex items-center gap-1">
                 💰 {{ $t('settings_quick_bet_amount') }}: <span class="font-black">{{ quickBetAmount }}</span>
               </label>
               <div class="relative px-1">
                 <input type="range" v-model.number="quickBetAmount" min="10" max="1000" step="10"
                   @change="saveSettings({ pref_quick_bet_amount: quickBetAmount })"
-                  class="w-full accent-primary h-1.5 rounded-full appearance-none bg-white/10 cursor-pointer" />
-                <div class="flex justify-between text-[8px] text-on-surface-variant/40 mt-0.5 px-0.5">
+                  class="w-full accent-primary h-1.5 lg:h-2 rounded-full appearance-none bg-white/10 cursor-pointer" />
+                <div class="flex justify-between text-[8px] lg:text-xs text-on-surface-variant/40 mt-0.5 px-0.5">
                   <span>10</span>
                   <span>250</span>
                   <span>500</span>
@@ -327,60 +327,60 @@ const onCardClick = (style) => {
           </div>
 
           <!-- Right column -->
-          <div class="space-y-4 mt-4 xl:mt-0 min-w-0">
+          <div class="space-y-4 lg:space-y-5 mt-4 xl:mt-0 min-w-0">
 
         <!-- Account -->
-        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6">
-          <div class="flex items-center gap-1.5 mb-4">
-            <span class="text-base">👤</span>
-            <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('settings_title') }}</span>
+        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-7">
+          <div class="flex items-center gap-1.5 lg:gap-2 mb-4">
+            <span class="text-base lg:text-lg">👤</span>
+            <span class="text-[10px] lg:text-xs font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('settings_title') }}</span>
             <div class="flex-grow border-t border-outline/20"></div>
           </div>
 
-          <div class="space-y-2.5">
+          <div class="space-y-2.5 lg:space-y-3">
             <!-- Telegram -->
-            <div class="bg-black/20 rounded-xl p-3">
+            <div class="bg-black/20 rounded-xl p-3 lg:p-4">
               <div class="flex items-center gap-2 mb-2">
-                <svg class="w-5 h-5 text-[#24A1DE] shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                <svg class="w-5 h-5 lg:w-6 lg:h-6 text-[#24A1DE] shrink-0" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.4-1.08.39-.35-.01-1.03-.2-1.54-.37-.62-.21-1.12-.32-1.08-.67.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .24z"/>
                 </svg>
-                <span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Telegram</span>
-                <span v-if="authStore.user?.telegram_id" class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold">✓ {{ $t('telegram_linked_title') }}</span>
+                <span class="text-xs lg:text-sm font-bold text-on-surface-variant uppercase tracking-wider">Telegram</span>
+                <span v-if="authStore.user?.telegram_id" class="text-[10px] lg:text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold">✓ {{ $t('telegram_linked_title') }}</span>
               </div>
               <div v-if="authStore.user?.telegram_id">
-                <button @click="handleUnlinkTelegram" class="text-[11px] text-error/70 hover:text-error underline transition-colors">{{ $t('unlink_button') }}</button>
+                <button @click="handleUnlinkTelegram" class="text-[11px] lg:text-xs text-error/70 hover:text-error underline transition-colors">{{ $t('unlink_button') }}</button>
               </div>
               <div v-else-if="tgStore.isTelegram">
-                <button @click="handleLinkTelegram" class="text-xs bg-[#24A1DE] hover:bg-[#1b8bbf] text-white font-bold py-2 px-4 rounded-xl transition-all active:scale-95">{{ $t('link_current_telegram', { username: authStore.user?.username }) }}</button>
-                <button @click="openMergeAccountModal" class="text-xs text-primary hover:underline ml-2">{{ $t('login_other_and_link') }}</button>
+                <button @click="handleLinkTelegram" class="text-xs lg:text-sm bg-[#24A1DE] hover:bg-[#1b8bbf] text-white font-bold py-2 lg:py-2.5 px-4 lg:px-5 rounded-xl transition-all active:scale-95">{{ $t('link_current_telegram', { username: authStore.user?.username }) }}</button>
+                <button @click="openMergeAccountModal" class="text-xs lg:text-sm text-primary hover:underline ml-2">{{ $t('login_other_and_link') }}</button>
               </div>
-              <div v-else class="text-[11px] text-on-surface-variant/60">{{ $t('open_via_telegram_hint') }}</div>
+              <div v-else class="text-[11px] lg:text-xs text-on-surface-variant/60">{{ $t('open_via_telegram_hint') }}</div>
             </div>
 
             <!-- Sessions -->
-            <div class="bg-black/20 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:bg-black/30 transition-all" @click="isSessionsModalOpen = true">
-              <div class="flex items-center gap-2.5">
-                <span class="text-base">🛡️</span>
+            <div class="bg-black/20 rounded-xl p-3 lg:p-4 flex items-center justify-between cursor-pointer hover:bg-black/30 transition-all" @click="isSessionsModalOpen = true">
+              <div class="flex items-center gap-2.5 lg:gap-3">
+                <span class="text-base lg:text-lg">🛡️</span>
                 <div>
-                  <div class="font-bold text-xs text-on-surface">{{ $t('settings_active_sessions') }}</div>
-                  <div class="text-[9px] text-on-surface-variant/60">{{ $t('session_device') }}</div>
+                  <div class="font-bold text-xs lg:text-sm text-on-surface">{{ $t('settings_active_sessions') }}</div>
+                  <div class="text-[9px] lg:text-xs text-on-surface-variant/60">{{ $t('session_device') }}</div>
                 </div>
               </div>
-              <svg class="w-4 h-4 text-on-surface-variant/40 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-4 h-4 lg:w-5 lg:h-5 text-on-surface-variant/40 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
               </svg>
             </div>
 
             <!-- Password -->
-            <div class="bg-black/20 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:bg-black/30 transition-all" @click="isPasswordModalOpen = true">
-              <div class="flex items-center gap-2.5">
-                <span class="text-base">🔑</span>
+            <div class="bg-black/20 rounded-xl p-3 lg:p-4 flex items-center justify-between cursor-pointer hover:bg-black/30 transition-all" @click="isPasswordModalOpen = true">
+              <div class="flex items-center gap-2.5 lg:gap-3">
+                <span class="text-base lg:text-lg">🔑</span>
                 <div>
-                  <div class="font-bold text-xs text-on-surface">{{ $t('password_change_title') }}</div>
-                  <div class="text-[9px] text-on-surface-variant/60">{{ $t('settings_connection_error') }}</div>
+                  <div class="font-bold text-xs lg:text-sm text-on-surface">{{ $t('password_change_title') }}</div>
+                  <div class="text-[9px] lg:text-xs text-on-surface-variant/60">{{ $t('settings_connection_error') }}</div>
                 </div>
               </div>
-              <svg class="w-4 h-4 text-on-surface-variant/40 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-4 h-4 lg:w-5 lg:h-5 text-on-surface-variant/40 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
               </svg>
             </div>
@@ -388,30 +388,30 @@ const onCardClick = (style) => {
         </div>
 
         <!-- Notifications -->
-        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-6 mb-4">
-          <div class="flex items-center gap-1.5 mb-4">
-            <span class="text-base">🔔</span>
-            <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('notifications_title') }}</span>
+        <div class="bg-black/20 rounded-2xl border border-white/5 p-4 md:p-5 lg:p-7 mb-4">
+          <div class="flex items-center gap-1.5 lg:gap-2 mb-4">
+            <span class="text-base lg:text-lg">🔔</span>
+            <span class="text-[10px] lg:text-xs font-bold text-on-surface-variant uppercase tracking-wider">{{ $t('notifications_title') }}</span>
             <div class="flex-grow border-t border-outline/20"></div>
           </div>
 
-          <div v-if="!notifStore.isSupported" class="text-center text-xs text-error bg-error/10 p-3 rounded-xl border border-error/20">
+          <div v-if="!notifStore.isSupported" class="text-center text-xs lg:text-sm text-error bg-error/10 p-3 lg:p-4 rounded-xl border border-error/20">
             🚫 {{ $t('notifications_unsupported') }}
           </div>
           <div v-else class="flex flex-col items-center gap-3">
             <button @click="toggleNotifications" :disabled="notifStore.isLoading || notifStore.permission === 'denied'"
-              class="w-full py-3 rounded-xl font-bold text-sm transition-all active:scale-[0.98]"
+              class="w-full py-3 lg:py-4 rounded-xl font-bold text-sm lg:text-base transition-all active:scale-[0.98]"
               :class="notifStore.isSubscribed
                 ? 'bg-error/10 text-error border border-error/20 hover:bg-error/20'
                 : 'bg-primary text-on-primary shadow-lg shadow-primary/20 hover:shadow-primary/40'">
               <span v-if="notifStore.isLoading" class="inline-flex items-center gap-2">
-                <span class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                <span class="w-4 h-4 lg:w-5 lg:h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
                 {{ $t('loading') }}
               </span>
               <span v-else>{{ notifStore.isSubscribed ? $t('notifications_disable') : $t('notifications_enable') }}</span>
             </button>
-            <p v-if="notifStore.permission === 'denied'" class="text-xs text-error font-bold">{{ $t('notifications_denied') }}</p>
-            <p v-else class="text-[10px] text-on-surface-variant/60 text-center max-w-xs">{{ $t('notifications_info') }}</p>
+            <p v-if="notifStore.permission === 'denied'" class="text-xs lg:text-sm text-error font-bold">{{ $t('notifications_denied') }}</p>
+            <p v-else class="text-[10px] lg:text-xs text-on-surface-variant/60 text-center max-w-xs">{{ $t('notifications_info') }}</p>
           </div>
         </div>
           </div>
@@ -419,13 +419,13 @@ const onCardClick = (style) => {
 
         <!-- Saving indicator + Home -->
         <div class="flex items-center justify-between gap-3">
-          <div v-if="isSaving" class="flex items-center gap-2 text-xs text-primary">
-            <span class="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+          <div v-if="isSaving" class="flex items-center gap-2 text-xs lg:text-sm text-primary">
+            <span class="w-3.5 h-3.5 lg:w-4 lg:h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
             {{ $t('loading') }}
           </div>
           <div v-else></div>
           <button @click="router.push('/')"
-            class="bg-black/20 text-on-surface-variant hover:bg-white/5 hover:text-white border border-outline/30 font-bold py-3 px-6 rounded-xl transition-all active:scale-95 text-sm">
+            class="bg-black/20 text-on-surface-variant hover:bg-white/5 hover:text-white border border-outline/30 font-bold py-3 px-6 lg:py-4 lg:px-8 lg:text-base rounded-xl transition-all active:scale-95 text-sm">
             {{ $t('go_home') }}
           </button>
         </div>

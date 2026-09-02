@@ -37,12 +37,12 @@ async function getSystemStats(onlineUsers: Map<any, any> | null, games: Record<s
     for (const game of Object.values(games || {})) {
       if (game.status === 'in_progress') {
         gamesInProgress++;
-        playersInMatches += game.playerOrder.length;
-        if (Object.values(game.players).some((p: any) => p.isBot)) {
+        playersInMatches += (game.playerOrder || []).length;
+        if (Object.values(game.players || {}).some((p: any) => p.isBot)) {
           botGames++;
         }
       } else if (game.status === 'waiting') {
-        if (game.settings.lobbyType === 'private') privateLobbies++;
+        if (game.settings?.lobbyType === 'private') privateLobbies++;
         else publicLobbies++;
       }
     }

@@ -60,6 +60,10 @@ export interface PokerGameState {
   currentBlindLevel: number;
   blindTimerEndsAt?: number | null;
   log: Array<{ timestamp: string; message: string }>;
+  maxPlayers?: number;
+  smallBlind?: number;
+  bigBlind?: number;
+  startingChips?: number;
 }
 
 export interface PokerTournament {

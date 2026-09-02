@@ -5,6 +5,7 @@ import { createDeck, RANK_VALUES, getNextPlayerIndex, updateTurn, checkGameOver 
 import statsService from './statsService.js';
 import achievementService from './achievementService.js';
 import ratingService from './ratingService.js';
+import * as pokerService from './pokerService.js';
 
 // During this window the deal animation plays; moves and the turn timer are locked.
 const DEAL_ANIMATION_MS = 4000;
@@ -187,27 +188,21 @@ async function updateStatsAfterGame(game: any) {
     console.log(`[Stats] Update for game ${game.id} already in progress. Skipping.`);
     return;
   }
+  // Skip non-durak games (poker) — they have their own endHand
+  if (game.gameType?.includes('poker')) return;
+  // Skip if missing critical fields (crash-safe)
+  if (!game.winner || !game.winner.winners || !game.winner.hasOwnProperty('loser')) return;
   game.isStatsUpdating = true;
   console.log(`[GAME END ${game.id}] Starting stats update.`);
-  if (!game.winner || !game.startTime || !game.winner.winners || !game.winner.hasOwnProperty('loser')) {
-    const endTime = new Date();
-    const durationSeconds = Math.round((endTime.getTime() - (game.startTime as any).getTime()) / 1000);
-    try {
-      await db
-        .update(game)
-        .set({ end_time: endTime.toISOString(), duration_seconds: durationSeconds })
-        .where(eq(game.id, game.id as any));
-    } catch (err: any) {
-      console.error(`[GAME END ${game.id}] Error updating game end time:`, err.message);
-    }
-    return;
-  }
+
+  const endTime = new Date();
+  const durationSeconds = game.startTime
+    ? Math.round((endTime.getTime() - game.startTime.getTime()) / 1000)
+    : 0;
   const hasBots = Object.values(game.players).some((p: any) => p?.isBot);
 
   try {
     await db.transaction(async (tx: any) => {
-      const endTime = new Date();
-      const durationSeconds = Math.round((endTime.getTime() - (game.startTime as any).getTime()) / 1000);
       const { winners, loser } = game.winner;
       const winnerDbIds = winners.filter((p: any) => p && !p.isGuest).map((p: any) => p.dbId!);
       const loserDbId = loser && !loser.isGuest ? loser.dbId : null;
@@ -590,7 +585,7 @@ function broadcastPublicLobbies() {
     .filter((game) => {
       return (
         game.status === 'waiting' &&
-        game.settings.lobbyType === 'public' &&
+        game.settings?.lobbyType === 'public' &&
         game.playerOrder &&
         game.playerOrder.length > 0
       );
@@ -606,6 +601,7 @@ function broadcastPublicLobbies() {
     }));
 
   io.to('lobby_browser').emit('lobbyListUpdate', publicLobbies);
+  io.to('lobby_browser').emit('pokerLobbies', pokerService.listPokerLobbies());
 }
 
 function handlePlayerDisconnect(socket: any, game: any) {

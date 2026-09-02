@@ -111,6 +111,10 @@ async function handleViewProfile(username) {
 const goToLobbyBrowser = () => {
   router.push('/lobbies');
 };
+
+const goToPoker = () => {
+  router.push({ path: '/lobbies', query: { game: 'poker' } });
+};
 </script>
 
 <template>
@@ -220,6 +224,11 @@ const goToLobbyBrowser = () => {
             <span>🎰</span> {{ $t('roulette_button') }}
           </button>
         </div>
+
+        <button @click="goToPoker"
+          class="w-full bg-gradient-to-r from-emerald-600/20 to-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-bold py-2.5 min-h-[44px] rounded-xl hover:from-emerald-600/30 hover:to-emerald-500/20 hover:border-emerald-400/50 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2 text-sm">
+          <span>♠️</span> Покер (Texas Hold'em)
+        </button>
 
         <button v-if="authStore.isAuthenticated" @click="isMyGamesOpen = true"
           class="w-full bg-transparent border border-outline/50 text-on-surface font-medium py-2.5 min-h-[44px] rounded-xl hover:bg-white/5 hover:border-outline hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2 text-sm">

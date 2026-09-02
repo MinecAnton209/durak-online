@@ -46,6 +46,11 @@ const router = createRouter({
       component: () => import('../views/RouletteView.vue'),
     },
     {
+      path: '/poker/:id',
+      name: 'poker-table',
+      component: () => import('../views/PokerTableView.vue'),
+    },
+    {
       path: '/status',
       name: 'status',
       component: StatusView

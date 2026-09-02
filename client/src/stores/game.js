@@ -17,9 +17,11 @@ export const useGameStore = defineStore('game', () => {
   const players = ref([]);
   const settings = ref({});
   const publicLobbies = ref([]);
+  const pokerLobbies = ref([]);
 
   const disconnectedPlayers = ref({});
   const isReconnecting = ref(false);
+  const _lobbyBrowserActive = ref(false);
 
   const gameStatus = ref('lobby');
   const isDealing = ref(false);
@@ -92,6 +94,9 @@ export const useGameStore = defineStore('game', () => {
     socket.off('invalidMove'); socket.off('musicStateUpdate'); socket.off('newLogEntry');
     socket.off('rematchUpdate');
     socket.off('playerDisconnected'); socket.off('playerReconnected');
+    socket.off('pokerLobbyCreated');
+    socket.off('pokerLobbies');
+    socket.off('lobbyListUpdate');
 
     socket.on('lobbyCreated', (data) => {
       resetState();
@@ -242,6 +247,25 @@ export const useGameStore = defineStore('game', () => {
       toast.addToast(msg || reason, 'warning');
     });
     socket.on('rematchUpdate', (data) => rematchStatus.value = data);
+
+    // Lobby browser listeners — re-attached on every (re)connect
+    socket.on('lobbyListUpdate', (list) => { publicLobbies.value = list; });
+    socket.on('pokerLobbies', (list) => { pokerLobbies.value = list; });
+    socket.on('pokerLobbyCreated', (payload) => {
+      const gameId = payload?.gameId;
+      const currentPath = router.currentRoute.value.path;
+      console.log('[GameStore.initListeners] pokerLobbyCreated:', gameId, 'currentPath:', currentPath);
+      if (gameId && !currentPath.startsWith('/poker/')) {
+        console.log('[GameStore.initListeners] pushing to /poker/' + gameId);
+        router.push(`/poker/${gameId}`).then(() => {
+          console.log('[GameStore.initListeners] push resolved, now at', router.currentRoute.value.path);
+        }).catch((e) => {
+          console.error('[GameStore.initListeners] push failed:', e);
+        });
+      } else {
+        console.log('[GameStore.initListeners] not pushing, gameId=', gameId);
+      }
+    });
   }
 
   function resetState() {
@@ -337,22 +361,60 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function subscribeToLobbies() {
-    if (!socketStore.socket) return;
-    socketStore.emit('joinLobbyBrowser');
-    socketStore.socket.on('lobbyListUpdate', (list) => { publicLobbies.value = list; });
+    if (!socketStore.socket) {
+      console.warn('[GameStore] subscribeToLobbies: no socket');
+      return;
+    }
+    const sock = socketStore.socket;
+    console.log('[GameStore] subscribeToLobbies, joining lobby_browser on socket', sock.id);
+    _lobbyBrowserActive.value = true;
+    if (sock.connected) {
+      sock.emit('joinLobbyBrowser');
+      sock.emit('getPokerLobbies');
+    } else {
+      sock.once('connect', () => {
+        console.log('[GameStore] socket connected late, re-joining lobby_browser');
+        sock.emit('joinLobbyBrowser');
+        sock.emit('getPokerLobbies');
+      });
+    }
   }
 
   function unsubscribeFromLobbies() {
+    _lobbyBrowserActive.value = false;
     if (!socketStore.socket) return;
     socketStore.emit('leaveLobbyBrowser');
-    socketStore.socket.off('lobbyListUpdate');
   }
 
   async function refreshLobbyList() {
     try {
       const response = await fetch('/api/public/lobbies');
-      if (response.ok) publicLobbies.value = await response.json();
+      if (!response.ok) return;
+      const all = await response.json();
+      publicLobbies.value = all.filter((l) => l.kind !== 'poker');
+      pokerLobbies.value = all.filter((l) => l.kind === 'poker');
     } catch (error) { console.error("Auto-sync error:", error); }
+  }
+
+  function refreshPokerLobbies() {
+    if (!socketStore.socket) return;
+    socketStore.emit('getPokerLobbies');
+  }
+
+  function createPokerLobby(settings) {
+    if (!socketStore.socket) {
+      console.warn('[GameStore] createPokerLobby: no socket');
+      return;
+    }
+    const socketId = socketStore.socket.id;
+    console.log(`[GameStore] createPokerLobby emitting on socket ${socketId}:`, settings);
+    socketStore.emit('createPokerLobby', settings);
+  }
+
+  function joinPokerLobby(lobbyId) {
+    if (!socketStore.socket) return;
+    socketStore.emit('joinPoker', { gameId: lobbyId });
+    router.push(`/poker/${lobbyId}`);
   }
 
   function makeMove(card) {
@@ -411,7 +473,7 @@ export const useGameStore = defineStore('game', () => {
 
   return {
     gameId, playerId, players, hostId, settings,
-    publicLobbies, disconnectedPlayers, isReconnecting,
+    publicLobbies, pokerLobbies, disconnectedPlayers, isReconnecting,
     isHost, gameStatus, tableCards, myCards, trumpCard, deckCount,
     turnPlayerId, attackerId, defenderId,
     isMyTurn, isAttacker, isDefender,
@@ -420,6 +482,7 @@ export const useGameStore = defineStore('game', () => {
 
     initListeners, createLobby, joinLobby, findAndJoinPublicLobby,
     subscribeToLobbies, unsubscribeFromLobbies, refreshLobbyList,
+    refreshPokerLobbies, createPokerLobby, joinPokerLobby,
     attemptReconnect, makeMove, takeCards, passTurn,
     canPlayCard, stopDealingAnimation, leaveGame, requestRematch,
     sendMessage, markChatRead, changeTrack, suggestTrack

@@ -1,5 +1,5 @@
 import db from '../db/drizzle.js';
-import { game } from '../db/schema.ts';
+import { game as gameTable } from '../db/schema.ts';
 import { eq, and } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { validateLobbySettings } from '../utils/validation.js';
@@ -42,7 +42,7 @@ export default function registerLobbyHandlers(io: any, socket: any, sharedContex
         try {
             const inviteCode = lobbySettings.lobbyType === 'private' ? crypto.randomBytes(3).toString('hex').toUpperCase() : null;
 
-            await db.insert(game).values({
+            await db.insert(gameTable).values({
                 id: gameId,
                 status: 'waiting',
                 lobby_type: lobbySettings.lobbyType,
@@ -97,16 +97,16 @@ export default function registerLobbyHandlers(io: any, socket: any, sharedContex
             if (inviteCode) {
                 const codeToCheck = inviteCode.toUpperCase();
 
-                gameFromDb = (await db.select({ id: game.id, max_players: game.max_players }).from(game).where(and(eq(game.invite_code, codeToCheck), eq(game.status, 'waiting'))))[0];
+                gameFromDb = (await db.select({ id: gameTable.id, max_players: gameTable.max_players }).from(gameTable).where(and(eq(gameTable.invite_code, codeToCheck), eq(gameTable.status, 'waiting'))))[0];
 
                 if (!gameFromDb) {
-                    gameFromDb = (await db.select({ id: game.id, max_players: game.max_players }).from(game).where(and(eq(game.id, codeToCheck), eq(game.status, 'waiting'))))[0];
+                    gameFromDb = (await db.select({ id: gameTable.id, max_players: gameTable.max_players }).from(gameTable).where(and(eq(gameTable.id, codeToCheck), eq(gameTable.status, 'waiting'))))[0];
                 }
 
                 if (gameFromDb) lobbyToJoinId = gameFromDb.id;
 
             } else if (lobbyToJoinId) {
-                gameFromDb = (await db.select({ id: game.id, max_players: game.max_players }).from(game).where(and(eq(game.id, lobbyToJoinId), eq(game.status, 'waiting'))))[0];
+                gameFromDb = (await db.select({ id: gameTable.id, max_players: gameTable.max_players }).from(gameTable).where(and(eq(gameTable.id, lobbyToJoinId), eq(gameTable.status, 'waiting'))))[0];
             }
 
             console.log(`[JoinLobby] DB Search Result:`, gameFromDb);
@@ -119,8 +119,13 @@ export default function registerLobbyHandlers(io: any, socket: any, sharedContex
             const lobbyGame = games[lobbyToJoinId] as any;
             if (!lobbyGame) {
                 console.log(`[JoinLobby] Lobby found in DB but NOT in Memory. Cancelling DB record.`);
-                await db.update(game).set({ status: 'cancelled' }).where(eq(game.id, lobbyToJoinId));
+                await db.update(gameTable).set({ status: 'cancelled' }).where(eq(gameTable.id, lobbyToJoinId));
                 return socket.emit('error', { i18nKey: 'error_lobby_not_found_in_memory' });
+            }
+
+            // Reject non-durak (poker) games — they have their own join handler
+            if (!lobbyGame.settings) {
+                return socket.emit('error', { i18nKey: 'error_game_not_found' });
             }
 
             if (sessionUser && Object.values(lobbyGame.players).some((p: any) => p.dbId === sessionUser.id)) {
@@ -201,7 +206,7 @@ export default function registerLobbyHandlers(io: any, socket: any, sharedContex
             if (humanIds.length === 0) {
                 console.log(`[Lobby] Lobby ${gameId} has only bots. Deleting.`);
                 delete games[gameId];
-                db.update(game).set({ status: 'cancelled' }).where(eq(game.id, gameId)).catch(() => { });
+                db.update(gameTable).set({ status: 'cancelled' }).where(eq(gameTable.id, gameId)).catch(() => { });
                 io.emit('lobbyExpired', { lobbyId: gameId });
             } else {
                 if (game.hostId === socket.id) {
@@ -222,7 +227,7 @@ export default function registerLobbyHandlers(io: any, socket: any, sharedContex
         } else {
             console.log(`[Lobby] Lobby ${gameId} is empty. Deleting.`);
             delete games[gameId];
-            db.update(game).set({ status: 'cancelled' }).where(eq(game.id, gameId)).catch(() => { });
+            db.update(gameTable).set({ status: 'cancelled' }).where(eq(gameTable.id, gameId)).catch(() => { });
             io.emit('lobbyExpired', { lobbyId: gameId });
             broadcastPublicLobbies();
         }
@@ -243,7 +248,7 @@ export default function registerLobbyHandlers(io: any, socket: any, sharedContex
         }
 
         try {
-            await db.update(game).set({ game_settings: JSON.stringify(game.settings), max_players: game.settings.maxPlayers }).where(eq(game.id, gameId));
+            await db.update(gameTable).set({ game_settings: JSON.stringify(game.settings), max_players: game.settings.maxPlayers }).where(eq(gameTable.id, gameId));
 
             io.to(gameId).emit('lobbyStateUpdate', {
                 players: Object.values(game.players).map((p: any) => ({
@@ -291,7 +296,7 @@ export default function registerLobbyHandlers(io: any, socket: any, sharedContex
     socket.on('joinLobbyBrowser', () => {
         socket.join('lobby_browser');
         const list = Object.values(games as Record<string, any>)
-            .filter((game: any) => game.status === 'waiting' && game.settings.lobbyType === 'public' && game.playerOrder.length > 0)
+            .filter((game: any) => game.status === 'waiting' && game.settings?.lobbyType === 'public' && game.playerOrder.length > 0)
             .map((game: any) => ({
                 gameId: game.id,
                 hostName: game.players[game.hostId]?.name || 'Unknown',
@@ -305,7 +310,7 @@ export default function registerLobbyHandlers(io: any, socket: any, sharedContex
 
     socket.on('getLobbyList', () => {
         const publicGames = Object.values(games as Record<string, any>)
-            .filter((g: any) => g.status === 'waiting' && g.settings.lobbyType === 'public')
+            .filter((g: any) => g.status === 'waiting' && g.settings?.lobbyType === 'public')
             .map((g: any) => ({
                 gameId: g.id,
                 hostName: g.players[g.hostId]?.name || 'Unknown',
@@ -325,7 +330,7 @@ export default function registerLobbyHandlers(io: any, socket: any, sharedContex
 
     socket.on('addBot', ({ gameId, difficulty }: any) => {
         const game: any = games[gameId];
-        if (!game || game.hostId !== socket.id || game.status !== 'waiting') return;
+        if (!game || game.hostId !== socket.id || game.status !== 'waiting' || !game.settings) return;
         if (Object.keys(game.players).length >= game.settings.maxPlayers) return;
 
         const botId = `bot_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
