@@ -38,6 +38,11 @@ export const useSocketStore = defineStore('socket', {
           console.log('✅ Socket connected:', this.socketId);
           const gameStore = useGameStore();
           gameStore.initListeners();
+          // Re-join lobby browser room if it was active before disconnect
+          if (gameStore._lobbyBrowserActive) {
+            console.log('[SocketStore] re-joining lobby_browser after reconnect');
+            this.socket.emit('joinLobbyBrowser');
+          }
           if (gameStore.isReconnecting && gameStore.gameId) {
             gameStore.attemptReconnect(gameStore.gameId);
           }
