@@ -213,7 +213,8 @@ app.get(/.*/, (req, res) => {
 });
 
 if (process.env.TELEGRAM_BOT_TOKEN) {
-    telegramBot.init(process.env.TELEGRAM_BOT_TOKEN, () => systemService.getSystemStats(onlineUsers, games));
+    telegramBot.init(process.env.TELEGRAM_BOT_TOKEN, () => systemService.getSystemStats(onlineUsers, games))
+        .catch((err: any) => console.error('[TelegramBot] Init error:', err));
 }
 
 io.use(socketAttachUser);
